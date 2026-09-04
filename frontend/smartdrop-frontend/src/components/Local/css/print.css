@@ -1,0 +1,113 @@
+/* Estilos Base para el Modal (Vista en pantalla) */
+.modal-overlay {
+  position: fixed;
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #ccc;
+}
+
+.btn-print {
+  background-color: #2b8a3e;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+.btn-close {
+  background-color: #868e96;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Estilo visual del ticket */
+.ticket-printable {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  color: #000;
+  background-color: #fff;
+}
+
+.ticket-header, .ticket-footer { text-align: center; }
+.dashed { border: none; border-top: 1px dashed #000; margin: 0.5rem 0; }
+.ticket-item { margin-bottom: 0.5rem; }
+.item-main { display: flex; justify-content: space-between; font-weight: bold; }
+.item-sub { font-size: 0.75rem; padding-left: 0.5rem; }
+.item-note { font-size: 0.75rem; font-style: italic; padding-left: 0.5rem; color: #333; }
+.ticket-footer p { display: flex; justify-content: space-between; margin: 0.2rem 0; }
+
+/* 🖨️ CONFIGURACIÓN DE IMPRESIÓN */
+@page {
+  margin: 0;
+  size: 80mm auto; /* Tamaño estándar de ticketera */
+}
+
+@media print {
+  /* 1. Ocultar la interfaz principal sin sacar elementos del flujo */
+  body {
+    visibility: hidden !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* 2. Hacer visible únicamente el comprobante y su contenido */
+  .ticket-printable,
+  .ticket-printable * {
+    visibility: visible !important;
+  }
+
+  /* 3. Posicionar el ticket de forma fija arriba de todo en la primera página */
+  .ticket-printable {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    padding: 4mm !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    z-index: 99999 !important;
+  }
+
+  /* Restablecer display flex de los textos de importes */
+  .ticket-printable .item-main,
+  .ticket-printable .ticket-footer p {
+    display: flex !important;
+    justify-content: space-between !important;
+  }
+}

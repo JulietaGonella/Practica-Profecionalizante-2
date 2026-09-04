@@ -1,0 +1,49 @@
+import { loginService, refreshTokenService, logoutService, registerClientService } from './auth.service.js';
+
+export const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const result = await loginService(email, password, userAgent, ipAddress);
+    res.json(result);
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    const result = await refreshTokenService(refreshToken);
+    res.json(result);
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    // Validar en el controller que envíen el token[cite: 42]
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh Token requerido' });
+    }
+
+    await logoutService(refreshToken);
+    res.json({ message: 'Sesión cerrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const registerClient = async (req, res) => {
+  try {
+    const result = await registerClientService(req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};

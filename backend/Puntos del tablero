@@ -1,0 +1,276 @@
+Para dejar la API 100% cerrada y preparada para alimentar tanto el backend como el futuro **Tablero/Dashboard del Administrador General** (requerimiento de tesis), a continuación se presenta el desglose estructurado de todo lo necesario antes de escribir código.
+
+---
+
+### Listado de Requerimientos para la Validación y Tablero Administrador
+
+#### 1. Definición de Reglas de Negocio Financieras (Comisiones)
+
+Antes de consultar montos, se deben definir las comisiones dentro del sistema:
+
+* **Comisión de la Plataforma por Venta:** % o monto fijo que la plataforma le cobra al local por cada orden completada.
+* **Comisión/Ganancia del Repartidor:** Porcentaje o valor asignado del `costo_envio` que le corresponde al repartidor frente al margen retenido por la plataforma.
+* **Cálculo de Facturación Líquida:**
+* **Bruto Total:** Suma de `total` en órdenes con estado **3 (Entregado)**.
+* **Ingreso Neto Plataforma:** (Comisiones de locales) + (Margen de envíos).
+* **Pago a Locales:** Subtotal de productos menos comisión de la plataforma.
+* **Pago a Repartidores:** Costo de envío abonado al repartidor.
+
+
+
+---
+
+#### 2. Parámetros de Entrada y Filtros (Query Parameters)
+
+El endpoint `GET /admin/dashboard` (o `/admin/reportes`) debe aceptar filtros dinámicos para que el tablero interactivo pueda segmentar la información:
+
+* **`desde` y `hasta` (Fechas):** Filtrar ordenes completadas en un rango determinado (ej. `?desde=2026-08-01&hasta=2026-08-31`).
+* **`periodo` (Atajo temporal):** Opciones rápidas como `hoy`, `semana`, `mes`, `anio`.
+* **`local_id` (Opcional):** Filtrar métricas de un local específico.
+* **`repartidor_id` (Opcional):** Filtrar rendimiento o ganancias de un repartidor específico.
+
+---
+
+#### 3. Estructura de Métricas para el Tablero (KPIs Principal)
+
+El endpoint responderá con un JSON agrupado en secciones clave para armar los widgets de la interfaz gráfica:
+
+##### A. Tarjetas de Resumen (KPIs Financieros Globales)
+
+* **Volumen Total Facturado:** Suma total de ventas brutas procesadas.
+* **Ganancia Neta Administrador:** Recaudación final por comisiones de servicio.
+* **Total Pagado a Locales:** Remanente acumulado para transferir a los comercios.
+* **Total Pagado a Repartidores:** Acumulado de costos de envío distribuidos.
+
+##### B. Métricas Operativas de Pedidos
+
+* **Total de Órdenes Completadas:** Cantidad de pedidos con estado `ID = 3` (Entregado).
+* **Total de Órdenes Canceladas:** Cantidad de pedidos con estado `ID = 6` (Cancelado) e importe no facturado.
+* **Ticket Promedio:** Monto promedio invertido por orden completada.
+* **Tiempo Promedio de Entrega:** Diferencia promedio entre la creación del pedido y su entrega final.
+
+##### C. Desglose y Ranking (Para Gráficos de Tablero)
+
+* **Top Locales con Mayor Facturación:** Ranking de los 5 a 10 locales con más ventas/comisiones generadas.
+* **Top Repartidores Más Activos:** Ranking por cantidad de entregas con éxito.
+* **Métodos de Pago Utilizados:** Porcentaje de transacciones distribuidas por tipo (Efectivo, Mercado Pago, Tarjeta).
+* **Historial/Evolución Temporal:** Arreglo con datos agrupados por día o mes para graficar líneas o barras de ingresos en el tiempo.
+
+---
+
+#### 4. Seguridad y Control de Acceso
+
+* **Ruta Protegida:** Uso exclusivo de `authMiddleware` combinado con `requireRole('administrador')`.
+* **Restricción:** Bloquear acceso de consulta a usuarios con roles `cliente`, `repartidor`, `local` o `administrador local`.
+
+---
+
+#### 5. Componentes de Código a Implementar (Fase Posterior)
+
+Una vez validada esta lista, la implementación se dividirá en:
+
+1. **Ruta:** Agregar `router.get('/dashboard', authMiddleware, requireRole('administrador'), getAdminDashboard)` en `admin.routes.js` o `reports.routes.js`.
+2. **Controlador:** Crear `getAdminDashboard` para parsear los filtros de query parameters y retornar la respuesta JSON.
+3. **Servicio:** Crear `getAdminDashboardService` con las consultas de agregación SQL (`SUM`, `COUNT`, `AVG`, `GROUP BY`) sobre las tablas `ordenes`, `detalle_orden` y `hitorial_estado_orden`.
+
+---
+
+¿El enfoque responde a lo requerido para estructurar el panel de control antes de escribir la solución técnica?
+
+
+
+1 DEFINICION DE REGLAS DE NEGOCIO FINACIERO (Comiciones)
+
+### Paso 1: Definición de Reglas de Negocio Financieras (Comisiones)
+
+Para calcular la facturación líquida del sistema, se establecen las reglas dinámicas basadas en variables de entorno o un archivo de configuración (`commissions.js`), evitando valores fijos (*hardcoded*).
+
+---
+
+#### 1. Porcentajes de Comisión Base
+
+* **Comisión de Plataforma sobre Productos (`PLATFORM_FEE_PERCENTAGE`):** Porcentaje retendido por la plataforma sobre el subtotal de productos vendidos por los locales (ej. **10%**).
+* **Comisión de Plataforma sobre Envíos (`DELIVERY_MARGIN_PERCENTAGE`):** Porcentaje retendido por la plataforma sobre el costo total del envío (ej. **15%**). El remanente (ej. **85%**) se destina al repartidor.
+
+---
+
+#### 2. Fórmulas de Cálculo Financiero
+
+Dado un conjunto de órdenes finalizadas (estado **`ID = 3` / Entregado**):
+
+$$\text{Subtotal Productos} = \sum (\text{ordenes.precio})$$
+
+$$\text{Total Envíos} = \sum (\text{ordenes.costo\_envio})$$
+
+$$\text{Facturación Bruta Total} = \text{Subtotal Productos} + \text{Total Envíos}$$
+
+* **Ganancia Neto Plataforma por Productos:**
+$$\text{Subtotal Productos} \times \left(\frac{\text{PLATFORM\_FEE\_PERCENTAGE}}{100}\right)$$
+
+
+* **Ganancia Neto Plataforma por Envíos:**
+$$\text{Total Envíos} \times \left(\frac{\text{DELIVERY\_MARGIN\_PERCENTAGE}}{100}\right)$$
+
+
+* **Ingreso Neto Total Plataforma:**
+$$\text{Ganancia Productos} + \text{Ganancia Envíos}$$
+
+
+* **Pago Neto Acumulado a Locales:**
+$$\text{Subtotal Productos} - \text{Ganancia Productos}$$
+
+
+* **Pago Neto Acumulado a Repartidores:**
+$$\text{Total Envíos} - \text{Ganancia Envíos}$$
+
+
+
+---
+
+#### 3. Validación con la Base de Datos Actual
+
+En la tabla `ordenes`:
+
+* `precio`: Almacena el subtotal de los productos.
+* `costo_envio`: Almacena el costo del flete.
+* `total`: Almacena la suma de `precio + costo_envio`.
+* `IDestado = 3`: Filtro indispensable para tomar únicamente ventas completadas y cobradas.
+
+---
+
+¿Estás de acuerdo con estas reglas y fórmulas para avanzar al **Paso 2: Parámetros de Entrada y Filtros de Consulta**?
+
+
+
+
+
+2 Parámetros de Entrada y Filtros (Query Parameters)
+
+### Paso 2: Parámetros de Entrada y Filtros de Consulta
+
+Para consultar las comisiones e ingresos del sistema de forma precisa, el endpoint o módulo de reportes debe aceptar un conjunto de parámetros que permitan filtrar los datos según el rango de tiempo, actores involucrados y estado de la transacción.
+
+---
+
+#### 1. Parámetros de Entrada (Query Parameters / Input DTO)
+
+| Parámetro | Tipo | Requerido | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `fecha_inicio` | `Date` (ISO 8601) | Opcional | Fecha y hora inicial del período a consultar. | `2026-08-01T00:00:00Z` |
+| `fecha_fin` | `Date` (ISO 8601) | Opcional | Fecha y hora final del período a consultar. | `2026-08-31T23:59:59Z` |
+| `id_local` | `Integer` | Opcional | Filtra la facturación y comisiones de un local específico. | `12` |
+| `id_repartidor` | `Integer` | Opcional | Filtra los ingresos y comisión sobre envíos de un repartidor específico. | `45` |
+| `id_estado` | `Integer` | Opcional | Por defecto es `3` (Entregado). Permite auditar otros estados si se requiere. | `3` |
+| `page` / `limit` | `Integer` | Opcional | Paginación para cuando se devuelvan los listados de órdenes desglosadas. | `page=1&limit=20` |
+
+---
+
+#### 2. Lógica de Filtros y Condiciones SQL / ORM
+
+Para garantizar datos consistentes en el cálculo de facturación, la consulta debe aplicar las siguientes condiciones estrictas:
+
+1. **Estado de la Orden:**
+* **Condición Obligatoria:** `IDestado = 3` (Entregado/Finalizado).
+* *Razón:* Las órdenes canceladas, pendientes o en proceso no deben generar ingresos ni liquidaciones de comisión hasta concretarse.
+
+
+2. **Rango de Fechas:**
+* **Condición:** `fecha >= fecha_inicio AND fecha <= fecha_fin`
+* Si no se proporcionan fechas, se toma por defecto el mes en curso (`inicio_de_mes` hasta `ahora`).
+
+
+3. **Filtrado por Actor (Multi-tenant / Vistas parciales):**
+* **Para el Admin General:** Si no se especifica `id_local` ni `id_repartidor`, la consulta evalúa la totalidad del sistema.
+* **Para un Local:** Se agrega `WHERE IDlocal = :id_local`.
+* **Para un Repartidor:** Se agrega `WHERE IDrepartidor = :id_repartidor`.
+
+
+
+---
+
+#### 3. Estructura SQL Base de Consulta
+
+```sql
+SELECT 
+    COUNT(id) AS total_ordenes,
+    COALESCE(SUM(precio), 0) AS subtotal_productos,
+    COALESCE(SUM(costo_envio), 0) AS total_envios,
+    COALESCE(SUM(total), 0) AS facturacion_bruta
+FROM ordenes
+WHERE IDestado = 3
+  AND (:fecha_inicio IS NULL OR fecha >= :fecha_inicio)
+  AND (:fecha_fin IS NULL OR fecha <= :fecha_fin)
+  AND (:id_local IS NULL OR IDlocal = :id_local)
+  AND (:id_repartidor IS NULL OR IDrepartidor = :id_repartidor);
+
+```
+
+---
+
+¿Avanzamos al **Paso 3: Desarrollo de la Lógica en Backend (JavaScript / Express / Query/ORM)** o deseas ajustar algún parámetro de entrada?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Cosas del tablero:
+El tablero de **SmartDrop** expone una arquitectura analítica dividida en cuatro perspectivas operativas claras: **Administrador General**, **Gestión de Repartidores**, **Vista de Cliente** y **Vista de Repartidor**.
+
+---
+
+### Análisis de las Vistas del Tablero
+
+#### 1. Tablero General - Administrador
+
+* **KPIs Clave:** Total de Pedidos (**150** repartidos en 88 Entregados y 62 Cancelados) e Ingresos Totales (**$23.731.362,00**).
+* **Distribución por Categorías:** Muestra la demanda liderada por *Limpieza* (31) y *Otros* (31), seguidos de *Alimentos Frescos* (26), *Bebidas* (23), *Comida Preparada* (20) y *Almacén* (19).
+* **Métodos de Pago:** Presenta un desglose equilibrado entre Tarjeta (**29,5%**), MercadoPago (**28,4%**), Transferencia (**23,9%**) y Efectivo (**18,2%**).
+* **Evolución Temporal:** Gráfico de líneas que monitorea el volumen de pedidos Entregados vs. Cancelados a lo largo de las fechas de 2025.
+
+#### 2. Tablero General - Gestión de Repartidores
+
+* **KPIs de Rendimiento:** % Pedidos Entregados (**58,67%**), Tiempo Promedio de Entrega (**30,02 min**), Total de KM Recorridos (**1.574,13 km**) y Cantidad Total de Repartidores (**20**).
+* **Visualizaciones:** Tabla detallada por repartidor, gráfico de barras de pedidos asignados por repartidor (liderado por Franco con 12) y mapa interactivo de entregas.
+
+#### 3. Tablero - Vista de Cliente (Ejemplo: Malena Fuentes)
+
+* **KPIs de Usuario:** Historial de 3 pedidos y un Gasto Total acumulado de **$765.421,00**.
+* **Detalle:** Gráfico circular por categoría (*66,7% Alimentos Frescos*, *33,3% Comida Preparada*), línea temporal y tabla con el historial de pedidos, puntaje asignado y estado.
+
+#### 4. Tablero - Vista de Repartidor (Ejemplo: Tomás Gutiérrez)
+
+* **KPIs del Driver:** 7 Pedidos Asignados, 4 Entregados y 4.527 KM Recorridos.
+* **Detalle:** Gráfico de estados por fecha, tabla con desglose de ganancia por pedido, kilometraje, puntaje asignado por el cliente y mapa de cobertura.
+
+---
+
+### Recomendaciones de Ajuste para la API y Base de Datos
+
+Para alimentar con precisión esta interfaz desde el servicio de backend en Node.js, conviene aplicar los siguientes ajustes a las consultas SQL:
+
+1. **Incorporar Agrupación por Categoría en Admin:**
+Agregar una consulta con `JOIN productos p ON do.IDproducto = p.id` y `JOIN categorias c ON p.IDcategoria = c.id` agrupado por `c.nombre` para calcular la "Cantidad de Pedidos por Categoría".
+2. **Métricas de Kilometraje y Posición Geográfica:**
+Añadir la columna `km_recorridos` (o calcularla a partir de coordenadas GPS de origen/destino) en la tabla `ordenes` o `envios` para alimentar el KPI de **Total KM Recorridos** y la vista individual de repartidores.
+3. **Endpoints Dedicados por Perfil:**
+Estructurar las rutas API separando las responsabilidades por tipo de usuario:
+* `GET /api/admin/dashboard` (Métricas globales)
+* `GET /api/repartidores/dashboard` (Métricas de la flota)
+* `GET /api/repartidores/:id/dashboard` (Vista individual del repartidor)
+* `GET /api/clientes/me/dashboard` (Vista de perfil e historial del cliente)
+
+
+
+¿Te gustaría que adaptemos el servicio en Node.js/Express para incluir la consulta por categorías y los endpoints específicos de Cliente y Repartidor?

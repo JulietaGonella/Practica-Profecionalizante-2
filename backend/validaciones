@@ -1,0 +1,47 @@
+Eventos y Destinatarios de Notificaciones
+
+Creación de nuevo pedido:
+
+Destinatario: El o los locales involucrados en el pedido.
+
+Notificación: "¡Nuevo pedido recibido! Revisa los ítems asignados para comenzar a preparar."
+
+Destinatario adicional: Cliente (confirmación).
+
+Notificación: "Tu pedido #ID ha sido creado correctamente y enviado a la cocina."
+
+Aceptación por parte de un repartidor:
+
+Destinatario: Local(es) e Cliente.
+
+Notificación (Local): "Un repartidor aceptó la orden #ID e irá a retirar el pedido."
+
+Notificación (Cliente): "¡Asignamos un repartidor a tu pedido! Pronto estará en camino a retirarlo."
+
+Cambio de estado por el local (Ej. "En preparación" / "Listo para retiro"):
+
+Destinatario: Cliente y Repartidor asignado.
+
+Notificación (Cliente): "Tu pedido #ID está siendo preparado" o "Tu pedido ya está listo en el local."
+
+Notificación (Repartidor): "El pedido #ID en el local X está listo para ser retirado."
+
+Pedido en camino:
+
+Destinatario: Cliente.
+
+Notificación: "¡Tu pedido está en camino! Podés seguir al repartidor en vivo. Tu código OTP de entrega es XXXX."
+
+Entrega realizada:
+
+Destinatario: Cliente y Local(es).
+
+Notificación (Cliente): "¡Pedido entregado con éxito! Que lo disfrutes. Valora tu experiencia."
+
+Notificación (Local): "El pedido #ID fue entregado al cliente."
+
+Cancelación de pedido:
+
+Destinatario: Local(es), Repartidor (si estaba asignado) y Cliente.
+
+Notificación: "El pedido #ID ha sido cancelado. Motivo: [motivo]."

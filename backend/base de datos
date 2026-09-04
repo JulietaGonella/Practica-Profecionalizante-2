@@ -1,0 +1,520 @@
+CREATE DATABASE IF NOT EXISTS BD_SmartDrop;
+USE BD_SmartDrop;
+
+-- Tabla roles
+CREATE TABLE roles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Tabla usuarios
+CREATE TABLE usuarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    rol_id INT NOT NULL,
+    totp_secret VARCHAR(255),
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (rol_id) REFERENCES roles(id)
+);
+
+-- Tabla locales
+CREATE TABLE locales (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    direccion VARCHAR(100) NOT NULL UNIQUE,
+    latitud DECIMAL(10,8) NOT NULL,
+    longitud DECIMAL(11,8) NOT NULL,
+    es_activo TINYINT(1) NOT NULL DEFAULT 1
+);
+
+ALTER TABLE locales
+  MODIFY COLUMN latitud DECIMAL(10,8) NOT NULL,
+  MODIFY COLUMN es_activo TINYINT(1) NOT NULL DEFAULT 1,
+  MODIFY COLUMN longitud DECIMAL(11,8) NOT NULL;
+
+ALTER TABLE locales
+ADD COLUMN IDusuario INT,
+ADD FOREIGN KEY (IDusuario) REFERENCES usuarios(id);
+
+-- Tabla productos
+CREATE TABLE productos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDlocal INT NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    precio DECIMAL(10,2) NOT NULL,
+    disponible TINYINT(1) NOT NULL DEFAULT 1,
+    FOREIGN KEY (IDlocal) REFERENCES locales(id)
+);
+
+ALTER TABLE productos
+  MODIFY COLUMN nombre VARCHAR(150) NOT NULL,
+  MODIFY COLUMN precio DECIMAL(10,2) NOT NULL,
+  MODIFY COLUMN disponible TINYINT(1) NOT NULL DEFAULT 1;
+  
+  -- Tabla de alimentos/ingredientes
+CREATE TABLE alimentos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Tabla intermedia para relacionar productos con ingredientes
+CREATE TABLE productos_ingredientes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    producto_id INT NOT NULL,
+    alimento_id INT NOT NULL,
+    cantidad VARCHAR(50), -- opcional, ej: "100g", "2 unidades"
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+    FOREIGN KEY (alimento_id) REFERENCES alimentos(id) ON DELETE CASCADE
+);
+
+  -- Tabla estados
+CREATE TABLE estados(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL
+);
+
+ALTER TABLE estados
+ADD COLUMN orden INT NOT NULL;
+
+-- Tabla ordenes
+CREATE TABLE ordenes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDcliente INT NOT NULL,
+    IDrepartidor INT NOT NULL,
+    IDestado INT NOT NULL,
+    precio DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (IDcliente) REFERENCES usuarios(id),
+    FOREIGN KEY (IDrepartidor) REFERENCES usuarios(id)
+);
+
+ALTER TABLE ordenes
+  CHANGE COLUMN nombre IDestado INT NOT NULL;
+
+ALTER TABLE ordenes
+DROP INDEX nombre;
+
+ALTER TABLE ordenes
+  ADD CONSTRAINT fk_orden_estado
+  FOREIGN KEY (IDestado) REFERENCES estados(id);
+
+ALTER TABLE ordenes
+DROP COLUMN disponible;
+
+ALTER TABLE ordenes
+MODIFY COLUMN IDrepartidor INT NULL;
+
+-- Tabla detalle orden
+CREATE TABLE detalle_orden (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDorden INT NOT NULL,
+    IDproducto INT NOT NULL,
+    IDlocal INT NOT NULL,
+    cantidad INT NOT NULL,
+    precio_unitario DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (IDorden) REFERENCES ordenes(id),
+    FOREIGN KEY (IDproducto) REFERENCES productos(id),
+    FOREIGN KEY (IDlocal) REFERENCES locales(id)
+);
+
+-- Tabla repartidores
+CREATE TABLE repartidores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL UNIQUE,
+    dni VARCHAR(20) NOT NULL,
+    validado TINYINT(1) NOT NULL DEFAULT 0,
+    disponible TINYINT(1) NOT NULL DEFAULT 1,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id)
+);
+
+CREATE TABLE tipos_vehiculo (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(30) NOT NULL UNIQUE
+);
+
+CREATE TABLE vehiculos_repartidor (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDrepartidor INT NOT NULL,
+    IDtipo_vehiculo INT NOT NULL,
+
+    -- datos generales
+    marca VARCHAR(50),
+    modelo VARCHAR(50),
+    anio INT,
+
+    -- moto / auto
+    patente VARCHAR(20),
+    seguro_vigente TINYINT(1),
+    licencia_vigente TINYINT(1),
+
+    -- bici
+    bici_propia TINYINT(1),
+
+    activo TINYINT(1) DEFAULT 1,
+
+    FOREIGN KEY (IDrepartidor) REFERENCES repartidores(id),
+    FOREIGN KEY (IDtipo_vehiculo) REFERENCES tipos_vehiculo(id)
+);
+
+-- Tabla recomendaciones
+CREATE TABLE hitorial_estado_orden(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDorden INT NOT NULL,
+    IDestado INT NOT NULL,
+    FOREIGN KEY (IDorden) REFERENCES ordenes(id),
+    FOREIGN KEY (IDestado) REFERENCES estados(id)
+);
+
+ALTER TABLE hitorial_estado_orden
+ADD COLUMN creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE TABLE clientes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL UNIQUE,
+    telefono VARCHAR(30),
+    direccion VARCHAR(150) NOT NULL,
+    piso VARCHAR(10),
+    departamento VARCHAR(10),
+    referencia VARCHAR(150),
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id)
+);
+
+-- 1️⃣ Agregar la columna IDestado a detalle_orden (por defecto en estado 1 -> Creado)
+ALTER TABLE detalle_orden
+ADD COLUMN IDestado INT NOT NULL DEFAULT 1;
+
+-- 2️⃣ Crear la Foreign Key conectando detalle_orden con la tabla estados
+ALTER TABLE detalle_orden
+ADD CONSTRAINT fk_detalle_estado
+FOREIGN KEY (IDestado) REFERENCES estados(id);
+
+USE BD_SmartDrop;
+
+-- 1️⃣ Agregar costo de envío y subtotal en la tabla ordenes
+ALTER TABLE ordenes
+  ADD COLUMN costo_envio DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER precio,
+  ADD COLUMN total DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER costo_envio;
+
+-- 2️⃣ Agregar latitud y longitud a la tabla clientes (para saber dónde entregar)
+ALTER TABLE clientes
+  ADD COLUMN latitud DECIMAL(10,8) NULL,
+  ADD COLUMN longitud DECIMAL(11,8) NULL;
+
+-- 3️⃣ Agregar latitud, longitud y última actualización a la tabla repartidores (GPS)
+ALTER TABLE repartidores
+  ADD COLUMN latitud DECIMAL(10,8) NULL,
+  ADD COLUMN longitud DECIMAL(11,8) NULL,
+  ADD COLUMN ultima_ubicacion DATETIME NULL;
+  
+  USE BD_SmartDrop;
+
+ALTER TABLE productos
+ADD COLUMN tiempo_preparacion_min INT NOT NULL DEFAULT 15 AFTER disponible;
+
+USE BD_SmartDrop;
+
+ALTER TABLE ordenes
+  ADD COLUMN tiempo_estimado_min INT NULL AFTER total;
+
+CREATE TABLE categorias_productos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    -- Nivel de sensibilidad:
+    -- 1 = Normal/Ambiente (Golosinas, bebidas empaquetadas, panadería)
+    -- 2 = Caliente (Pizzas, empanadas, pastas)
+    -- 3 = Frito / Sensible a humedad (Papas fritas, rebozados)
+    -- 4 = Frío / Congelado (Helados, postres fríos, hielos)
+    nivel_sensibilidad INT NOT NULL DEFAULT 1 
+);
+
+-- 3️⃣ Relacionar la tabla productos con la nueva categoría
+ALTER TABLE productos
+ADD COLUMN IDcategoria INT NULL,
+ADD CONSTRAINT fk_producto_categoria
+FOREIGN KEY (IDcategoria) REFERENCES categorias_productos(id);
+
+USE BD_SmartDrop;
+
+CREATE TABLE IF NOT EXISTS sesiones_usuario (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL,
+    refresh_token_hash VARCHAR(255) NOT NULL,
+    user_agent VARCHAR(255) NULL,
+    ip_address VARCHAR(45) NULL,
+    revocado TINYINT(1) DEFAULT 0,
+    expira_en DATETIME NOT NULL,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+ALTER TABLE repartidores
+ADD CONSTRAINT unique_dni UNIQUE (dni);
+
+USE BD_SmartDrop;
+
+-- 1️⃣ Crear catálogo de métodos de pago
+CREATE TABLE IF NOT EXISTS metodos_pago (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(50) NOT NULL UNIQUE,
+  descripcion VARCHAR(255) NULL,
+  activo TINYINT(1) DEFAULT 1
+);
+
+INSERT INTO metodos_pago (nombre, descripcion) VALUES
+('efectivo', 'Pago en efectivo al momento de la entrega'),
+('mercadopago', 'Pago online mediante pasarela de Mercado Pago'),
+('tarjeta_credito', 'Pago con tarjeta de crédito/débito');
+
+-- 2️⃣ Crear catálogo de estados de pago
+CREATE TABLE IF NOT EXISTS estados_pago (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(50) NOT NULL UNIQUE,
+  descripcion VARCHAR(255) NULL
+);
+
+INSERT INTO estados_pago (nombre, descripcion) VALUES
+('pendiente', 'El pago aún no ha sido procesado ni abonado'),
+('aprobado', 'El pago fue procesado exitosamente'),
+('rechazado', 'El pago fue rechazado por la entidad financiera'),
+('reembolsado', 'El dinero fue devuelto al cliente tras cancelación');
+
+USE BD_SmartDrop;
+
+-- 1️⃣ Eliminar las columnas viejas de texto (sin la cláusula IF EXISTS)
+ALTER TABLE ordenes DROP COLUMN metodo_pago;
+ALTER TABLE ordenes DROP COLUMN estado_pago;
+
+-- 2️⃣ Si ya existe motivo_cancelacion, la eliminamos primero para evitar duplicados
+ALTER TABLE ordenes DROP COLUMN motivo_cancelacion;
+
+-- 3️⃣ Agregar las nuevas columnas relacionales y claves foráneas
+ALTER TABLE ordenes
+  ADD COLUMN IDmetodo_pago INT NOT NULL DEFAULT 1 AFTER tiempo_estimado_min,
+  ADD COLUMN IDestado_pago INT NOT NULL DEFAULT 1 AFTER IDmetodo_pago,
+  ADD COLUMN motivo_cancelacion VARCHAR(255) NULL AFTER IDestado_pago,
+  ADD CONSTRAINT fk_ordenes_metodo_pago 
+      FOREIGN KEY (IDmetodo_pago) REFERENCES metodos_pago(id),
+  ADD CONSTRAINT fk_ordenes_estado_pago 
+      FOREIGN KEY (IDestado_pago) REFERENCES estados_pago(id);
+      
+USE BD_SmartDrop;
+
+ALTER TABLE ordenes
+  ADD COLUMN codigo_otp VARCHAR(8) NULL AFTER motivo_cancelacion;
+  
+  USE BD_SmartDrop;
+
+-- 1. Agregar kilometraje calculado a las órdenes
+ALTER TABLE ordenes
+  ADD COLUMN distancia_km DECIMAL(8,2) NOT NULL DEFAULT 0.00 AFTER costo_envio;
+
+-- 2. Agregar puntuación del cliente a la orden (1 a 5 estrellas)
+ALTER TABLE ordenes
+  ADD COLUMN puntaje_cliente INT NULL AFTER motivo_cancelacion;
+  
+  -- 1. Agregar comentario por producto individual
+ALTER TABLE detalle_orden
+ADD COLUMN comentario VARCHAR(255) NULL AFTER precio_unitario;
+
+-- 2. Grupos de opciones por producto (ej: "Selecciona hasta 3 sabores")
+CREATE TABLE grupos_opciones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    producto_id INT NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    min_seleccion INT DEFAULT 1,
+    max_seleccion INT DEFAULT 1,
+    obligatorio TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE
+);
+
+-- 3. Opciones específicas dentro de cada grupo (ej: "Dulce de leche", "Menta granizada")
+CREATE TABLE opciones_producto (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    precio_adicional DECIMAL(10,2) DEFAULT 0.00,
+    FOREIGN KEY (grupo_id) REFERENCES grupos_opciones(id) ON DELETE CASCADE
+);
+
+-- 4. Opciones guardadas para cada producto de una orden
+CREATE TABLE detalle_orden_opciones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    detalle_orden_id INT NOT NULL,
+    opcion_id INT NOT NULL,
+    precio_adicional DECIMAL(10,2) DEFAULT 0.00,
+    FOREIGN KEY (detalle_orden_id) REFERENCES detalle_orden(id) ON DELETE CASCADE,
+    FOREIGN KEY (opcion_id) REFERENCES opciones_producto(id)
+);
+
+USE BD_SmartDrop;
+
+ALTER TABLE ordenes
+ADD COLUMN creado_en DATETIME DEFAULT CURRENT_TIMESTAMP;
+
+USE BD_SmartDrop;
+
+CREATE TABLE horarios_local (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDlocal INT NOT NULL,
+    dia_semana TINYINT NOT NULL, -- 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+    hora_apertura TIME NOT NULL,
+    hora_cierre TIME NOT NULL,
+    es_activo TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (IDlocal) REFERENCES locales(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS notificaciones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL,              -- Usuario que recibe la notificación (Cliente, Admin Local o Repartidor)
+    IDorden INT NULL,                   -- Relación con la orden
+    titulo VARCHAR(100) NOT NULL,
+    mensaje VARCHAR(255) NOT NULL,
+    leido TINYINT(1) DEFAULT 0,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (IDorden) REFERENCES ordenes(id) ON DELETE SET NULL
+);
+
+ALTER TABLE locales
+ADD COLUMN esta_operativo TINYINT(1) NOT NULL DEFAULT 1;
+
+ALTER TABLE ordenes
+DROP FOREIGN KEY ordenes_ibfk_2;
+
+ALTER TABLE ordenes
+ADD CONSTRAINT fk_orden_repartidor
+FOREIGN KEY (IDrepartidor) REFERENCES repartidores(id);
+
+ALTER TABLE locales
+ADD CONSTRAINT unique_local_usuario UNIQUE (IDusuario);
+
+USE BD_SmartDrop;
+
+-- Agregar cantidad de cada opción en el detalle del pedido
+ALTER TABLE detalle_orden_opciones
+ADD COLUMN cantidad INT NOT NULL DEFAULT 1 AFTER opcion_id;
+
+ALTER TABLE grupos_opciones
+ADD COLUMN permitir_cantidad TINYINT(1) NOT NULL DEFAULT 0 AFTER obligatorio;
+
+USE BD_SmartDrop;
+
+-- 1️⃣ Crear la nueva tabla de direcciones asociadas al usuario
+CREATE TABLE IF NOT EXISTS direcciones_cliente (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL,
+    alias VARCHAR(50) NOT NULL DEFAULT 'Hogar', -- Ej: "Casa", "Trabajo", "Novia"
+    direccion VARCHAR(150) NOT NULL,
+    piso VARCHAR(10) NULL,
+    departamento VARCHAR(10) NULL,
+    referencia VARCHAR(150) NULL,
+    latitud DECIMAL(10,8) NOT NULL,
+    longitud DECIMAL(11,8) NOT NULL,
+    es_principal TINYINT(1) DEFAULT 0,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+-- 2️⃣ Migrar direcciones existentes desde 'clientes' hacia 'direcciones_cliente'
+INSERT INTO direcciones_cliente (IDusuario, alias, direccion, piso, departamento, referencia, latitud, longitud, es_principal)
+SELECT 
+    IDusuario, 
+    'Principal' AS alias, 
+    direccion, 
+    piso, 
+    departamento, 
+    referencia, 
+    COALESCE(latitud, -32.40800000) AS latitud, 
+    COALESCE(longitud, -63.24100000) AS longitud, 
+    1 AS es_principal
+FROM clientes
+WHERE direccion IS NOT NULL AND direccion != '';
+
+-- 3️⃣ Vincular la dirección exacta en la tabla 'ordenes' (Snapshot de la entrega)
+ALTER TABLE ordenes
+  ADD COLUMN IDdireccion INT NULL AFTER IDcliente,
+  ADD COLUMN direccion_entrega VARCHAR(150) NULL AFTER IDdireccion,
+  ADD COLUMN latitud_entrega DECIMAL(10,8) NULL AFTER direccion_entrega,
+  ADD COLUMN longitud_entrega DECIMAL(11,8) NULL AFTER latitud_entrega,
+  ADD CONSTRAINT fk_ordenes_direccion FOREIGN KEY (IDdireccion) REFERENCES direcciones_cliente(id);
+  
+  USE BD_SmartDrop;
+
+-- 1️⃣ Crear la nueva tabla para las Categorías Comerciales (orientada al cliente)
+CREATE TABLE IF NOT EXISTS categorias_comerciales (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL UNIQUE,
+    descripcion VARCHAR(150) NULL
+);
+
+-- 2️⃣ Insertar las categorías comerciales base
+INSERT INTO categorias_comerciales (nombre) VALUES
+('Hamburguesas'),
+('Pizzas'),
+('Lomitos'),
+('Empanadas'),
+('Bebidas'),
+('Postres y Helados'),
+('Promociones');
+
+-- 3️⃣ Agregar la clave foránea a la tabla productos
+ALTER TABLE productos
+ADD COLUMN IDcategoria_comercial INT NULL AFTER IDcategoria,
+ADD CONSTRAINT fk_producto_categoria_comercial
+FOREIGN KEY (IDcategoria_comercial) REFERENCES categorias_comerciales(id);
+
+-- Agregar columna 'motivo_cancelacion' a 'detalle_orden' para almacenar el motivo específico de rechazo del local
+ALTER TABLE detalle_orden
+ADD COLUMN motivo_cancelacion VARCHAR(255) NULL AFTER IDestado;
+
+USE BD_SmartDrop;
+
+-- Crear índice para agilizar consultas por fecha de creación en ordenes
+CREATE INDEX idx_ordenes_creado_en ON ordenes(creado_en);
+-- Crear índice compuesto para búsquedas por local y orden en detalle_orden
+CREATE INDEX idx_detalle_local_orden ON detalle_orden(IDlocal, IDorden);
+
+USE BD_SmartDrop;
+
+ALTER TABLE opciones_producto
+ADD COLUMN disponible TINYINT(1) NOT NULL DEFAULT 1 AFTER precio_adicional;
+
+USE BD_SmartDrop;
+
+ALTER TABLE productos
+ADD COLUMN imagen_url VARCHAR(255) NULL AFTER disponible;
+
+USE BD_SmartDrop;
+
+-- Alteración de la tabla locales para incorporar los campos requeridos del perfil[cite: 64]
+ALTER TABLE locales
+  ADD COLUMN telefono VARCHAR(30) NULL AFTER direccion,
+  ADD COLUMN logo_url VARCHAR(255) NULL AFTER esta_operativo,
+  ADD COLUMN banner_url VARCHAR(255) NULL AFTER logo_url,
+  ADD COLUMN foto_url VARCHAR(255) NULL AFTER banner_url,
+  ADD COLUMN costo_envio_base DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER foto_url,
+  ADD COLUMN tiempo_preparacion_promedio INT NOT NULL DEFAULT 20 AFTER costo_envio_base;
+
+ALTER TABLE usuarios
+  ADD COLUMN nombre VARCHAR(80) NULL AFTER username,
+  ADD COLUMN apellido VARCHAR(80) NULL AFTER nombre;
+
+ALTER TABLE vehiculos_repartidor
+  ADD COLUMN cedula_url VARCHAR(255) NULL AFTER patente,
+  ADD COLUMN seguro_url VARCHAR(255) NULL AFTER cedula_url,
+  ADD COLUMN licencia_url VARCHAR(255) NULL AFTER seguro_url,
+  ADD COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO') NOT NULL DEFAULT 'APROBADO' AFTER activo,
+  ADD COLUMN motivo_rechazo TEXT NULL AFTER estado;
+
+UPDATE vehiculos_repartidor
+SET estado = 'APROBADO'
+WHERE estado IS NULL OR estado = 'PENDIENTE';
+
+ALTER TABLE repartidores
+  ADD COLUMN IDvehiculo_activo INT NULL AFTER IDusuario,
+  ADD CONSTRAINT fk_repartidor_vehiculo_activo
+    FOREIGN KEY (IDvehiculo_activo) REFERENCES vehiculos_repartidor(id)
+    ON DELETE SET NULL;

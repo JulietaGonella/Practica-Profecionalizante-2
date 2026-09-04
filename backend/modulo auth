@@ -1,0 +1,457 @@
+/*auth.routes.js:
+import { Router } from 'express';
+import { login, refreshToken, logout, registerClient } from './auth.controller.js'; // 👈 Agregar registerClient
+
+const router = Router();
+
+router.post('/register', registerClient); // 👈 Nuevo endpoint público para clientes
+router.post('/login', login);
+router.post('/refresh-token', refreshToken);
+router.post('/logout', logout);
+
+export default router;*/
+
+/*auth.controller.js:
+mport { loginService, refreshTokenService, logoutService, registerClientService } from './auth.service.js';
+
+export const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const result = await loginService(email, password, userAgent, ipAddress);
+    res.json(result);
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    const result = await refreshTokenService(refreshToken);
+    res.json(result);
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    await logoutService(refreshToken);
+    res.json({ message: 'Sesión cerrada correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const registerClient = async (req, res) => {
+  try {
+    const result = await registerClientService(req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};*/
+
+/*auth.service.js:
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { pool } from '../config/db.js';
+import { getUserByEmailService } from '../services/users.service.js';
+import { generateAccessToken, generateRefreshToken } from './auth.utils.js';
+
+export const loginService = async (email, password, userAgent, ipAddress) => {
+  if (!email || !password) {
+    throw new Error('Email y password requeridos');
+  }
+
+  // 1️⃣ Normalizar email[cite: 42]
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  const user = await getUserByEmailService(cleanEmail);
+  if (!user) {
+    throw new Error('Credenciales inválidas');
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password_hash);
+
+  if (!isMatch) {
+    throw new Error('Credenciales inválidas');
+  }
+
+  if (
+    String(user.rol).toLowerCase() === 'repartidor' &&
+    Number(user.repartidor_validado) !== 1
+  ) {
+    throw new Error(
+      'Tu cuenta de repartidor todavía no fue validada por un administrador.'
+    );
+  }
+
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
+
+  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+  const expiraEn = new Date();
+  expiraEn.setDate(expiraEn.getDate() + 30);
+
+  await pool.query(
+    `INSERT INTO sesiones_usuario (IDusuario, refresh_token_hash, user_agent, ip_address, expira_en)
+     VALUES (?, ?, ?, ?, ?)`,
+    [user.id, refreshTokenHash, userAgent || null, ipAddress || null, expiraEn]
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    user: {
+      id: user.id,
+      username: user.username,
+      nombre: user.nombre,
+      apellido: user.apellido,
+      email: user.email,
+      rol: user.rol
+    }
+  };
+};
+
+export const registerClientService = async (data) => {
+  const {
+    nombre,
+    apellido,
+    username,
+    email,
+    password,
+    direccion,
+    telefono,
+    latitud,
+    longitud
+  } = data;
+
+  // 1️⃣ Validar presencia de campos requeridos[cite: 42]
+  if (!nombre || !apellido || !username || !email || !password || !direccion || !telefono || latitud === undefined || longitud === undefined) {
+    throw new Error('Nombre, apellido, username, email, password, dirección, teléfono, latitud y longitud son obligatorios');
+  }
+
+  // 2️⃣ Clean up / Trim de cadenas[cite: 42]
+  const cleanNombre = String(nombre).trim();
+  const cleanApellido = String(apellido).trim();
+  const cleanUsername = String(username).trim();
+  const cleanEmail = String(email).trim().toLowerCase();
+  const cleanDireccion = String(direccion).trim();
+  const cleanTelefono = String(telefono).trim();
+
+  // 3️⃣ Validar formato de email y contraseña[cite: 42]
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    throw new Error('El formato del correo electrónico no es válido');
+  }
+  if (password.length < 8) {
+    throw new Error('La contraseña debe tener al menos 8 caracteres');
+  }
+
+  // 4️⃣ Validar rango numérico de Latitud y Longitud GPS[cite: 42]
+  const lat = Number(latitud);
+  const lng = Number(longitud);
+
+  if (isNaN(lat) || lat < -90 || lat > 90) {
+    throw new Error('La latitud debe ser un número válido entre -90 y 90');
+  }
+  if (isNaN(lng) || lng < -180 || lng > 180) {
+    throw new Error('La longitud debe ser un número válido entre -180 y 180');
+  }
+
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [[rolCliente]] = await conn.query(
+      `SELECT id, nombre FROM roles WHERE LOWER(nombre) = 'cliente'`
+    );
+
+    if (!rolCliente) {
+      throw new Error('El rol "cliente" no está registrado en la base de datos');
+    }
+
+    const ROL_CLIENTE_ID = rolCliente.id;
+    const ROL_CLIENTE_NOMBRE = rolCliente.nombre;
+
+    // 5️⃣ Verificar duplicados de manera específica (Username o Email)[cite: 42]
+    const [existingUsers] = await conn.query(
+      `SELECT username, email FROM usuarios WHERE LOWER(username) = LOWER(?) OR LOWER(email) = ?`,
+      [cleanUsername, cleanEmail]
+    );
+
+    if (existingUsers.length > 0) {
+      const match = existingUsers[0];
+      if (match.email.toLowerCase() === cleanEmail) {
+        throw new Error('El correo electrónico ya está registrado');
+      }
+      if (match.username.toLowerCase() === cleanUsername.toLowerCase()) {
+        throw new Error('El nombre de usuario ya está registrado');
+      }
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const [userResult] = await conn.query(
+      `INSERT INTO usuarios (nombre, apellido, username, email, password_hash, rol_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cleanNombre, cleanApellido, cleanUsername, cleanEmail, password_hash, ROL_CLIENTE_ID]
+    );
+
+    const IDusuario = userResult.insertId;
+
+    await conn.query(
+      `INSERT INTO clientes (IDusuario, telefono, direccion, latitud, longitud)
+       VALUES (?, ?, ?, ?, ?)`,
+      [IDusuario, cleanTelefono, cleanDireccion, lat, lng]
+    );
+
+    await conn.commit();
+
+    return {
+      message: 'Cliente registrado con éxito',
+      user: {
+        id: IDusuario,
+        nombre: cleanNombre,
+        apellido: cleanApellido,
+        username: cleanUsername,
+        email: cleanEmail,
+        rol: ROL_CLIENTE_NOMBRE
+      }
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
+// 🔄 Servicio para refrescar el token cuando expira el Access Token
+// auth.service.js
+export const refreshTokenService = async (refreshToken) => {
+  if (!refreshToken) {
+    throw new Error('Refresh Token requerido');
+  }
+
+  const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh';
+  let decoded;
+
+  try {
+    decoded = jwt.verify(refreshToken, secret);
+  } catch (err) {
+    throw new Error('Refresh Token expirado o inválido');
+  }
+
+  // Buscar sesiones activas del usuario
+  const [sesiones] = await pool.query(
+    `SELECT * FROM sesiones_usuario 
+     WHERE IDusuario = ? AND revocado = 0 AND expira_en > NOW()`,
+    [decoded.id]
+  );
+
+  if (sesiones.length === 0) {
+    throw new Error('Sesión revocada o expirada');
+  }
+
+  // Buscar coincidencia de token en las sesiones activas
+  let sesionValida = null;
+  for (const s of sesiones) {
+    const match = await bcrypt.compare(refreshToken, s.refresh_token_hash);
+    if (match) {
+      sesionValida = s;
+      break;
+    }
+  }
+
+  if (!sesionValida) {
+    throw new Error('Refresh Token no coincide con ninguna sesión activa');
+  }
+
+  // 🔍 Obtener usuario con estado de validación de repartidor
+  const [[user]] = await pool.query(
+    `
+    SELECT
+      u.id,
+      r.nombre AS rol,
+      r2.validado AS repartidor_validado
+    FROM usuarios u
+    JOIN roles r ON r.id = u.rol_id
+    LEFT JOIN repartidores r2 ON r2.IDusuario = u.id
+    WHERE u.id = ?
+    `,
+    [decoded.id]
+  );
+
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  // 🛡️ Verificar si es repartidor y si está validado
+  if (
+    String(user.rol).trim().toLowerCase() === 'repartidor' &&
+    Number(user.repartidor_validado) !== 1
+  ) {
+    throw new Error(
+      'La cuenta de repartidor no está validada.'
+    );
+  }
+
+  const newAccessToken = generateAccessToken(user);
+
+  return { accessToken: newAccessToken };
+};
+
+// 🚪 Cierre de sesión (Revoca incluso si el JWT de refresh expiró físicamente)[cite: 42]
+export const logoutService = async (refreshToken) => {
+  if (!refreshToken) throw new Error('Refresh Token requerido');
+
+  const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh';
+  let userId = null;
+
+  try {
+    const decoded = jwt.verify(refreshToken, secret);
+    userId = decoded.id;
+  } catch (error) {
+    // Si expiro según JWT, intentamos obtener el ID mediante decode insensible[cite: 42]
+    const decoded = jwt.decode(refreshToken);
+    if (decoded && decoded.id) {
+      userId = decoded.id;
+    }
+  }
+
+  if (userId) {
+    const [sesiones] = await pool.query(
+      `SELECT id, refresh_token_hash FROM sesiones_usuario WHERE IDusuario = ? AND revocado = 0`,
+      [userId]
+    );
+
+    for (const s of sesiones) {
+      const match = await bcrypt.compare(refreshToken, s.refresh_token_hash);
+      if (match) {
+        await pool.query(`UPDATE sesiones_usuario SET revocado = 1 WHERE id = ?`, [s.id]);
+        break;
+      }
+    }
+  }
+};*/
+
+/*auth.utils.js:
+import jwt from 'jsonwebtoken';
+
+// 🔑 Access Token (Corta duración: 15 min)
+export const generateAccessToken = (user) => {
+  return jwt.sign(
+    { id: user.id, rol: user.rol },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  );
+};
+
+// 🔄 Refresh Token (Larga duración: ej. 30 días)
+export const generateRefreshToken = (user) => {
+  return jwt.sign(
+    { id: user.id },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh',
+    { expiresIn: '30d' }
+  );
+};*/
+
+/*auth.middleware.js:
+import jwt from 'jsonwebtoken';
+
+export const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  // 1️⃣ Validar existencia y prefijo "Bearer "
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Token requerido o formato inválido (debe ser Bearer <token>)' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Token no proporcionado' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // { id, rol }
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Access Token expirado' });
+    }
+    return res.status(401).json({ message: 'Token inválido' });
+  }
+};
+*/ 
+
+/*repartidorValidado.middleware.js:
+// auth/repartidorValidado.middleware.js
+import { pool } from '../config/db.js';
+
+export const requireRepartidorValidado = async (req, res, next) => {
+  try {
+    if (req.user?.rol?.toLowerCase() !== 'repartidor') {
+      return next();
+    }
+
+    const [[repartidor]] = await pool.query(
+      `SELECT validado FROM repartidores WHERE IDusuario = ?`,
+      [req.user.id]
+    );
+
+    if (!repartidor || Number(repartidor.validado) !== 1) {
+      return res.status(403).json({
+        error: 'Tu cuenta de repartidor aún no ha sido validada por un administrador.'
+      });
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Error al verificar estado del repartidor.' });
+  }
+};
+*/
+
+/*upload.middleware.js:
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+const uploadDir = path.join(process.cwd(), 'uploads');
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    // 💡 Usar file.fieldname en lugar de 'producto' hardcodeado
+    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Solo se permiten archivos de imagen.'), false);
+  }
+};
+
+export const upload = multer({ storage, fileFilter });
+*/

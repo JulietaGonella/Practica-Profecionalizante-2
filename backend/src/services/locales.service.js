@@ -1,0 +1,1168 @@
+// src/services/locales.service.js
+
+import { pool } from '../config/db.js';
+
+/**
+ * Evalúa si un local está activo manualmente y dentro de su horario de atención.
+ * @param {number} esActivo Flag de la tabla locales (es_activo)
+ * @param {number} estaOperativo Flag de la tabla locales (esta_operativo)
+ * @param {Array} horarios Lista de registros de la tabla horarios_local
+ * @returns {boolean}
+ */
+
+export const evaluarEstadoAtencionLocal = (
+  esActivo,
+  estaOperativo,
+  horarios = []
+) => {
+  if (Number(esActivo) !== 1) return false;
+  if (Number(estaOperativo) !== 1) return false;
+
+  const ahora = new Date();
+  const diaActual = ahora.getDay();
+  const minutosActuales =
+    ahora.getHours() * 60 + ahora.getMinutes();
+
+  const horariosDeHoy = horarios.filter(
+    (horario) =>
+      Number(horario.dia_semana) === diaActual &&
+      Number(horario.es_activo) === 1
+  );
+
+  return horariosDeHoy.some((horario) => {
+    const [horaApertura, minutoApertura] =
+      String(horario.hora_apertura).split(':').map(Number);
+
+    const [horaCierre, minutoCierre] =
+      String(horario.hora_cierre).split(':').map(Number);
+
+    const apertura = horaApertura * 60 + minutoApertura;
+    const cierre = horaCierre * 60 + minutoCierre;
+
+    // Horario que cruza la medianoche
+    if (cierre < apertura) {
+      return (
+        minutosActuales >= apertura ||
+        minutosActuales <= cierre
+      );
+    }
+
+    return (
+      minutosActuales >= apertura &&
+      minutosActuales <= cierre
+    );
+  });
+};
+
+/**
+ * Obtener el perfil completo del local autenticado mediante su IDusuario.
+ */
+export const getLocalByUserIdService = async (IDusuario) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      l.id,
+      l.nombre,
+      l.direccion,
+      l.telefono,
+      l.latitud,
+      l.longitud,
+      l.es_activo,
+      l.esta_operativo,
+      l.logo_url,
+      l.banner_url,
+      l.foto_url,
+      l.costo_envio_base,
+      l.tiempo_preparacion_promedio,
+      l.IDusuario,
+      u.username AS usuario_admin,
+      u.email AS email_admin
+    FROM locales l
+    LEFT JOIN usuarios u ON l.IDusuario = u.id
+    WHERE l.IDusuario = ?
+    `,
+    [IDusuario]
+  );
+
+  const local = rows[0];
+
+  if (!local) return null;
+
+  const [horarios] = await pool.query(
+    `
+    SELECT
+      id,
+      dia_semana,
+      hora_apertura,
+      hora_cierre,
+      es_activo
+    FROM horarios_local
+    WHERE IDlocal = ?
+    ORDER BY dia_semana, hora_apertura
+    `,
+    [local.id]
+  );
+
+  local.horarios = horarios;
+
+  local.abierto_ahora = evaluarEstadoAtencionLocal(
+    local.es_activo,
+    local.esta_operativo,
+    horarios
+  );
+
+  return local;
+};
+
+/**
+ * Actualizar los campos propios del perfil del local.
+ * Exclusivo para el Administrador del Local.
+ */
+export const updatePerfilLocalService = async (IDusuario, data) => {
+  const [[local]] = await pool.query(
+    `SELECT id FROM locales WHERE IDusuario = ?`,
+    [IDusuario]
+  );
+
+  if (!local) {
+    throw new Error(
+      'No se encontró ningún local asociado a este usuario.'
+    );
+  }
+
+  const {
+    telefono,
+    logo_url,
+    banner_url,
+    foto_url,
+    costo_envio_base,
+    tiempo_preparacion_promedio
+  } = data;
+
+  // Validar costo de envío
+  if (
+    costo_envio_base !== undefined &&
+    costo_envio_base !== null
+  ) {
+    const costo = Number(costo_envio_base);
+
+    if (Number.isNaN(costo) || costo < 0) {
+      throw new Error(
+        'El costo de envío base debe ser un número mayor o igual a 0.'
+      );
+    }
+  }
+
+  // Validar tiempo de preparación
+  if (
+    tiempo_preparacion_promedio !== undefined &&
+    tiempo_preparacion_promedio !== null
+  ) {
+    const tiempo = Number(tiempo_preparacion_promedio);
+
+    if (
+      Number.isNaN(tiempo) ||
+      tiempo < 1
+    ) {
+      throw new Error(
+        'El tiempo promedio de preparación debe ser un entero positivo en minutos.'
+      );
+    }
+  }
+
+  await pool.query(
+    `
+    UPDATE locales
+    SET
+      telefono = COALESCE(?, telefono),
+      logo_url = COALESCE(?, logo_url),
+      banner_url = COALESCE(?, banner_url),
+      foto_url = COALESCE(?, foto_url),
+      costo_envio_base = COALESCE(?, costo_envio_base),
+      tiempo_preparacion_promedio = COALESCE(?, tiempo_preparacion_promedio)
+    WHERE id = ?
+    `,
+    [
+      telefono !== undefined
+        ? String(telefono).trim()
+        : null,
+
+      logo_url !== undefined
+        ? String(logo_url).trim()
+        : null,
+
+      banner_url !== undefined
+        ? String(banner_url).trim()
+        : null,
+
+      foto_url !== undefined
+        ? String(foto_url).trim()
+        : null,
+
+      costo_envio_base !== undefined
+        ? Number(costo_envio_base)
+        : null,
+
+      tiempo_preparacion_promedio !== undefined
+        ? Number(tiempo_preparacion_promedio)
+        : null,
+
+      local.id
+    ]
+  );
+
+  return {
+    message: 'Perfil del local actualizado correctamente.'
+  };
+};
+
+/**
+ * Crear un nuevo local.
+ */
+export const createLocalService = async (data) => {
+  const {
+    nombre,
+    direccion,
+    latitud,
+    longitud,
+    IDusuario
+  } = data;
+
+  if (
+    !nombre ||
+    !direccion ||
+    latitud === undefined ||
+    longitud === undefined ||
+    !IDusuario
+  ) {
+    throw new Error(
+      'Faltan campos obligatorios (nombre, direccion, latitud, longitud, IDusuario)'
+    );
+  }
+
+  // Verificar que exista el usuario
+  const [usuarioExiste] = await pool.query(
+    `SELECT id FROM usuarios WHERE id = ?`,
+    [IDusuario]
+  );
+
+  if (usuarioExiste.length === 0) {
+    throw new Error(
+      'El IDusuario especificado no existe'
+    );
+  }
+
+  // Verificar que el usuario no tenga otro local
+  const [usuarioOcupado] = await pool.query(
+    `SELECT id FROM locales WHERE IDusuario = ?`,
+    [IDusuario]
+  );
+
+  if (usuarioOcupado.length > 0) {
+    throw new Error(
+      'Este usuario ya tiene un local asignado'
+    );
+  }
+
+  // Verificar dirección duplicada
+  const [direccionExiste] = await pool.query(
+    `SELECT id FROM locales WHERE direccion = ?`,
+    [direccion]
+  );
+
+  if (direccionExiste.length > 0) {
+    throw new Error(
+      'Ya existe un local con esa dirección'
+    );
+  }
+
+  // Normalizar coordenadas
+  const lat = Number(latitud).toFixed(8);
+  const lng = Number(longitud).toFixed(8);
+
+  // Verificar coordenadas duplicadas
+  const [coordenadasExisten] = await pool.query(
+    `
+    SELECT id
+    FROM locales
+    WHERE latitud = ?
+      AND longitud = ?
+    `,
+    [lat, lng]
+  );
+
+  if (coordenadasExisten.length > 0) {
+    throw new Error(
+      'Ya existe un local en esa ubicación'
+    );
+  }
+
+  // Obtener usuario y su rol
+  const [[usuario]] = await pool.query(
+    `
+    SELECT
+      u.id,
+      r.nombre AS rol
+    FROM usuarios u
+    JOIN roles r ON u.rol_id = r.id
+    WHERE u.id = ?
+    `,
+    [IDusuario]
+  );
+
+  if (!usuario) {
+    throw new Error(
+      'El IDusuario especificado no existe'
+    );
+  }
+
+  const rolNormalized =
+    String(usuario.rol).toLowerCase();
+
+  if (
+    rolNormalized !== 'local' &&
+    rolNormalized !== 'administrador local'
+  ) {
+    throw new Error(
+      'El usuario asignado debe tener el rol "local" o "administrador local"'
+    );
+  }
+
+  const [result] = await pool.query(
+    `
+    INSERT INTO locales
+      (nombre, direccion, latitud, longitud, IDusuario)
+    VALUES (?, ?, ?, ?, ?)
+    `,
+    [
+      nombre,
+      direccion,
+      lat,
+      lng,
+      IDusuario
+    ]
+  );
+
+  return {
+    id: result.insertId,
+    nombre,
+    direccion,
+    latitud: lat,
+    longitud: lng,
+    IDusuario,
+    message:
+      'Local creado correctamente con usuario asignado'
+  };
+};
+
+/**
+ * Obtener todos los locales activos.
+ */
+export const getLocalesService = async () => {
+  const [locales] = await pool.query(
+    `
+    SELECT
+      l.id,
+      l.nombre,
+      l.direccion,
+      l.telefono,
+      l.latitud,
+      l.longitud,
+      l.es_activo,
+      l.esta_operativo,
+      l.logo_url,
+      l.banner_url,
+      l.foto_url,
+      l.costo_envio_base,
+      l.tiempo_preparacion_promedio,
+      l.IDusuario,
+      u.username AS usuario_admin,
+      u.email AS email_admin
+    FROM locales l
+    LEFT JOIN usuarios u
+      ON l.IDusuario = u.id
+    WHERE l.es_activo = 1
+    `
+  );
+
+  for (const local of locales) {
+
+    // Obtener horarios del local
+    const [horarios] = await pool.query(
+      `
+      SELECT
+        id,
+        dia_semana,
+        hora_apertura,
+        hora_cierre,
+        es_activo
+      FROM horarios_local
+      WHERE IDlocal = ?
+        AND es_activo = 1
+      `,
+      [local.id]
+    );
+
+    local.horarios = horarios;
+
+    local.abierto_ahora =
+      evaluarEstadoAtencionLocal(
+        local.es_activo,
+        local.esta_operativo,
+        horarios
+      );
+
+    // Obtener categorías comerciales
+    const [categorias] = await pool.query(
+      `
+      SELECT DISTINCT cc.nombre
+      FROM productos p
+      JOIN categorias_comerciales cc
+        ON p.IDcategoria_comercial = cc.id
+      WHERE p.IDlocal = ?
+        AND p.disponible = 1
+      `,
+      [local.id]
+    );
+
+    local.categorias =
+      categorias.map((c) => c.nombre);
+  }
+
+  return locales;
+};
+
+/**
+ * Valida de forma estricta si un local puede recibir pedidos.
+ * Lanza un error si está cerrado.
+*/
+export const validarLocalDisponibleParaPedido =
+  async (idLocal) => {
+
+    const [[local]] = await pool.query(
+      `
+      SELECT
+        id,
+        nombre,
+        es_activo,
+        esta_operativo
+      FROM locales
+      WHERE id = ?
+      `,
+      [idLocal]
+    );
+
+    if (!local) {
+      throw new Error(
+        'El local especificado no existe.'
+      );
+    }
+
+    if (!local.es_activo) {
+      throw new Error(
+        `El local "${local.nombre}" está deshabilitado por el administrador.`
+      );
+    }
+
+    if (!local.esta_operativo) {
+      throw new Error(
+        `El local "${local.nombre}" cerró temporalmente la recepción de pedidos.`
+      );
+    }
+
+    const [horarios] = await pool.query(
+      `
+      SELECT
+        dia_semana,
+        hora_apertura,
+        hora_cierre,
+        es_activo
+      FROM horarios_local
+      WHERE IDlocal = ?
+        AND es_activo = 1
+      `,
+      [idLocal]
+    );
+
+    const abierto =
+      evaluarEstadoAtencionLocal(
+        local.es_activo,
+        local.esta_operativo,
+        horarios
+      );
+
+    if (!abierto) {
+      throw new Error(
+        `El local "${local.nombre}" está fuera de su horario de atención.`
+      );
+    }
+
+    return true;
+  };
+
+/**
+ * Obtener un local por ID.
+ */
+export const getLocalByIdService = async (id) => {
+  const [rows] = await pool.query(
+    `
+    SELECT
+      l.id,
+      l.nombre,
+      l.direccion,
+      l.telefono,
+      l.latitud,
+      l.longitud,
+      l.es_activo,
+      l.esta_operativo,
+      l.logo_url,
+      l.banner_url,
+      l.foto_url,
+      l.costo_envio_base,
+      l.tiempo_preparacion_promedio,
+      l.IDusuario,
+      u.username AS usuario_admin,
+      u.email AS email_admin
+    FROM locales l
+    LEFT JOIN usuarios u
+      ON l.IDusuario = u.id
+    WHERE l.id = ?
+    `,
+    [id]
+  );
+
+  const local = rows[0];
+
+  if (!local) return null;
+
+  const [horarios] = await pool.query(
+    `
+    SELECT
+      dia_semana,
+      hora_apertura,
+      hora_cierre,
+      es_activo
+    FROM horarios_local
+    WHERE IDlocal = ?
+    ORDER BY dia_semana, hora_apertura
+    `,
+    [id]
+  );
+
+  local.horarios = horarios;
+
+  local.abierto_ahora =
+    evaluarEstadoAtencionLocal(
+      local.es_activo,
+      local.esta_operativo,
+      horarios
+    );
+
+  return local;
+};
+
+/**
+ * Actualización administrativa global del local.
+ * Exclusivo Administrador General.
+ */
+export const updateLocalService = async (id, data) => {
+  const {
+    nombre,
+    direccion,
+    latitud,
+    longitud,
+    IDusuario
+  } = data;
+
+  const [[localActual]] = await pool.query(
+    `SELECT id FROM locales WHERE id = ?`,
+    [id]
+  );
+
+  if (!localActual) {
+    return null;
+  }
+
+  // Validar usuario asociado
+  if (
+    IDusuario !== undefined &&
+    IDusuario !== null
+  ) {
+
+    const [[usuario]] = await pool.query(
+      `
+      SELECT
+        u.id,
+        r.nombre AS rol
+      FROM usuarios u
+      JOIN roles r
+        ON r.id = u.rol_id
+      WHERE u.id = ?
+      `,
+      [IDusuario]
+    );
+
+    if (!usuario) {
+      throw new Error(
+        'El usuario asociado no existe.'
+      );
+    }
+
+    const rol =
+      String(usuario.rol).toLowerCase();
+
+    if (
+      rol !== 'local' &&
+      rol !== 'administrador local'
+    ) {
+      throw new Error(
+        'El usuario asociado debe tener rol local o administrador local.'
+      );
+    }
+
+    const [[localAsignado]] =
+      await pool.query(
+        `
+        SELECT id
+        FROM locales
+        WHERE IDusuario = ?
+          AND id <> ?
+        `,
+        [IDusuario, id]
+      );
+
+    if (localAsignado) {
+      throw new Error(
+        'Este usuario ya está asociado a otro local.'
+      );
+    }
+  }
+
+  // Validar nombre
+  if (nombre !== undefined) {
+
+    const [[nombreExiste]] =
+      await pool.query(
+        `
+        SELECT id
+        FROM locales
+        WHERE nombre = ?
+          AND id <> ?
+        `,
+        [nombre.trim(), id]
+      );
+
+    if (nombreExiste) {
+      throw new Error(
+        'Ya existe otro local con ese nombre.'
+      );
+    }
+  }
+
+  // Validar dirección
+  if (direccion !== undefined) {
+
+    const [[direccionExiste]] =
+      await pool.query(
+        `
+        SELECT id
+        FROM locales
+        WHERE direccion = ?
+          AND id <> ?
+        `,
+        [direccion.trim(), id]
+      );
+
+    if (direccionExiste) {
+      throw new Error(
+        'Ya existe otro local con esa dirección.'
+      );
+    }
+  }
+
+  let latitudFinal;
+  let longitudFinal;
+
+  // Validar latitud
+  if (latitud !== undefined) {
+
+    latitudFinal = Number(latitud);
+
+    if (
+      Number.isNaN(latitudFinal) ||
+      latitudFinal < -90 ||
+      latitudFinal > 90
+    ) {
+      throw new Error(
+        'La latitud debe estar entre -90 y 90.'
+      );
+    }
+  }
+
+  // Validar longitud
+  if (longitud !== undefined) {
+
+    longitudFinal = Number(longitud);
+
+    if (
+      Number.isNaN(longitudFinal) ||
+      longitudFinal < -180 ||
+      longitudFinal > 180
+    ) {
+      throw new Error(
+        'La longitud debe estar entre -180 y 180.'
+      );
+    }
+  }
+
+  // Validar coordenadas duplicadas
+  if (
+    latitud !== undefined ||
+    longitud !== undefined
+  ) {
+
+    const [[coordenadasActuales]] =
+      await pool.query(
+        `
+        SELECT latitud, longitud
+        FROM locales
+        WHERE id = ?
+        `,
+        [id]
+      );
+
+    const latitudBusqueda =
+      latitud !== undefined
+        ? latitudFinal.toFixed(8)
+        : Number(
+            coordenadasActuales.latitud
+          ).toFixed(8);
+
+    const longitudBusqueda =
+      longitud !== undefined
+        ? longitudFinal.toFixed(8)
+        : Number(
+            coordenadasActuales.longitud
+          ).toFixed(8);
+
+    const [[coordenadasExiste]] =
+      await pool.query(
+        `
+        SELECT id
+        FROM locales
+        WHERE latitud = ?
+          AND longitud = ?
+          AND id <> ?
+        `,
+        [
+          latitudBusqueda,
+          longitudBusqueda,
+          id
+        ]
+      );
+
+    if (coordenadasExiste) {
+      throw new Error(
+        'Ya existe otro local en esa ubicación.'
+      );
+    }
+  }
+
+  await pool.query(
+    `
+    UPDATE locales
+    SET
+      nombre = COALESCE(?, nombre),
+      direccion = COALESCE(?, direccion),
+      latitud = COALESCE(?, latitud),
+      longitud = COALESCE(?, longitud),
+      IDusuario = COALESCE(?, IDusuario)
+    WHERE id = ?
+    `,
+    [
+      nombre !== undefined
+        ? nombre.trim()
+        : null,
+
+      direccion !== undefined
+        ? direccion.trim()
+        : null,
+
+      latitud !== undefined
+        ? latitudFinal.toFixed(8)
+        : null,
+
+      longitud !== undefined
+        ? longitudFinal.toFixed(8)
+        : null,
+
+      IDusuario !== undefined
+        ? IDusuario
+        : null,
+
+      id
+    ]
+  );
+
+  return {
+    message:
+      'Local actualizado correctamente.'
+  };
+};
+
+/**
+ * Activar / desactivar local.
+ */
+export const toggleActivoLocalService = async (
+  idLocal,
+  IDusuario,
+  rolUsuario
+) => {
+
+  const conn =
+    await pool.getConnection();
+
+  try {
+
+    if (
+      String(rolUsuario).toLowerCase() !==
+      'administrador'
+    ) {
+
+      const [[local]] =
+        await conn.query(
+          `
+          SELECT
+            id,
+            es_activo
+          FROM locales
+          WHERE id = ?
+            AND IDusuario = ?
+          `,
+          [idLocal, IDusuario]
+        );
+
+      if (!local) {
+        throw new Error(
+          'No tiene permisos sobre este local o el local no existe'
+        );
+      }
+
+      const nuevoEstado =
+        local.es_activo === 1
+          ? 0
+          : 1;
+
+      await conn.query(
+        `
+        UPDATE locales
+        SET es_activo = ?
+        WHERE id = ?
+        `,
+        [nuevoEstado, idLocal]
+      );
+
+      return {
+        message:
+          `Estado del local modificado a: ${
+            nuevoEstado === 1
+              ? 'Abierto / Activo'
+              : 'Cerrado / Inactivo'
+          }`,
+        es_activo: nuevoEstado
+      };
+    }
+
+    const [[local]] =
+      await conn.query(
+        `
+        SELECT
+          id,
+          es_activo
+        FROM locales
+        WHERE id = ?
+        `,
+        [idLocal]
+      );
+
+    if (!local) {
+      throw new Error(
+        'Local no encontrado'
+      );
+    }
+
+    const nuevoEstado =
+      local.es_activo === 1
+        ? 0
+        : 1;
+
+    await conn.query(
+      `
+      UPDATE locales
+      SET es_activo = ?
+      WHERE id = ?
+      `,
+      [nuevoEstado, idLocal]
+    );
+
+    return {
+      message:
+        `Estado del local modificado a: ${
+          nuevoEstado === 1
+            ? 'Abierto / Activo'
+            : 'Cerrado / Inactivo'
+        }`,
+      es_activo: nuevoEstado
+    };
+
+  } finally {
+    conn.release();
+  }
+};
+
+/**
+ * Activar / desactivar recepción de pedidos.
+ */
+export const toggleOperativoLocalService = async (
+  idLocal,
+  IDusuario
+) => {
+
+  const [[local]] =
+    await pool.query(
+      `
+      SELECT
+        id,
+        esta_operativo
+      FROM locales
+      WHERE id = ?
+        AND IDusuario = ?
+      `,
+      [idLocal, IDusuario]
+    );
+
+  if (!local) {
+    throw new Error(
+      'No tenés permisos sobre este local o el local no existe.'
+    );
+  }
+
+  const nuevoEstado =
+    Number(local.esta_operativo) === 1
+      ? 0
+      : 1;
+
+  await pool.query(
+    `
+    UPDATE locales
+    SET esta_operativo = ?
+    WHERE id = ?
+    `,
+    [nuevoEstado, idLocal]
+  );
+
+  return {
+    message: nuevoEstado
+      ? 'El local volvió a recibir pedidos.'
+      : 'El local dejó de recibir pedidos.',
+    esta_operativo: nuevoEstado
+  };
+};
+
+/**
+ * Obtener horarios del local ordenados por día y turno.
+ */
+export const getMisHorariosService = async (
+  IDusuario
+) => {
+
+  const [[local]] =
+    await pool.query(
+      `
+      SELECT id
+      FROM locales
+      WHERE IDusuario = ?
+      `,
+      [IDusuario]
+    );
+
+  if (!local) {
+    throw new Error(
+      'No se encontró ningún local asociado a este usuario.'
+    );
+  }
+
+  const [horarios] =
+    await pool.query(
+      `
+      SELECT
+        id,
+        dia_semana,
+        hora_apertura,
+        hora_cierre,
+        es_activo
+      FROM horarios_local
+      WHERE IDlocal = ?
+      ORDER BY
+        dia_semana ASC,
+        hora_apertura ASC
+      `,
+      [local.id]
+    );
+
+  return horarios;
+};
+
+/**
+ * Reemplazar o actualizar la grilla de horarios
+ * del local (soporta múltiples turnos por día).
+ */
+export const updateMisHorariosService = async (
+  IDusuario,
+  horarios
+) => {
+
+  if (!Array.isArray(horarios)) {
+    throw new Error(
+      'La propiedad "horarios" debe ser un arreglo.'
+    );
+  }
+
+  const [[local]] =
+    await pool.query(
+      `
+      SELECT id
+      FROM locales
+      WHERE IDusuario = ?
+      `,
+      [IDusuario]
+    );
+
+  if (!local) {
+    throw new Error(
+      'No se encontró ningún local asociado a este usuario.'
+    );
+  }
+
+  // Validaciones
+  for (const h of horarios) {
+
+    if (
+      h.dia_semana === undefined ||
+      h.dia_semana < 0 ||
+      h.dia_semana > 6
+    ) {
+      throw new Error(
+        'Cada registro debe incluir un "dia_semana" válido (0 a 6).'
+      );
+    }
+
+    if (
+      !h.hora_apertura ||
+      !h.hora_cierre
+    ) {
+      throw new Error(
+        'Cada registro debe contener "hora_apertura" y "hora_cierre".'
+      );
+    }
+
+    if (
+      h.hora_apertura >=
+      h.hora_cierre
+    ) {
+      throw new Error(
+        `La hora de apertura (${h.hora_apertura}) debe ser menor a la hora de cierre (${h.hora_cierre}).`
+      );
+    }
+  }
+
+  const conn =
+    await pool.getConnection();
+
+  try {
+
+    await conn.beginTransaction();
+
+    // Eliminar horarios anteriores
+    await conn.query(
+      `
+      DELETE FROM horarios_local
+      WHERE IDlocal = ?
+      `,
+      [local.id]
+    );
+
+    // Insertar cada turno
+    for (const h of horarios) {
+
+      const activo =
+        h.es_activo !== undefined
+          ? (h.es_activo ? 1 : 0)
+          : 1;
+
+      await conn.query(
+        `
+        INSERT INTO horarios_local
+          (
+            IDlocal,
+            dia_semana,
+            hora_apertura,
+            hora_cierre,
+            es_activo
+          )
+        VALUES (?, ?, ?, ?, ?)
+        `,
+        [
+          local.id,
+          h.dia_semana,
+          h.hora_apertura,
+          h.hora_cierre,
+          activo
+        ]
+      );
+    }
+
+    await conn.commit();
+
+    return {
+      message:
+        'Horarios y turnos actualizados correctamente.'
+    };
+
+  } catch (error) {
+
+    await conn.rollback();
+    throw error;
+
+  } finally {
+
+    conn.release();
+  }
+};
+
+/**
+ * Obtener horarios activos de un local específico.
+ */
+export const getHorariosByLocalIdService =
+  async (idLocal) => {
+
+    const [horarios] =
+      await pool.query(
+        `
+        SELECT
+          dia_semana,
+          hora_apertura,
+          hora_cierre,
+          es_activo
+        FROM horarios_local
+        WHERE IDlocal = ?
+          AND es_activo = 1
+        ORDER BY
+          dia_semana ASC,
+          hora_apertura ASC
+        `,
+        [idLocal]
+      );
+
+    return horarios;
+  };
