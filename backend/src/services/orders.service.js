@@ -1372,6 +1372,8 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
   return orders;
 };
 
+// src/services/orders.service.js
+
 export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
   const [[repartidor]] = await pool.query(
     `SELECT id FROM repartidores WHERE IDusuario = ?`,
@@ -1415,7 +1417,8 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     throw new Error('El pedido no existe o no está asignado a este repartidor');
   }
 
-  // 1. Obtener la consolidación de locales y su estado de retiro
+  // 1️⃣ Obtener locales ORDENADOS por Nivel de Sensibilidad del Producto (Ascendente)
+  // De menor sensibilidad (Ambiente/Normal) a mayor sensibilidad (Helado/Caliente/Frito)
   const [localesConsolidados] = await pool.query(
     `
     SELECT 
@@ -1424,43 +1427,69 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       l.direccion AS local_direccion,
       l.latitud,
       l.longitud,
+      MAX(COALESCE(cp.nivel_sensibilidad, 1)) AS max_sensibilidad,
       IF(r.id IS NOT NULL, 1, 0) AS retirado,
       r.fecha_retiro
     FROM detalle_orden do
     JOIN locales l ON do.IDlocal = l.id
+    JOIN productos p ON do.IDproducto = p.id
+    LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
     LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
-    WHERE do.IDorden = ?
+    WHERE do.IDorden = ? AND do.IDestado != 6 -- Excluir productos cancelados
     GROUP BY l.id, l.nombre, l.direccion, l.latitud, l.longitud, r.id, r.fecha_retiro
+    ORDER BY retirado ASC, max_sensibilidad ASC, l.id ASC
     `,
     [IDorden]
   );
 
-  orden.localesRuta = localesConsolidados;
+  // 2️⃣ Determinar la secuencia óptima y cuál es el local habilitado actualmente
+  let proximoLocalHabilitadoEncontrado = false;
 
-  // 2. Obtener el detalle de los productos
+  const localesRutaEstructurados = localesConsolidados.map((loc, index) => {
+    const esRetirado = Number(loc.retirado) === 1;
+    let esElSiguienteAHabilitar = false;
+
+    // El primer local no retirado en la lista ordenada por sensibilidad será el único habilitado
+    if (!esRetirado && !proximoLocalHabilitadoEncontrado) {
+      esElSiguienteAHabilitar = true;
+      proximoLocalHabilitadoEncontrado = true;
+    }
+
+    return {
+      ...loc,
+      orden_parada: index + 1,
+      retirado: esRetirado,
+      habilitado_para_retiro: esElSiguienteAHabilitar
+    };
+  });
+
+  orden.localesRuta = localesRutaEstructurados;
+
+  // 3️⃣ Obtener el detalle de los productos ordenados también por la secuencia
   const [productos] = await pool.query(
     `
     SELECT
-      d.id AS IDdetalle,
-      d.IDproducto,
-      p.nombre AS producto,
-      d.cantidad,
-      d.precio_unitario,
-      d.comentario,
-      d.IDestado AS IDestado_detalle,
-      ed.nombre AS estado_detalle,
-      l.id AS IDlocal,
-      l.nombre AS local,
-      l.telefono AS telefono_local,
-      l.direccion AS direccion_local,
-      l.latitud AS local_latitud,
-      l.longitud AS local_longitud
-    FROM detalle_orden d
-    JOIN productos p ON p.id = d.IDproducto
-    JOIN estados ed ON ed.id = d.IDestado
-    JOIN locales l ON l.id = d.IDlocal
-    WHERE d.IDorden = ?
-    ORDER BY l.id, d.id
+  d.id AS IDdetalle,
+  d.IDproducto,
+  p.nombre AS producto,
+  d.cantidad,
+  d.precio_unitario,
+  d.comentario,
+  d.IDestado AS IDestado_detalle,
+  ed.nombre AS estado_detalle,
+  l.id AS IDlocal,
+  l.nombre AS local,
+  l.telefono AS telefono_local,
+  l.direccion AS direccion_local,
+  l.latitud AS local_latitud,
+  l.longitud AS local_longitud,
+  COALESCE(cp.nivel_sensibilidad, 1) AS nivel_sensibilidad -- 👈 🟢 AGREGAR ESTA LÍNEA
+  FROM detalle_orden d
+  JOIN productos p ON p.id = d.IDproducto
+  JOIN estados ed ON ed.id = d.IDestado
+  JOIN locales l ON l.id = d.IDlocal
+  LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id -- 👈 🟢 AGREGAR ESTA LÍNEA
+  WHERE d.IDorden = ?
     `,
     [IDorden]
   );
@@ -1728,46 +1757,103 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
   try {
     await conn.beginTransaction();
 
+    // 1️⃣ Obtener repartidor y ubicación
     const [[repartidor]] = await conn.query(
-      `SELECT id FROM repartidores WHERE IDusuario = ?`,
+      `SELECT id, latitud, longitud FROM repartidores WHERE IDusuario = ?`,
       [IDusuario]
     );
 
-    if (!repartidor) {
-      throw new Error('El usuario autenticado no está registrado como repartidor');
+    if (!repartidor) throw new Error('El usuario autenticado no está registrado como repartidor');
+    if (repartidor.latitud === null || repartidor.longitud === null) {
+      throw new Error('No se pudo determinar tu ubicación GPS actual.');
     }
 
+    // 2️⃣ Obtener datos del local a retirar
+    const [[local]] = await conn.query(
+      `SELECT id, nombre, latitud, longitud FROM locales WHERE id = ?`,
+      [IDlocal]
+    );
+
+    if (!local) throw new Error('El local especificado no existe.');
+
+    // 3️⃣ Validar geofencing (100 metros)
+    const distanciaKM = calcularDistanciaKM(
+      Number(repartidor.latitud),
+      Number(repartidor.longitud),
+      Number(local.latitud),
+      Number(local.longitud)
+    );
+
+    if (distanciaKM > 0.1) {
+      const distanciaMetros = Math.round(distanciaKM * 1000);
+      throw new Error(
+        `Te encuentras a ${distanciaMetros}m del local "${local.nombre}". Debes estar a menos de 100m para confirmar.`
+      );
+    }
+
+    // 4️⃣ Bloquear la orden y verificar asignación
     const [[orden]] = await conn.query(
       `SELECT IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
     if (!orden) throw new Error('La orden especificada no existe');
-
     if (orden.IDrepartidor !== repartidor.id) {
       throw new Error('Acción denegada: No eres el repartidor asignado a esta orden');
     }
 
-    // ⛔ 1. VALIDAR SI LOS PRODUCTOS DEL LOCAL YA ESTÁN PREPARADOS/LISTOS
+    // 5️⃣ VALIDACIÓN DE ORDEN DE RUTA SEGÚN NIVEL DE SENSIBILIDAD
+    // Obtenemos los locales pendientes de retiro ordenados secuencialmente por sensibilidad
+    const [localesPendientesOrdenados] = await conn.query(
+      `
+  SELECT 
+    l.id AS IDlocal,
+    l.nombre AS local_nombre,
+    MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS max_sensibilidad
+  FROM detalle_orden do
+  JOIN productos p ON do.IDproducto = p.id
+  LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
+  JOIN locales l ON do.IDlocal = l.id
+  LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
+  WHERE do.IDorden = ? 
+    AND do.IDestado != 6 -- Excluir cancelados
+    AND r.id IS NULL      -- Excluir ya retirados
+  GROUP BY l.id, l.nombre
+  ORDER BY max_sensibilidad ASC, l.id ASC  -- 👈 CAMBIAR DE DESC A ASC
+  `,
+      [IDorden]
+    );
+
+    if (localesPendientesOrdenados.length > 0) {
+      const proximoLocalRequerido = localesPendientesOrdenados[0];
+
+      if (Number(proximoLocalRequerido.IDlocal) !== Number(IDlocal)) {
+        throw new Error(
+          `Secuencia de ruta incorrecta: Debes retirar primero en "${proximoLocalRequerido.local_nombre}" debido al nivel de sensibilidad de sus productos.`
+        );
+      }
+    }
+
+    // 6️⃣ Validar que los ítems del local estén listos
     const [detallesPendientes] = await conn.query(
-      `SELECT id, IDestado FROM detalle_orden 
+      `SELECT id FROM detalle_orden 
        WHERE IDorden = ? AND IDlocal = ? AND IDestado NOT IN (7, 8, 6)`,
       [IDorden, IDlocal]
     );
 
     if (detallesPendientes.length > 0) {
-      throw new Error('El pedido aún no está listo para retirar en este local. El local debe marcarlo como "Listo para retiro" primero.');
+      throw new Error('El pedido aún no está marcado como "Listo para retiro" por el local.');
     }
 
-    const ESTADO_RETIRADO_ID = 8; // ID 8 = Retirado en Local
+    const ESTADO_RETIRADO_ID = 8; // Retirado en Local
 
-    // 2. Actualizar estado de los ítems de este local
+    // 7️⃣ Confirmar retiro de ítems
     await conn.query(
       `UPDATE detalle_orden SET IDestado = ? WHERE IDorden = ? AND IDlocal = ? AND IDestado != 6`,
       [ESTADO_RETIRADO_ID, IDorden, IDlocal]
     );
 
-    // 3. Registrar el retiro exitoso para desbloquear la pausa del simulador
+    // 8️⃣ Registrar el evento de retiro
     await conn.query(
       `INSERT INTO retiros_locales_orden (IDorden, IDlocal, IDrepartidor) 
        VALUES (?, ?, ?) 
@@ -1775,13 +1861,27 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       [IDorden, IDlocal, repartidor.id]
     );
 
+    // 9️⃣ Verificar si se completaron todos los retiros de la orden
+    const [[pendientesGlobales]] = await conn.query(
+      `SELECT COUNT(*) AS sinRetirar 
+       FROM detalle_orden 
+       WHERE IDorden = ? AND IDestado != 8 AND IDestado != 6`,
+      [IDorden]
+    );
+
+    if (pendientesGlobales.sinRetirar === 0 && orden.IDestado !== ESTADO_RETIRADO_ID) {
+      await conn.query(`UPDATE ordenes SET IDestado = ? WHERE id = ?`, [ESTADO_RETIRADO_ID, IDorden]);
+      await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`, [IDorden, ESTADO_RETIRADO_ID]);
+    }
+
     await conn.commit();
 
     return {
-      message: `¡Producto retirado con éxito! El simulador reanudará el recorrido.`,
+      message: `¡Producto retirado con éxito de "${local.nombre}"!`,
       IDorden,
       IDlocal,
-      retirado: true
+      retirado: true,
+      retiroCompletoPedido: pendientesGlobales.sinRetirar === 0
     };
   } catch (error) {
     await conn.rollback();

@@ -478,6 +478,13 @@ export const getRepartidoresAdminService = async () => {
       r.latitud,
       r.longitud,
       r.ultima_ubicacion,
+      -- Obtener datos resumidos del vehículo activo actual para la tabla principal
+      va.marca AS marca_activo,
+      va.modelo AS modelo_activo,
+      va.patente AS patente_activo,
+      tva.nombre AS tipo_vehiculo,
+      
+      -- Lista completa de vehículos asociados y sus metadatos
       COALESCE(
         (
           SELECT JSON_ARRAYAGG(
@@ -487,6 +494,8 @@ export const getRepartidoresAdminService = async () => {
               'marca', COALESCE(v.marca, ''),
               'modelo', COALESCE(v.modelo, ''),
               'patente', COALESCE(v.patente, ''),
+              'seguro_vigente', v.seguro_vigente,
+              'licencia_vigente', v.licencia_vigente,
               'estado', v.estado,
               'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
               'cedula_url', COALESCE(v.cedula_url, ''),
@@ -502,13 +511,30 @@ export const getRepartidoresAdminService = async () => {
       ) AS vehiculos
     FROM repartidores r
     JOIN usuarios u ON u.id = r.IDusuario
+    LEFT JOIN vehiculos_repartidor va ON va.id = r.IDvehiculo_activo
+    LEFT JOIN tipos_vehiculo tva ON tva.id = va.IDtipo_vehiculo
     ORDER BY r.id DESC
   `);
 
-  return rows.map((r) => ({
-    ...r,
-    vehiculos: typeof r.vehiculos === 'string' ? JSON.parse(r.vehiculos) : (r.vehiculos || [])
-  }));
+  return rows.map((r) => {
+    // Parsear el JSON si viene como String y descartar elementos nulos generados por agregación vacía
+    const listaVehiculos = (
+      typeof r.vehiculos === 'string'
+        ? JSON.parse(r.vehiculos)
+        : (r.vehiculos || [])
+    ).filter(Boolean);
+
+    const primerVehiculo = listaVehiculos[0] || {};
+
+    return {
+      ...r,
+      vehiculos: listaVehiculos,
+      tipo_vehiculo: r.tipo_vehiculo || primerVehiculo.tipo_vehiculo || null,
+      marca: r.marca_activo || primerVehiculo.marca || '',
+      modelo: r.modelo_activo || primerVehiculo.modelo || '',
+      patente: r.patente_activo || primerVehiculo.patente || ''
+    };
+  });
 };
 
 export const getMisVehiculosService = async (IDusuario) => {

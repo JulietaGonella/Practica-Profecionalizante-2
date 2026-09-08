@@ -15,6 +15,7 @@ import {
   getHorariosLocalAdmin,
   eliminarUsuarioAdmin
 } from '../../api/adminService';
+import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
 
 const DIAS_SEMANA = [
   'Domingo',
@@ -104,29 +105,73 @@ export const PanelAdministrador = () => {
   const [paginaRepartidores, setPaginaRepartidores] = useState(1);
   const [paginaClientes, setPaginaClientes] = useState(1);
   const [registrosPorPagina, setRegistrosPorPagina] = useState(5);
+  const [busqueda, setBusqueda] = useState('');
 
+  // --- BÚSQUEDA Y FILTRADO DE DATOS ---
+  const term = busqueda.trim().toLowerCase();
+
+  const usuariosFiltrados = usuarios.filter((u) => {
+    if (!term) return true;
+    return (
+      u.username?.toLowerCase().includes(term) ||
+      u.email?.toLowerCase().includes(term) ||
+      u.rol?.toLowerCase().includes(term)
+    );
+  });
+
+  const localesFiltrados = locales.filter((l) => {
+    if (!term) return true;
+    return (
+      l.nombre?.toLowerCase().includes(term) ||
+      l.direccion?.toLowerCase().includes(term)
+    );
+  });
+
+  const repartidoresFiltrados = repartidores.filter((r) => {
+    if (!term) return true;
+    return (
+      r.username?.toLowerCase().includes(term) ||
+      r.email?.toLowerCase().includes(term) ||
+      r.dni?.toLowerCase().includes(term) ||
+      r.tipo_vehiculo?.toLowerCase().includes(term)
+    );
+  });
+
+  const clientesFiltrados = clientes.filter((c) => {
+    if (!term) return true;
+    const nombreCompleto = `${c.nombre || ''} ${c.apellido || ''}`.toLowerCase();
+    return (
+      c.username?.toLowerCase().includes(term) ||
+      c.email?.toLowerCase().includes(term) ||
+      c.telefono?.toLowerCase().includes(term) ||
+      c.direccion?.toLowerCase().includes(term) ||
+      nombreCompleto.includes(term)
+    );
+  });
+
+  // --- CÁLCULO DE PAGINACIÓN SOBRE LOS FILTRADOS ---
   const totalPaginasRepartidores = Math.max(
     1,
-    Math.ceil(repartidores.length / registrosPorPagina)
+    Math.ceil(repartidoresFiltrados.length / registrosPorPagina)
   );
   const totalPaginasUsuarios = Math.max(
     1,
-    Math.ceil(usuarios.length / registrosPorPagina)
+    Math.ceil(usuariosFiltrados.length / registrosPorPagina)
   );
   const totalPaginasClientes = Math.max(
     1,
-    Math.ceil(clientes.length / registrosPorPagina)
+    Math.ceil(clientesFiltrados.length / registrosPorPagina)
   );
 
-  const repartidoresVisibles = repartidores.slice(
+  const repartidoresVisibles = repartidoresFiltrados.slice(
     (paginaRepartidores - 1) * registrosPorPagina,
     paginaRepartidores * registrosPorPagina
   );
-  const usuariosVisibles = usuarios.slice(
+  const usuariosVisibles = usuariosFiltrados.slice(
     (paginaUsuarios - 1) * registrosPorPagina,
     paginaUsuarios * registrosPorPagina
   );
-  const clientesVisibles = clientes.slice(
+  const clientesVisibles = clientesFiltrados.slice(
     (paginaClientes - 1) * registrosPorPagina,
     paginaClientes * registrosPorPagina
   );
@@ -182,6 +227,11 @@ export const PanelAdministrador = () => {
   useEffect(() => {
     cargarDatos();
   }, []);
+
+  // Opcional: Limpiar la búsqueda al cambiar de pestaña/sección
+  useEffect(() => {
+    setBusqueda('');
+  }, [seccion]);
 
   const handleEliminarUsuario = async (usuario) => {
     if (Number(usuario.id) === Number(usuarioActual?.id)) {
@@ -361,6 +411,8 @@ export const PanelAdministrador = () => {
     }
   };
 
+
+
   return (
     <div style={{ maxWidth: '1150px', margin: '0 auto', padding: '2rem' }}>
       <header
@@ -491,6 +543,18 @@ export const PanelAdministrador = () => {
           🧑‍🤝‍🧑 Clientes
         </button>
       </nav>
+      {/* COMPONENTE DE BÚSQUEDA */}
+      <BarraBusquedaFiltro
+        busqueda={busqueda}
+        setBusqueda={(valor) => {
+          setBusqueda(valor);
+          // Reiniciar las páginas a 1 cuando el usuario busca para no quedar desfasado
+          setPaginaUsuarios(1);
+          setPaginaRepartidores(1);
+          setPaginaClientes(1);
+        }}
+        placeholder={`Buscar en ${seccion}...`}
+      />
 
       {loading ? (
         <p>⏳ Cargando información...</p>
@@ -549,53 +613,53 @@ export const PanelAdministrador = () => {
                       </thead>
 
                       <tbody>
-                      {usuariosVisibles.map((usuario) => (
-                        <tr
-                          key={usuario.id}
-                          style={{ borderBottom: '1px solid #dee2e6' }}
-                        >
-                          <td style={{ padding: '0.8rem' }}>{usuario.id}</td>
-                          <td style={{ padding: '0.8rem' }}>{usuario.username}</td>
-                          <td style={{ padding: '0.8rem' }}>{usuario.email}</td>
-                          <td style={{ padding: '0.8rem' }}>{usuario.rol}</td>
-                          <td style={{ padding: '0.8rem' }}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                gap: '0.5rem',
-                                justifyContent: 'center',
-                                flexWrap: 'wrap'
-                              }}
-                            >
-                              {Number(usuario.id) !== Number(usuarioActual?.id) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleEliminarUsuario(usuario)}
-                                  disabled={
-                                    procesandoId === `eliminar-usuario-${usuario.id}`
-                                  }
-                                  style={{
-                                    padding: '0.45rem 0.7rem',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    backgroundColor:
+                        {usuariosVisibles.map((usuario) => (
+                          <tr
+                            key={usuario.id}
+                            style={{ borderBottom: '1px solid #dee2e6' }}
+                          >
+                            <td style={{ padding: '0.8rem' }}>{usuario.id}</td>
+                            <td style={{ padding: '0.8rem' }}>{usuario.username}</td>
+                            <td style={{ padding: '0.8rem' }}>{usuario.email}</td>
+                            <td style={{ padding: '0.8rem' }}>{usuario.rol}</td>
+                            <td style={{ padding: '0.8rem' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '0.5rem',
+                                  justifyContent: 'center',
+                                  flexWrap: 'wrap'
+                                }}
+                              >
+                                {Number(usuario.id) !== Number(usuarioActual?.id) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEliminarUsuario(usuario)}
+                                    disabled={
                                       procesandoId === `eliminar-usuario-${usuario.id}`
-                                        ? '#868e96'
-                                        : '#e03131',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  {procesandoId === `eliminar-usuario-${usuario.id}`
-                                    ? '⏳ Eliminando...'
-                                    : '🗑️ Eliminar'}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                    }
+                                    style={{
+                                      padding: '0.45rem 0.7rem',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      backgroundColor:
+                                        procesandoId === `eliminar-usuario-${usuario.id}`
+                                          ? '#868e96'
+                                          : '#e03131',
+                                      color: '#fff',
+                                      cursor: 'pointer',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {procesandoId === `eliminar-usuario-${usuario.id}`
+                                      ? '⏳ Eliminando...'
+                                      : '🗑️ Eliminar'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -1373,137 +1437,147 @@ export const PanelAdministrador = () => {
                   </div>
 
                   <TablaConScrollSuperior minWidth="1150px">
-                  <table
-                    style={{
-                      width: '100%',
-                      borderCollapse: 'collapse',
-                      marginTop: '1rem'
-                    }}
-                  >
-                    <thead>
-                      <tr style={{ backgroundColor: '#e9ecef' }}>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          ID
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Usuario
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Email
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          DNI
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Vehículo
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Disponibilidad
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Validación
-                        </th>
-                        <th style={{ padding: '0.8rem' }}>
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {repartidoresVisibles.map((rep) => (
-                        <tr
-                          key={rep.id}
-                          style={{ borderBottom: '1px solid #dee2e6' }}
-                        >
-                          <td style={{ padding: '0.8rem' }}>{rep.id}</td>
-                          <td style={{ padding: '0.8rem' }}>{rep.username}</td>
-                          <td style={{ padding: '0.8rem' }}>{rep.email}</td>
-                          <td style={{ padding: '0.8rem' }}>{rep.dni}</td>
-                          <td style={{ padding: '0.8rem' }}>
-                            {rep.tipo_vehiculo || 'Sin vehículo'}{' '}
-                            {rep.marca ? `- ${rep.marca}` : ''}
-                          </td>
-                          <td style={{ padding: '0.8rem' }}>
-                            <span
-                              style={{
-                                color:
-                                  Number(rep.disponible) === 1
-                                    ? '#2b8a3e'
-                                    : '#6c757d',
-                                fontWeight: 'bold'
-                              }}
-                            >
-                              {Number(rep.disponible) === 1
-                                ? '🟢 Disponible'
-                                : '⚪ No disponible'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.8rem' }}>
-                            <span
-                              style={{
-                                color: Number(rep.validado) === 1 ? '#2b8a3e' : '#d9480f',
-                                fontWeight: 'bold'
-                              }}
-                            >
-                              {Number(rep.validado) === 1 ? 'Sí' : 'No'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '0.8rem' }}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                gap: '0.5rem',
-                                flexWrap: 'wrap'
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => abrirDetalleRepartidor(rep)}
-                                style={{
-                                  padding: '0.45rem 0.7rem',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#1c7ed6',
-                                  color: '#fff',
-                                  cursor: 'pointer',
-                                  fontWeight: 'bold'
-                                }}
-                              >
-                                👁️ Ver detalle
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleValidarRepartidor(rep)}
-                                disabled={procesandoId === `repartidor-${rep.id}`}
-                                style={{
-                                  padding: '0.45rem 0.7rem',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  backgroundColor:
-                                    Number(rep.validado) === 1
-                                      ? '#e03131'
-                                      : '#2b8a3e',
-                                  color: '#fff',
-                                  cursor:
-                                    procesandoId === `repartidor-${rep.id}`
-                                      ? 'not-allowed'
-                                      : 'pointer',
-                                  fontWeight: 'bold'
-                                }}
-                              >
-                                {procesandoId === `repartidor-${rep.id}`
-                                  ? '⏳ Procesando...'
-                                  : Number(rep.validado) === 1
-                                    ? '❌ Invalidar'
-                                    : '✅ Validar'}
-                              </button>
-                            </div>
-                          </td>
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        marginTop: '1rem'
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ backgroundColor: '#e9ecef' }}>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            ID
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Usuario
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Email
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            DNI
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Vehículo
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Disponibilidad
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Validación
+                          </th>
+                          <th style={{ padding: '0.8rem' }}>
+                            Acciones
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+
+                      <tbody>
+                        {repartidoresVisibles.map((rep) => (
+                          <tr
+                            key={rep.id}
+                            style={{ borderBottom: '1px solid #dee2e6' }}
+                          >
+                            <td style={{ padding: '0.8rem' }}>{rep.id}</td>
+                            <td style={{ padding: '0.8rem' }}>{rep.username}</td>
+                            <td style={{ padding: '0.8rem' }}>{rep.email}</td>
+                            <td style={{ padding: '0.8rem' }}>{rep.dni}</td>
+                            <td style={{ padding: '0.8rem' }}>
+                              {rep.tipo_vehiculo ? (
+                                <div>
+                                  <strong>{rep.tipo_vehiculo}</strong>
+                                  {(rep.marca || rep.modelo) && (
+                                    <small style={{ display: 'block', color: '#666' }}>
+                                      {rep.marca} {rep.modelo} {rep.patente ? `(${rep.patente})` : ''}
+                                    </small>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#868e96' }}>Sin vehículo</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '0.8rem' }}>
+                              <span
+                                style={{
+                                  color:
+                                    Number(rep.disponible) === 1
+                                      ? '#2b8a3e'
+                                      : '#6c757d',
+                                  fontWeight: 'bold'
+                                }}
+                              >
+                                {Number(rep.disponible) === 1
+                                  ? '🟢 Disponible'
+                                  : '⚪ No disponible'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.8rem' }}>
+                              <span
+                                style={{
+                                  color: Number(rep.validado) === 1 ? '#2b8a3e' : '#d9480f',
+                                  fontWeight: 'bold'
+                                }}
+                              >
+                                {Number(rep.validado) === 1 ? 'Sí' : 'No'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.8rem' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '0.5rem',
+                                  flexWrap: 'wrap'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => abrirDetalleRepartidor(rep)}
+                                  style={{
+                                    padding: '0.45rem 0.7rem',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#1c7ed6',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  👁️ Ver detalle
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleValidarRepartidor(rep)}
+                                  disabled={procesandoId === `repartidor-${rep.id}`}
+                                  style={{
+                                    padding: '0.45rem 0.7rem',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    backgroundColor:
+                                      Number(rep.validado) === 1
+                                        ? '#e03131'
+                                        : '#2b8a3e',
+                                    color: '#fff',
+                                    cursor:
+                                      procesandoId === `repartidor-${rep.id}`
+                                        ? 'not-allowed'
+                                        : 'pointer',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {procesandoId === `repartidor-${rep.id}`
+                                    ? '⏳ Procesando...'
+                                    : Number(rep.validado) === 1
+                                      ? '❌ Invalidar'
+                                      : '✅ Validar'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </TablaConScrollSuperior>
 
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
@@ -1770,8 +1844,8 @@ export const PanelAdministrador = () => {
                         <p style={{ margin: '0.3rem 0 0' }}>
                           {repartidorSeleccionado.creado_en
                             ? new Date(
-                                repartidorSeleccionado.creado_en
-                              ).toLocaleString('es-AR')
+                              repartidorSeleccionado.creado_en
+                            ).toLocaleString('es-AR')
                             : 'No informada'}
                         </p>
                       </div>
@@ -1779,42 +1853,42 @@ export const PanelAdministrador = () => {
 
                     {(repartidorSeleccionado.latitud !== null ||
                       repartidorSeleccionado.longitud !== null) && (
-                      <div
-                        style={{
-                          marginTop: '1rem',
-                          padding: '1rem',
-                          backgroundColor: '#e7f5ff',
-                          borderRadius: '8px',
-                          color: '#1864ab'
-                        }}
-                      >
-                        <strong>Última ubicación registrada</strong>
-
-                        <p
+                        <div
                           style={{
-                            margin: '0.4rem 0 0',
-                            fontFamily: 'monospace'
+                            marginTop: '1rem',
+                            padding: '1rem',
+                            backgroundColor: '#e7f5ff',
+                            borderRadius: '8px',
+                            color: '#1864ab'
                           }}
                         >
-                          Latitud:{' '}
-                          {repartidorSeleccionado.latitud ?? 'No disponible'}
-                          <br />
-                          Longitud:{' '}
-                          {repartidorSeleccionado.longitud ?? 'No disponible'}
-                        </p>
+                          <strong>Última ubicación registrada</strong>
 
-                        {repartidorSeleccionado.ultima_ubicacion && (
-                          <small>
-                            Última actualización:{' '}
-                            {new Date(
-                              repartidorSeleccionado.ultima_ubicacion
-                            ).toLocaleString('es-AR')}
-                          </small>
-                        )}
-                      </div>
-                    )}
+                          <p
+                            style={{
+                              margin: '0.4rem 0 0',
+                              fontFamily: 'monospace'
+                            }}
+                          >
+                            Latitud:{' '}
+                            {repartidorSeleccionado.latitud ?? 'No disponible'}
+                            <br />
+                            Longitud:{' '}
+                            {repartidorSeleccionado.longitud ?? 'No disponible'}
+                          </p>
 
-                                        {/* Bloque: Lista de todos los vehículos asociados y estado documental */}
+                          {repartidorSeleccionado.ultima_ubicacion && (
+                            <small>
+                              Última actualización:{' '}
+                              {new Date(
+                                repartidorSeleccionado.ultima_ubicacion
+                              ).toLocaleString('es-AR')}
+                            </small>
+                          )}
+                        </div>
+                      )}
+
+                    {/* Bloque: Lista de todos los vehículos asociados y estado documental */}
                     <div style={{ marginTop: '1.2rem' }}>
                       <h3
                         style={{
@@ -2033,7 +2107,7 @@ export const PanelAdministrador = () => {
                   </div>
                 </div>
               )}
-              
+
             </section>
           )}
 
@@ -2070,129 +2144,129 @@ export const PanelAdministrador = () => {
                   </div>
 
                   <TablaConScrollSuperior minWidth="1150px">
-                  <table
-                    style={{
-                      width: '100%',
-                      borderCollapse: 'collapse',
-                      marginTop: '1rem'
-                    }}
-                  >
-                    <thead>
-                      <tr style={{ backgroundColor: '#e9ecef' }}>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          ID
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Usuario
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Nombre completo
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Email
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Teléfono
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Dirección
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Coordenadas
-                        </th>
-                        <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                          Registro
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {clientesVisibles.map((cliente) => (
-                        <tr
-                          key={cliente.id}
-                          style={{
-                            borderBottom: '1px solid #dee2e6'
-                          }}
-                        >
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.id}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.username}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {[cliente.nombre, cliente.apellido]
-                              .filter(Boolean)
-                              .join(' ') || 'No informado'}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.email}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.telefono || 'No informado'}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            <div>{cliente.direccion}</div>
-
-                            {(cliente.piso || cliente.departamento) && (
-                              <small style={{ color: '#666' }}>
-                                {cliente.piso
-                                  ? `Piso ${cliente.piso}`
-                                  : ''}
-                                {cliente.departamento
-                                  ? ` - Depto. ${cliente.departamento}`
-                                  : ''}
-                              </small>
-                            )}
-
-                            {cliente.referencia && (
-                              <small
-                                style={{
-                                  display: 'block',
-                                  color: '#666'
-                                }}
-                              >
-                                Ref.: {cliente.referencia}
-                              </small>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.latitud !== null &&
-                              cliente.longitud !== null ? (
-                              <span
-                                style={{
-                                  fontFamily: 'monospace',
-                                  fontSize: '0.85rem'
-                                }}
-                              >
-                                {Number(cliente.latitud).toFixed(6)}
-                                <br />
-                                {Number(cliente.longitud).toFixed(6)}
-                              </span>
-                            ) : (
-                              <span style={{ color: '#868e96' }}>
-                                No asignadas
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '0.8rem' }}>
-                            {cliente.creado_en
-                              ? new Date(cliente.creado_en).toLocaleDateString(
-                                'es-AR'
-                              )
-                              : 'No informado'}
-                          </td>
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        marginTop: '1rem'
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ backgroundColor: '#e9ecef' }}>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            ID
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Usuario
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Nombre completo
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Email
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Teléfono
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Dirección
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Coordenadas
+                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
+                            Registro
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+
+                      <tbody>
+                        {clientesVisibles.map((cliente) => (
+                          <tr
+                            key={cliente.id}
+                            style={{
+                              borderBottom: '1px solid #dee2e6'
+                            }}
+                          >
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.id}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.username}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {[cliente.nombre, cliente.apellido]
+                                .filter(Boolean)
+                                .join(' ') || 'No informado'}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.email}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.telefono || 'No informado'}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              <div>{cliente.direccion}</div>
+
+                              {(cliente.piso || cliente.departamento) && (
+                                <small style={{ color: '#666' }}>
+                                  {cliente.piso
+                                    ? `Piso ${cliente.piso}`
+                                    : ''}
+                                  {cliente.departamento
+                                    ? ` - Depto. ${cliente.departamento}`
+                                    : ''}
+                                </small>
+                              )}
+
+                              {cliente.referencia && (
+                                <small
+                                  style={{
+                                    display: 'block',
+                                    color: '#666'
+                                  }}
+                                >
+                                  Ref.: {cliente.referencia}
+                                </small>
+                              )}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.latitud !== null &&
+                                cliente.longitud !== null ? (
+                                <span
+                                  style={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.85rem'
+                                  }}
+                                >
+                                  {Number(cliente.latitud).toFixed(6)}
+                                  <br />
+                                  {Number(cliente.longitud).toFixed(6)}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#868e96' }}>
+                                  No asignadas
+                                </span>
+                              )}
+                            </td>
+
+                            <td style={{ padding: '0.8rem' }}>
+                              {cliente.creado_en
+                                ? new Date(cliente.creado_en).toLocaleDateString(
+                                  'es-AR'
+                                )
+                                : 'No informado'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </TablaConScrollSuperior>
 
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
