@@ -177,15 +177,29 @@ export const MisPedidos = () => {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3>Pedido #{orden.IDorden}</h3>
-                  <span style={{
-                    fontWeight: 'bold',
-                    padding: '0.3rem 0.6rem',
-                    borderRadius: '4px',
-                    backgroundColor: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#d4edda' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#f8d7da' : '#fff3cd',
-                    color: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#155724' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#721c24' : '#856404'
-                  }}>
-                    {orden.estado_orden}
-                  </span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {(orden.repartidor_asignado || orden.IDrepartidor) && (
+                      <span style={{
+                        fontWeight: 'bold',
+                        padding: '0.3rem 0.6rem',
+                        borderRadius: '4px',
+                        backgroundColor: '#d0ebff',
+                        color: '#1864ab',
+                        fontSize: '0.85rem'
+                      }}>
+                        🚴 Repartidor Asignado
+                      </span>
+                    )}
+                    <span style={{
+                      fontWeight: 'bold',
+                      padding: '0.3rem 0.6rem',
+                      borderRadius: '4px',
+                      backgroundColor: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#d4edda' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#f8d7da' : '#fff3cd',
+                      color: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#155724' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#721c24' : '#856404'
+                    }}>
+                      {orden.estado_orden}
+                    </span>
+                  </div>
                 </div>
 
                 <p><strong>Total:</strong> ${Number(orden.total).toFixed(2)} (Subtotal: ${Number(orden.subtotal).toFixed(2)} + Envío: ${Number(orden.costo_envio).toFixed(2)})</p>
@@ -241,7 +255,7 @@ export const MisPedidos = () => {
 
                                 let precioStr = '';
                                 if (precioUnit > 0) {
-                                  precioStr = cant > 1 
+                                  precioStr = cant > 1
                                     ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
                                     : ` (+$${precioUnit.toFixed(2)})`;
                                 }

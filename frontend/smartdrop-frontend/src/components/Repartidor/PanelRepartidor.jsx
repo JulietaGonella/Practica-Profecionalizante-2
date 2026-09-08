@@ -9,7 +9,8 @@ import {
   getMisVehiculos,
   solicitarVehiculo,
   seleccionarVehiculoActivo,
-  getMiPerfilRepartidor
+  getMiPerfilRepartidor,
+  getResumenGananciasHoy
 } from '../../api/repartidorService';
 import { LogoutButton } from '../LogoutButton';
 
@@ -30,6 +31,12 @@ export const PanelRepartidor = () => {
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
   const [perfil, setPerfil] = useState(null);
+  const [resumenGanancias, setResumenGanancias] = useState({
+    totalPedidosHoy: 0,
+    gananciasEnvioHoy: 0,
+    efectivoRecaudadoHoy: 0,
+    efectivoARendirHoy: 0
+  });
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
   const [formVehiculo, setFormVehiculo] = useState({
     IDtipo_vehiculo: '',
@@ -47,15 +54,26 @@ export const PanelRepartidor = () => {
       setLoading(true);
       setError('');
 
-      const [disponibles, asignados, disponibilidadActual, vehiculosData] = await Promise.all([
+      const [
+        disponibles,
+        asignados,
+        disponibilidadActual,
+        vehiculosData,
+        gananciasData
+      ] = await Promise.all([
         getPedidosDisponibles(),
         getMisPedidosAsignados(),
         getDisponibilidadRepartidor(),
-        getMisVehiculos()
+        getMisVehiculos(),
+        getResumenGananciasHoy()
       ]);
 
       setDisponible(Boolean(disponibilidadActual?.disponible));
       setVehiculos(Array.isArray(vehiculosData) ? vehiculosData : []);
+
+      if (gananciasData) {
+        setResumenGanancias(gananciasData);
+      }
 
       const pedidos = Array.isArray(asignados) ? asignados : [];
 
@@ -66,8 +84,8 @@ export const PanelRepartidor = () => {
       setMisPedidos(
         pedidos.filter((pedido) => {
           const estado = Number(pedido.IDestado ?? pedido.id_estado ?? 0);
-          // Incluimos todos los estados de gestión del repartidor (4, 5 y 7)
-          return estado === 4 || estado === 5 || estado === 7;
+          // Incluir todos los estados activos durante el ciclo de vida de reparto (4, 5, 7 y 8)
+          return estado === 4 || estado === 5 || estado === 7 || estado === 8;
         })
       );
 
@@ -467,7 +485,130 @@ export const PanelRepartidor = () => {
           <LogoutButton />
         </div>
       </header>
+      {/* 💰 RESUMEN FINANCIERO DEL DÍA */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '1rem',
+          marginBottom: '1.5rem'
+        }}
+      >
+        {/* Ganancias por envíos */}
+        <div
+          style={{
+            padding: '1rem',
+            backgroundColor: '#e6fcf5',
+            borderRadius: '10px',
+            border: '1px solid #96f2d7'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.85rem',
+              color: '#087f5b',
+              fontWeight: 'bold'
+            }}
+          >
+            💰 Ganancias por Envíos (Hoy)
+          </span>
 
+          <h2
+            style={{
+              margin: '0.3rem 0 0 0',
+              color: '#087f5b'
+            }}
+          >
+            $ {Number(resumenGanancias.gananciasEnvioHoy || 0).toFixed(2)}
+          </h2>
+        </div>
+
+        {/* Efectivo Cobrado en Mano */}
+        <div
+          style={{
+            padding: '1rem',
+            backgroundColor: '#fff9db',
+            borderRadius: '10px',
+            border: '1px solid #ffe066'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.85rem',
+              color: '#f59f00',
+              fontWeight: 'bold'
+            }}
+          >
+            💵 Efectivo Cobrado (Bruto)
+          </span>
+
+          <h2
+            style={{
+              margin: '0.3rem 0 0 0',
+              color: '#f59f00'
+            }}
+          >
+            $ {Number(resumenGanancias.efectivoRecaudadoHoy || 0).toFixed(2)}
+          </h2>
+        </div>
+
+        {/* Deuda Real a Rendir */}
+        <div
+          style={{
+            padding: '1rem',
+            backgroundColor: '#fff0f6',
+            borderRadius: '10px',
+            border: '1px solid #ffdeeb'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.85rem',
+              color: '#d6336c',
+              fontWeight: 'bold'
+            }}
+          >
+            🏦 Efectivo a Rendir (Nivel Central/Local)
+          </span>
+
+          <h2
+            style={{
+              margin: '0.3rem 0 0 0',
+              color: '#d6336c'
+            }}
+          >
+            $ {Number(resumenGanancias.efectivoARendirHoy || 0).toFixed(2)}
+          </h2>
+        </div>
+        {/* Entregas realizadas */}
+        <div
+          style={{
+            padding: '1rem',
+            backgroundColor: '#e7f5ff',
+            borderRadius: '10px',
+            border: '1px solid #a5d8ff'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.85rem',
+              color: '#1c7ed6',
+              fontWeight: 'bold'
+            }}
+          >
+            📦 Entregas Realizadas
+          </span>
+
+          <h2
+            style={{
+              margin: '0.3rem 0 0 0',
+              color: '#1c7ed6'
+            }}
+          >
+            {resumenGanancias.totalPedidosHoy || 0}
+          </h2>
+        </div>
+      </div>
       <div
         style={{
           display: 'flex',

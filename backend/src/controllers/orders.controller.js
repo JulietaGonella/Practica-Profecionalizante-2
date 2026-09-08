@@ -15,7 +15,9 @@ import {
   getMisPedidosAsignadosService,
   getPedidoAsignadoService,
   simularPagoExitosoService,
-  searchLocalOrdersService
+  searchLocalOrdersService,
+  liberarPedidoRepartidorService,
+  confirmarRetiroLocalService
 } from '../services/orders.service.js';
 import { procesarWebhookMercadoPagoService } from '../services/mercadopago.service.js';
 
@@ -249,6 +251,36 @@ export const searchLocalOrders = async (req, res) => {
     const { busqueda, fechaInicio, fechaFin, estado } = req.query;
     const orders = await searchLocalOrdersService(IDusuario, { busqueda, fechaInicio, fechaFin, estado });
     res.json(orders);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const liberarPedidoRepartidor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const IDusuario = req.user.id;
+    const { motivo } = req.body;
+
+    const result = await liberarPedidoRepartidorService(id, IDusuario, motivo);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const confirmarRetiroLocal = async (req, res) => {
+  try {
+    const { id } = req.params; // ID de la orden
+    const { IDlocal } = req.body; // ID del local específico retirado
+    const IDusuario = req.user.id;
+
+    if (!IDlocal) {
+      return res.status(400).json({ error: 'El campo IDlocal es requerido para confirmar el retiro' });
+    }
+
+    const result = await confirmarRetiroLocalService(id, IDusuario, IDlocal);
+    res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

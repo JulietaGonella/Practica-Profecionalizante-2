@@ -59,42 +59,25 @@ export const interpolarCoordenadas = (puntoA, puntoB, pasos = 4) => {
   return puntos;
 };
 
-// 🧠 ORDENADOR INTELIGENTE POR NIVEL DE SENSIBILIDAD
-export const evaluarProximoLocalOptimo = (posicionActual, localesRestantes) => {
-  if (localesRestantes.length === 1) return localesRestantes[0];
+// ai.service.js
 
-  let mejorLocal = null;
+export const evaluarProximoLocalOptimo = (origenActual, localesPendientes) => {
+  let mejorLocal = localesPendientes[0];
   let menorScore = Infinity;
 
-  for (const local of localesRestantes) {
+  for (const local of localesPendientes) {
     const distancia = calcularDistanciaKM(
-      posicionActual.latitud,
-      posicionActual.longitud,
-      local.latitud,
-      local.longitud
+      origenActual.latitud,
+      origenActual.longitud,
+      Number(local.latitud),
+      Number(local.longitud)
     );
 
-    const tiempoEsperaEst = local.estaListo ? 0 : (local.tiempoPreparacionMin || 10);
-
-    // 🌡️ PENALIZACIÓN DINÁMICA SEGÚN NIVEL DE SENSIBILIDAD (1 a 4)
-    // Nivel 1: Normal/Ambiente -> Penalización 0
-    // Nivel 2: Caliente         -> Penalización 10
-    // Nivel 3: Frito            -> Penalización 25
-    // Nivel 4: Frío/Helado      -> Penalización 50
-    let penaltySensibilidad = 0;
-    const nivelSensibilidad = Number(local.maxSensibilidad) || 1;
-
-    // Solo penaliza si aún quedan otros locales pendientes por visitar
-    const hayOtrosLocalesPendientes = localesRestantes.some(l => l.id !== local.id);
-
-    if (hayOtrosLocalesPendientes) {
-      if (nivelSensibilidad === 2) penaltySensibilidad = 10;
-      else if (nivelSensibilidad === 3) penaltySensibilidad = 25;
-      else if (nivelSensibilidad >= 4) penaltySensibilidad = 50;
-    }
-
-    // Score: A menor puntaje, más prioritario es para visitar ahora mismo
-    const score = (distancia * 1.5) + (tiempoEsperaEst * 2.0) + penaltySensibilidad;
+    const sensibilidad = Number(local.maxSensibilidad) || 1;
+    
+    // Multiplicamos la distancia por la sensibilidad para retrasar las paradas sensibles
+    // (A mayor sensibilidad, mayor score/penalización, dejándolo para el final del recorrido)
+    const score = distancia * sensibilidad;
 
     if (score < menorScore) {
       menorScore = score;
@@ -105,7 +88,7 @@ export const evaluarProximoLocalOptimo = (posicionActual, localesRestantes) => {
   return mejorLocal;
 };
 
-// 🛣️ Genera la ruta con evaluación paso a paso
+// 🧠 ORDENADOR INTELIGENTE POR NIVEL DE SENSIBILIDAD
 export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion) => {
   const etapas = [];
   let puntoOrigenActual = { latitud: Number(repartidorUbicacion.latitud), longitud: Number(repartidorUbicacion.longitud) };
@@ -113,7 +96,6 @@ export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion
 
   while (localesPendientes.length > 0) {
     const proximoLocal = evaluarProximoLocalOptimo(puntoOrigenActual, localesPendientes);
-    
     const puntoDestino = { latitud: Number(proximoLocal.latitud), longitud: Number(proximoLocal.longitud) };
     const puntos = interpolarCoordenadas(puntoOrigenActual, puntoDestino, 4);
 
@@ -122,6 +104,7 @@ export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion
       localId: proximoLocal.id,
       localNombre: proximoLocal.nombre,
       maxSensibilidad: proximoLocal.maxSensibilidad,
+      retirado: Boolean(proximoLocal.retirado), // 👈 Saber si ya fue confirmado
       puntos: puntos.slice(1)
     });
 

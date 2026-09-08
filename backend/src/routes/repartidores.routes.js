@@ -14,7 +14,8 @@ import {
   getVehiculosPendientes,
   revisarVehiculo,
   getRepartidoresAdmin,
-  getMiPerfilRepartidor
+  getMiPerfilRepartidor,
+  getGananciasHoy
 } from '../controllers/repartidores.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole } from '../auth/roles.middleware.js';
@@ -67,6 +68,9 @@ router.get('/vehiculos-pendientes', authMiddleware, requireRole('administrador')
 router.patch('/vehiculos/:id/revision', authMiddleware, requireRole('administrador'), revisarVehiculo);
 
 router.get('/me/perfil', authMiddleware, requireRole('repartidor'), getMiPerfilRepartidor);
+
+// 🚴 Consulta de ganancias y desglose de cobros del día
+router.get('/ganancias-hoy', authMiddleware, requireRole('repartidor'), getGananciasHoy);
 
 router.get('/', authMiddleware, requireRole('administrador'), getRepartidoresAdmin);
 

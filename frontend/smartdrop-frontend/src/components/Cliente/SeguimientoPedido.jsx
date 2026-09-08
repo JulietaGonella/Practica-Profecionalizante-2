@@ -145,7 +145,7 @@ export const SeguimientoPedido = () => {
           <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: '#2b8a3e' }}>
             🧪 Modo Demo Activo (Pasarela Online):
           </p>
-          <button 
+          <button
             disabled={isSimulating}
             onClick={async () => {
               setIsSimulating(true);
@@ -181,6 +181,26 @@ export const SeguimientoPedido = () => {
         </div>
       )}
 
+      {/* 🚴 NUEVO: Alerta de Vista Cliente para Repartidor Asignado */}
+      {(orden.repartidor_asignado || orden.IDrepartidor) && (
+        <div style={{
+          backgroundColor: '#e7f5ff',
+          border: '1px solid #74c0fc',
+          color: '#1864ab',
+          padding: '1rem',
+          borderRadius: '8px',
+          marginBottom: '1.5rem',
+          textAlign: 'center'
+        }}>
+          <strong>🚴 ¡Repartidor Asignado!</strong>
+          <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.95rem' }}>
+            {orden.repartidor?.nombre
+              ? `${orden.repartidor.nombre} ${orden.repartidor.apellido || ''} se encargará de retirar y entregar tu pedido.`
+              : 'Un repartidor ya ha tomado tu pedido y se encuentra en camino al local.'}
+          </p>
+        </div>
+      )}
+
       {/* Estado General de la Orden */}
       <div
         style={{
@@ -199,14 +219,14 @@ export const SeguimientoPedido = () => {
 
       {/* 🔴 NUEVO: Alerta y Motivo cuando la orden general está CANCELADA (Cancelada por Cliente o Todos Rechazados) */}
       {Number(orden.IDestado) === 6 && (
-        <div style={{ 
-          backgroundColor: '#ffe3e3', 
-          border: '1px solid #ffc9c9', 
-          color: '#c92a2a', 
-          padding: '1rem', 
-          borderRadius: '8px', 
-          marginBottom: '1.5rem', 
-          textAlign: 'center' 
+        <div style={{
+          backgroundColor: '#ffe3e3',
+          border: '1px solid #ffc9c9',
+          color: '#c92a2a',
+          padding: '1rem',
+          borderRadius: '8px',
+          marginBottom: '1.5rem',
+          textAlign: 'center'
         }}>
           <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.1rem' }}>🚫 Pedido Cancelado</h3>
           <p style={{ margin: 0, fontSize: '0.95rem' }}>
@@ -281,7 +301,7 @@ export const SeguimientoPedido = () => {
       {/* Desglose individual de estados por Producto */}
       <div style={{ backgroundColor: '#f8f9fa', padding: '1.2rem', borderRadius: '8px', marginTop: '1rem' }}>
         <h4 style={{ margin: '0 0 1rem 0' }}>📋 Estado Individual por Producto</h4>
-        
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
           {listaProductos.map((prod, idx) => {
             const estadoIdProd = Number(prod.IDestado_item ?? prod.IDestado_detalle ?? prod.IDestado ?? orden.IDestado);
@@ -297,11 +317,11 @@ export const SeguimientoPedido = () => {
             const motivoRechazoItem = prod.motivo_rechazo || prod.motivo_cancelacion || orden.motivo_cancelacion;
 
             return (
-              <div 
-                key={idx} 
-                style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '0.8rem 1rem',
                   backgroundColor: esCancelado ? '#fff5f5' : '#fff',
@@ -329,7 +349,7 @@ export const SeguimientoPedido = () => {
 
                           let precioStr = '';
                           if (precioUnit > 0) {
-                            precioStr = cant > 1 
+                            precioStr = cant > 1
                               ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
                               : ` (+$${precioUnit.toFixed(2)})`;
                           }

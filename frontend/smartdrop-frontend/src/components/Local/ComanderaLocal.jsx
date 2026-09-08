@@ -342,6 +342,15 @@ export const ComanderaLocal = () => {
             const estadoActual = estadoOrden(orden);
             const esOrdenCancelada = estadoActual === ESTADOS_ORDEN.CANCELADO;
 
+            // 1. Identificar si el pedido está en curso (no finalizado ni cancelado)
+            const esPedidoEnCurso = ![
+              ESTADOS_ORDEN.ENTREGADO, // 3
+              ESTADOS_ORDEN.CANCELADO  // 6
+            ].includes(estadoActual);
+
+            // 2. Comprobar si tiene repartidor asignado
+            const tieneRepartidorAsignado = Boolean(orden.IDrepartidor);
+
             return (
               <div
                 key={orden.IDorden || orden.id}
@@ -360,7 +369,26 @@ export const ComanderaLocal = () => {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
                     <h3 style={{ margin: 0, color: '#2c3e50' }}>Pedido #{orden.IDorden || orden.id}</h3>
-                    {getEtiquetaEstado(estadoActual, orden.estado_orden)}
+                    
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      {/* 🛵 Badge visual de Repartidor Asignado solo para pedidos en curso */}
+                      {esPedidoEnCurso && tieneRepartidorAsignado && (
+                        <span style={{
+                          backgroundColor: '#d0ebff',
+                          color: '#1864ab',
+                          padding: '0.3rem 0.7rem',
+                          borderRadius: '20px',
+                          fontWeight: 'bold',
+                          fontSize: '0.85rem',
+                          border: '1px solid #74c0fc'
+                        }}>
+                          🛵 Repartidor Asignado
+                        </span>
+                      )}
+
+                      {/* Estado general o efectivo de la orden */}
+                      {getEtiquetaEstado(estadoActual, orden.estado_orden)}
+                    </div>
                   </div>
 
                   {esOrdenCancelada && (

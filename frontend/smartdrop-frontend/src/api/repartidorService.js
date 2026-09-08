@@ -69,3 +69,19 @@ export const getMiPerfilRepartidor = async () => {
   const response = await api.get('/repartidores/me/perfil');
   return response.data;
 };
+
+export const liberarPedidoRepartidor = async (ordenId, motivo = '') => {
+  const { data } = await api.put(`/orders/${ordenId}/liberar`, { motivo });
+  return data;
+};
+
+export const confirmarRetiroLocal = async (ordenId, payload) => {
+  // payload: { IDlocal }
+  const response = await api.put(`/orders/${ordenId}/confirmar-retiro`, payload);
+  return response.data;
+};
+
+export const getResumenGananciasHoy = async () => {
+  const { data } = await api.get('/repartidores/ganancias-hoy');
+  return data;
+};

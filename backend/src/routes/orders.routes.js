@@ -20,7 +20,9 @@ import {
   getPedidoAsignado,
   handleMercadoPagoWebhook,
   simularPagoExitoso,
-  searchLocalOrders
+  searchLocalOrders,
+  liberarPedidoRepartidor,
+  confirmarRetiroLocal
 } from '../controllers/orders.controller.js';
 
 const router = Router();
@@ -71,6 +73,12 @@ router.get('/webhook/mercadopago', handleMercadoPagoWebhook); // Mercado Pago en
 router.post('/:id/simular-pago', authMiddleware, simularPagoExitoso);
 
 router.get('/buscar-local', authMiddleware, requireAnyRole('administrador local', 'local'), searchLocalOrders);
+
+// 🚴 Repartidor rechaza / libera un pedido asignado
+router.put('/:id/liberar', authMiddleware, requireRole('repartidor'), liberarPedidoRepartidor);
+
+// 🚴 Repartidor confirma retiro del pedido en el local
+router.put('/:id/confirmar-retiro', authMiddleware, requireRole('repartidor'), confirmarRetiroLocal);
 
 // 2. Definir la ruta GET /:id (Colocar debajo de /mis-pedidos para evitar solapamientos)
 router.get('/:id', authMiddleware, requireRole('cliente'), getOrderById);

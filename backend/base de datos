@@ -497,12 +497,12 @@ ALTER TABLE locales
   ADD COLUMN foto_url VARCHAR(255) NULL AFTER banner_url,
   ADD COLUMN costo_envio_base DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER foto_url,
   ADD COLUMN tiempo_preparacion_promedio INT NOT NULL DEFAULT 20 AFTER costo_envio_base;
-
-ALTER TABLE usuarios
+  
+  ALTER TABLE usuarios
   ADD COLUMN nombre VARCHAR(80) NULL AFTER username,
   ADD COLUMN apellido VARCHAR(80) NULL AFTER nombre;
-
-ALTER TABLE vehiculos_repartidor
+  
+  ALTER TABLE vehiculos_repartidor
   ADD COLUMN cedula_url VARCHAR(255) NULL AFTER patente,
   ADD COLUMN seguro_url VARCHAR(255) NULL AFTER cedula_url,
   ADD COLUMN licencia_url VARCHAR(255) NULL AFTER seguro_url,
@@ -518,3 +518,31 @@ ALTER TABLE repartidores
   ADD CONSTRAINT fk_repartidor_vehiculo_activo
     FOREIGN KEY (IDvehiculo_activo) REFERENCES vehiculos_repartidor(id)
     ON DELETE SET NULL;
+    
+USE BD_SmartDrop;
+
+-- 1. Insertar el nuevo estado "Retirado en Local" con orden 4 (Ajustando la secuencia)
+-- Asignamos ID 8 o el autoincremental correspondiente
+INSERT INTO estados (id, nombre, orden) VALUES (8, 'Retirado en Local', 4);
+
+-- 2. (Opcional) Si la columna orden requiere reajuste secuencial:
+-- 1: Creado | 2: En Preparación | 7: Listo para Retiro | 4: Repartidor Asignado | 8: Retirado en Local | 5: En Camino | 3: Entregado | 6: Cancelado
+UPDATE estados SET orden = 5 WHERE id = 5;
+UPDATE estados SET orden = 6 WHERE id = 3;
+
+ALTER TABLE ordenes 
+ADD COLUMN retiro_confirmado TINYINT(1) NOT NULL DEFAULT 0;
+
+USE BD_SmartDrop;
+
+CREATE TABLE IF NOT EXISTS retiros_locales_orden (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDorden INT NOT NULL,
+    IDlocal INT NOT NULL,
+    IDrepartidor INT NOT NULL,
+    fecha_retiro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDorden) REFERENCES ordenes(id) ON DELETE CASCADE,
+    FOREIGN KEY (IDlocal) REFERENCES locales(id),
+    FOREIGN KEY (IDrepartidor) REFERENCES repartidores(id),
+    UNIQUE KEY unique_orden_local (IDorden, IDlocal)
+);

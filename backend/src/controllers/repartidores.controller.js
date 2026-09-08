@@ -13,7 +13,8 @@ import {
   getVehiculosPendientesService,
   revisarVehiculoService,
   getRepartidoresAdminService,
-  getMiPerfilRepartidorService
+  getMiPerfilRepartidorService,
+  getGananciasHoyService
 } from '../services/repartidores.service.js';
 
 export const createRepartidor = async (req, res) => {
@@ -177,6 +178,17 @@ export const getMiPerfilRepartidor = async (req, res) => {
   try {
     const perfil = await getMiPerfilRepartidorService(req.user.id);
     res.json(perfil);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const getGananciasHoy = async (req, res) => {
+  try {
+    const IDusuario = req.user.id; // Extraído del token JWT por authMiddleware
+    const ganancias = await getGananciasHoyService(IDusuario);
+    
+    res.json(ganancias);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

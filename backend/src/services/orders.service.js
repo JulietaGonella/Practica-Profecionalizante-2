@@ -365,7 +365,6 @@ const PASO_CRONOLOGICO = {
   6: 99 // Cancelado (Estado final/excepción)
 };
 
-
 // 🚴 Repartidor acepta la orden (con validación de concurrencia, estado del repartidor y límite de 1 orden activa)
 export const assignRepartidorService = async (IDorden, IDusuario) => {
   const conn = await pool.getConnection();
@@ -552,6 +551,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
       SELECT DISTINCT
         o.id AS IDorden,
         o.IDcliente,
+        o.IDrepartidor,
         u.nombre AS cliente_nombre,
         u.apellido AS cliente_apellido,
         u.username AS cliente_username,
@@ -686,14 +686,14 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Obtener el local del usuario
+    // 1️⃣ Obtener el local asociado al usuario autenticado
     const [[local]] = await conn.query(
       `SELECT id FROM locales WHERE IDusuario = ?`,
       [IDusuario]
     );
     if (!local) throw new Error('No existe un local asociado a este usuario');
 
-    // 2️⃣ Obtener detalles pertenecientes a este local
+    // 2️⃣ Obtener los ítems del detalle pertenecientes a este local
     const [detalles] = await conn.query(
       `SELECT id, IDestado FROM detalle_orden WHERE IDorden = ? AND IDlocal = ?`,
       [IDorden, local.id]
@@ -702,14 +702,15 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       throw new Error('La orden no pertenece a este local o no fue encontrada');
     }
 
-    // ⚠️ CAMBIO AQUÍ: Filtrar e impedir la modificación si un ítem ya fue cancelado/rechazado (IDestado = 6)
+    // Impedir modificaciones sobre productos previamente cancelados/rechazados (IDestado = 6)
     const detallesCancelados = detalles.filter(d => Number(d.IDestado) === 6);
     if (detallesCancelados.length > 0 && detallesIds.some(id => detallesCancelados.map(d => d.id).includes(Number(id)))) {
       throw new Error('No se pueden modificar productos que ya fueron cancelados o rechazados.');
     }
-    
+
+    // Bloquear la cabecera del pedido para actualización concurrente
     const [[ordenActual]] = await conn.query(
-      `SELECT IDestado, latitud_entrega, longitud_entrega FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT IDestado, IDrepartidor, latitud_entrega, longitud_entrega FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
     if (!ordenActual) throw new Error('La orden no existe');
@@ -718,7 +719,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       ? detallesIds
       : detalles.map(d => d.id);
 
-    // 3️⃣ Si es Rechazo/Cancelación (IDestado = 6), registrar motivo
+    // 3️⃣ Actualizar los ítems en `detalle_orden`
     if (Number(nuevoEstadoId) === 6) {
       await conn.query(
         `UPDATE detalle_orden 
@@ -733,7 +734,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       );
     }
 
-    // 4️⃣ Verificar estado de todos los detalles de la orden
+    // 4️⃣ Consultar el estado actualizado de todos los productos del pedido
     const [todosDetalles] = await conn.query(
       `SELECT d.id, d.IDlocal, d.cantidad, d.precio_unitario, d.IDestado, l.latitud, l.longitud
        FROM detalle_orden d
@@ -745,7 +746,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
     const todosCancelados = todosDetalles.every(d => Number(d.IDestado) === 6);
 
     if (todosCancelados) {
-      // Si todos los productos fueron rechazados, se cancela la orden completa
+      // Si el 100% de los ítems fueron rechazados, la orden se cancela globalmente
       await conn.query(
         `UPDATE ordenes SET IDestado = 6, precio = 0, costo_envio = 0, total = 0, motivo_cancelacion = ? WHERE id = ?`,
         [motivo || 'Todos los ítems fueron rechazados por los locales', IDorden]
@@ -755,7 +756,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         [IDorden]
       );
     } else {
-      // 5️⃣ Recalcular Subtotal, Coordenadas de Locales Activos y Costo de Envío
+      // 5️⃣ Recalcular Subtotal, Coordenadas y Costo de Envío con los ítems activos
       const detallesActivos = todosDetalles.filter(d => Number(d.IDestado) !== 6);
 
       let nuevoSubtotal = 0;
@@ -771,7 +772,6 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         }
       });
 
-      // Puntos para recostear la ruta (Locales activos + Punto de entrega cliente)
       const puntosRuta = Array.from(localesActivosMap.values());
       puntosRuta.push({
         latitud: Number(ordenActual.latitud_entrega),
@@ -781,20 +781,35 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       const { distanciaTotalKM, costoEnvio } = calcularCostoEnvioMultiorigen(puntosRuta);
       const nuevoTotal = nuevoSubtotal + costoEnvio;
 
-      // 6️⃣ Determinar el menor estado de avance entre los ítems activos
-      const [[estadoMenorAvance]] = await conn.query(
-        `SELECT e.id AS IDestado
-         FROM detalle_orden do
-         JOIN estados e ON do.IDestado = e.id
-         WHERE do.IDorden = ? AND do.IDestado != 6
-         ORDER BY e.orden ASC
-         LIMIT 1`,
-        [IDorden]
-      );
+      // 6️⃣ REGLA DE NEGOCIO: Evaluación e Invariabilidad del Estado Global
+      let nuevoEstadoOrden = Number(ordenActual.IDestado);
 
-      const nuevoEstadoOrden = estadoMenorAvance ? Number(estadoMenorAvance.IDestado) : ordenActual.IDestado;
+      // 🔒 SI EL PEDIDO YA INICIÓ EL RECORRIDO (5: En camino, 3: Entregado), SE CONSERVA EL ESTADO GLOBAL
+      if (nuevoEstadoOrden === 5 || nuevoEstadoOrden === 3) {
+        // No se altera `nuevoEstadoOrden`, garantizando la invariabilidad y persistencia de "En camino"
+      } else {
+        // Evaluación estándar previa a "En camino"
+        const todosItemsListos = detallesActivos.every(d => Number(d.IDestado) === 7);
 
-      // Actualizar la orden con los nuevos montos, distancia y estado
+        if (todosItemsListos) {
+          nuevoEstadoOrden = 7; // Listo para Retiro
+        } else if (ordenActual.IDrepartidor !== null) {
+          nuevoEstadoOrden = 4; // Repartidor Asignado
+        } else {
+          const [[estadoMenorAvance]] = await conn.query(
+            `SELECT e.id AS IDestado
+             FROM detalle_orden do
+             JOIN estados e ON do.IDestado = e.id
+             WHERE do.IDorden = ? AND do.IDestado != 6
+             ORDER BY e.orden ASC
+             LIMIT 1`,
+            [IDorden]
+          );
+          nuevoEstadoOrden = estadoMenorAvance ? Number(estadoMenorAvance.IDestado) : nuevoEstadoOrden;
+        }
+      }
+
+      // 7️⃣ Persistir cambios en la tabla 'ordenes'
       await conn.query(
         `UPDATE ordenes 
          SET IDestado = ?, precio = ?, costo_envio = ?, distancia_km = ?, total = ? 
@@ -802,6 +817,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         [nuevoEstadoOrden, nuevoSubtotal, costoEnvio, distanciaTotalKM, nuevoTotal, IDorden]
       );
 
+      // Registrar en el historial únicamente si hubo un cambio real en la cabecera
       if (nuevoEstadoOrden !== Number(ordenActual.IDestado)) {
         await conn.query(
           `INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`,
@@ -812,9 +828,10 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
 
     await conn.commit();
     return {
-      message: 'Producto actualizado y orden recalculada correctamente.',
+      message: 'Detalle de la orden actualizado correctamente.',
       IDorden,
-      nuevoEstadoId
+      nuevoEstadoIdDetalle: nuevoEstadoId,
+      estadoGlobalOrden: todosCancelados ? 6 : Number(ordenActual.IDestado)
     };
   } catch (error) {
     await conn.rollback();
@@ -832,7 +849,6 @@ export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Validar repartidor autenticado
     const [[repartidor]] = await conn.query(
       `SELECT id FROM repartidores WHERE IDusuario = ?`,
       [IDusuario]
@@ -842,7 +858,6 @@ export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
       throw new Error('El usuario autenticado no está registrado como repartidor');
     }
 
-    // 2️⃣ Obtener la orden y verificar pertenencia del repartidor
     const [[orden]] = await conn.query(
       `SELECT IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
@@ -856,27 +871,20 @@ export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
       throw new Error('Acción denegada: No eres el repartidor asignado a esta orden');
     }
 
-    // 3️⃣ Permite pasar a "En camino" (5) desde "Asignado" (4) o "Listo para retirar" (7)
+    // Permite pasar a "En camino" (5) desde "Asignado" (4) o "Listo para retiro" (7)
     const estadosPermitidos = [4, 7];
     if (!estadosPermitidos.includes(Number(orden.IDestado))) {
-      throw new Error('No se puede cambiar a "En camino": La orden debe estar previamente en estado "Repartidor asignado" o "Listo para retirar"');
+      throw new Error('La orden debe estar en estado Asignado o Listo para retiro para iniciar el recorrido');
     }
 
-    // 4️⃣ Actualizar a estado "En camino" (ID 5)
-    await conn.query(
-      `UPDATE ordenes SET IDestado = 5 WHERE id = ?`,
-      [IDorden]
-    );
-
-    await conn.query(
-      `INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 5)`,
-      [IDorden]
-    );
+    // Actualizar orden general a "En camino" (ID 5)
+    await conn.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
+    await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 5)`, [IDorden]);
 
     await conn.commit();
 
     return {
-      message: 'La orden ahora se encuentra EN CAMINO',
+      message: 'La orden se encuentra EN CAMINO y la simulación/recorrido está iniciada.',
       IDorden,
       nuevoEstado: 5
     };
@@ -899,7 +907,6 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Validar repartidor registrado
     const [[repartidor]] = await conn.query(
       `SELECT id FROM repartidores WHERE IDusuario = ?`,
       [IDusuario]
@@ -909,54 +916,44 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
       throw new Error('El usuario autenticado no está registrado como repartidor');
     }
 
-    // 2️⃣ Obtener la orden, validar pertenencia y verificar OTP
     const [[orden]] = await conn.query(
       `SELECT IDestado, IDrepartidor, codigo_otp FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
-    if (!orden) {
-      throw new Error('La orden no existe');
+    if (!orden || orden.IDrepartidor !== repartidor.id) {
+      throw new Error('Orden no válida o no asignada al repartidor');
     }
 
-    if (orden.IDrepartidor !== repartidor.id) {
-      throw new Error('Acción denegada: No eres el repartidor asignado a esta orden');
+    const estadosPermitidosEntrega = [5, 7, 8];
+
+    if (!estadosPermitidosEntrega.includes(Number(orden.IDestado))) {
+      throw new Error('La orden no se encuentra en un estado válido para ser entregada.');
     }
 
-    // 3️⃣ Validar estado previo ("En camino", ID 5)
-    if (orden.IDestado !== 5) {
-      throw new Error('No se puede marcar como "Entregado": La orden debe estar previamente "En camino"');
+    // Validar que TODOS los locales de la orden hayan sido confirmados como retirados
+    const [[pendientes]] = await conn.query(
+      `SELECT COUNT(*) AS sinRetirar 
+       FROM detalle_orden 
+       WHERE IDorden = ? AND IDestado != 8 AND IDestado != 6`,
+      [IDorden]
+    );
+
+    if (pendientes.sinRetirar > 0) {
+      throw new Error('Aún quedan productos en locales sin confirmar su retiro');
     }
 
-    // 🔐 4️⃣ VALIDACIÓN DE CÓDIGO OTP / PIN
+    // Validar OTP
     if (String(orden.codigo_otp).trim() !== String(codigoOTP).trim()) {
-      throw new Error('El código OTP ingresado es incorrecto. Pídeselo al cliente para confirmar la entrega.');
+      throw new Error('El código OTP ingresado es incorrecto.');
     }
 
-    // 5️⃣ Actualizar a "Entregado" (ID 3) la orden general
-    await conn.query(
-      `UPDATE ordenes SET IDestado = 3 WHERE id = ?`,
-      [IDorden]
-    );
+    // Marcar orden completa como Entregada (ID 3)
+    await conn.query(`UPDATE ordenes SET IDestado = 3 WHERE id = ?`, [IDorden]);
+    await conn.query(`UPDATE detalle_orden SET IDestado = 3 WHERE IDorden = ? AND IDestado != 6`, [IDorden]);
+    await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 3)`, [IDorden]);
 
-    // ⚠️ MODIFICACIÓN AQUÍ: Actualizar ÚNICAMENTE los ítems que NO hayan sido cancelados (IDestado != 6)
-    await conn.query(
-      `UPDATE detalle_orden SET IDestado = 3 WHERE IDorden = ? AND IDestado != 6`,
-      [IDorden]
-    );
-
-    await conn.query(
-      `INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 3)`,
-      [IDorden]
-    );
     await conn.commit();
-
-    // 📢 IMPRIMIR CONFIRMACIÓN EN LA CONSOLA
-    console.log(`\n==================================================`);
-    console.log(`✅ [ENTREGA CONFIRMADA] OTP verificado con éxito.`);
-    console.log(`📦 Orden #${IDorden} entregada por Repartidor ID: ${repartidor.id}`);
-    console.log(`🎉 Estado cambiado a 3 (ENTREGADO).`);
-    console.log(`==================================================\n`);
 
     return {
       message: 'La orden ha sido confirmada y marcada como ENTREGADA exitosamente',
@@ -974,11 +971,27 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
 // 🛒 1. Obtener las órdenes del cliente con datos de tracking del repartidor
 // src/services/orders.service.js
 export const getMyOrdersService = async (IDcliente) => {
+  // 1️⃣ Consulta principal de órdenes del cliente incluyendo los datos del repartidor si está asignado
   const [ordenes] = await pool.query(
-    `SELECT o.id AS IDorden, o.precio AS subtotal, o.costo_envio, o.total, 
-            o.tiempo_estimado_min, o.codigo_otp, o.IDestado, e.nombre AS estado_orden, o.creado_en
+    `SELECT 
+        o.id AS IDorden, 
+        o.precio AS subtotal, 
+        o.costo_envio, 
+        o.total, 
+        o.tiempo_estimado_min, 
+        o.codigo_otp, 
+        o.IDestado, 
+        e.nombre AS estado_orden, 
+        o.creado_en,
+        o.IDrepartidor,
+        u_rep.nombre AS repartidor_nombre,
+        u_rep.apellido AS repartidor_apellido,
+        c_rep.telefono AS repartidor_telefono
      FROM ordenes o
      JOIN estados e ON o.IDestado = e.id
+     LEFT JOIN repartidores r ON o.IDrepartidor = r.id
+     LEFT JOIN usuarios u_rep ON r.IDusuario = u_rep.id
+     LEFT JOIN clientes c_rep ON u_rep.id = c_rep.IDusuario
      WHERE o.IDcliente = ?
      ORDER BY 
        CASE 
@@ -991,11 +1004,27 @@ export const getMyOrdersService = async (IDcliente) => {
 
   if (ordenes.length === 0) return [];
 
+  // 2️⃣ Mapear productos, opciones y formatear el objeto del repartidor para cada orden
   for (const orden of ordenes) {
+    // Estructuración de los datos del repartidor asignado
+    orden.repartidor_asignado = orden.IDrepartidor !== null;
+    orden.repartidor = orden.IDrepartidor ? {
+      id: orden.IDrepartidor,
+      nombre: orden.repartidor_nombre,
+      apellido: orden.repartidor_apellido,
+      telefono: orden.repartidor_telefono
+    } : null;
+
+    // Limpieza de propiedades auxiliares
+    delete orden.repartidor_nombre;
+    delete orden.repartidor_apellido;
+    delete orden.repartidor_telefono;
+
+    // Obtener los ítems con el estado individual de cada uno
     const [productos] = await pool.query(
       `SELECT do.id AS IDdetalle, do.IDproducto, p.nombre AS producto, do.cantidad, 
-       do.precio_unitario, do.comentario, do.motivo_cancelacion AS motivo_rechazo, do.IDlocal, l.nombre AS local, 
-       do.IDestado AS IDestado_item, e.nombre AS estado_item
+              do.precio_unitario, do.comentario, do.motivo_cancelacion AS motivo_rechazo, do.IDlocal, l.nombre AS local, 
+              do.IDestado AS IDestado_item, e.nombre AS estado_item
        FROM detalle_orden do
        JOIN productos p ON do.IDproducto = p.id
        JOIN locales l ON do.IDlocal = l.id
@@ -1031,16 +1060,20 @@ export const getOrderTrackingService = async (IDorden, IDcliente) => {
       e.nombre AS estado_orden,
       o.IDcliente,
       o.IDrepartidor,
+      u_rep.nombre AS repartidor_nombre,
+      u_rep.apellido AS repartidor_apellido,
+      c_rep.telefono AS repartidor_telefono,
       r.latitud AS repartidor_latitud,
       r.longitud AS repartidor_longitud,
       r.ultima_ubicacion AS repartidor_ultima_ubicacion,
-      c.latitud AS cliente_latitud,
-      c.longitud AS cliente_longitud,
-      c.direccion AS cliente_direccion
+      o.latitud_entrega,
+      o.longitud_entrega,
+      o.direccion_entrega
     FROM ordenes o
     JOIN estados e ON o.IDestado = e.id
-    JOIN clientes c ON o.IDcliente = c.IDusuario
     LEFT JOIN repartidores r ON o.IDrepartidor = r.id
+    LEFT JOIN usuarios u_rep ON r.IDusuario = u_rep.id
+    LEFT JOIN clientes c_rep ON u_rep.id = c_rep.IDusuario
     WHERE o.id = ?
     `,
     [IDorden]
@@ -1054,27 +1087,29 @@ export const getOrderTrackingService = async (IDorden, IDcliente) => {
     throw new Error('Acción denegada: No tienes acceso al seguimiento de esta orden');
   }
 
-  const enCamino = orden.IDestado === 5; // Estado 5: En camino
+  const tieneRepartidor = orden.IDrepartidor !== null;
 
   return {
     IDorden: orden.IDorden,
     IDestado: orden.IDestado,
     estado_orden: orden.estado_orden,
-    en_camino: enCamino,
-    destino_cliente: {
-      direccion: orden.cliente_direccion,
-      latitud: orden.cliente_latitud,
-      longitud: orden.cliente_longitud
-    },
-    repartidor_ubicacion: enCamino && orden.IDrepartidor ? {
-      IDrepartidor: orden.IDrepartidor,
-      latitud: orden.repartidor_latitud,
-      longitud: orden.repartidor_longitud,
-      ultima_ubicacion: orden.repartidor_ultima_ubicacion
+    repartidor_asignado: tieneRepartidor,
+    repartidor: tieneRepartidor ? {
+      id: orden.IDrepartidor,
+      nombre: orden.repartidor_nombre,
+      apellido: orden.repartidor_apellido,
+      telefono: orden.repartidor_telefono,
+      ubicacion: {
+        latitud: orden.repartidor_latitud,
+        longitud: orden.repartidor_longitud,
+        ultima_ubicacion: orden.repartidor_ultima_ubicacion
+      }
     } : null,
-    mensaje: enCamino
-      ? 'Seguimiento activo en tiempo real'
-      : 'El repartidor aún no se encuentra en camino hacia tu ubicación'
+    destino_cliente: {
+      direccion: orden.direccion_entrega,
+      latitud: orden.latitud_entrega,
+      longitud: orden.longitud_entrega
+    }
   };
 };
 
@@ -1191,11 +1226,12 @@ export const cotizarOrdenService = async (data) => {
 };
 
 export const getOrderByIdService = async (IDorden, IDcliente) => {
-  // 1️⃣ Obtener el encabezado de la orden con datos de entrega
+  // 1️⃣ Consulta con JOIN a repartidores y usuarios para extraer datos completos del repartidor
   const [[orden]] = await pool.query(
     `SELECT 
         o.id AS IDorden,
         o.IDcliente,
+        o.IDrepartidor,
         o.IDmetodo_pago,
         o.direccion_entrega,
         o.latitud_entrega,
@@ -1213,11 +1249,17 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
         ep.nombre AS estado_pago,
         o.motivo_cancelacion,
         o.puntaje_cliente,
-        o.creado_en
+        o.creado_en,
+        u_rep.nombre AS repartidor_nombre,
+        u_rep.apellido AS repartidor_apellido,
+        c_rep.telefono AS repartidor_telefono
      FROM ordenes o
      JOIN estados e ON o.IDestado = e.id
      LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
      LEFT JOIN estados_pago ep ON o.IDestado_pago = ep.id
+     LEFT JOIN repartidores r ON o.IDrepartidor = r.id
+     LEFT JOIN usuarios u_rep ON r.IDusuario = u_rep.id
+     LEFT JOIN clientes c_rep ON u_rep.id = c_rep.IDusuario
      WHERE o.id = ?`,
     [IDorden]
   );
@@ -1226,12 +1268,11 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
     throw new Error(`La orden ID #${IDorden} no existe.`);
   }
 
-  // ⛔ Validación de seguridad
   if (orden.IDcliente !== IDcliente) {
     throw new Error('Acción denegada: No tienes permiso para ver esta orden.');
   }
 
-  // 2️⃣ Obtener los productos asociados al detalle
+  // 2️⃣ Obtener los productos con el estado individual de cada uno
   const [productos] = await pool.query(
     `SELECT do.id AS IDdetalle, do.IDproducto, p.nombre AS producto, do.cantidad, 
        do.precio_unitario, do.comentario, do.motivo_cancelacion AS motivo_rechazo, do.IDlocal, l.nombre AS local, 
@@ -1244,7 +1285,6 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
     [IDorden]
   );
 
-  // 3️⃣ Obtener las opciones de cada producto
   for (const prod of productos) {
     const [opciones] = await pool.query(
       `SELECT op.id, op.nombre, doo.precio_adicional, doo.cantidad
@@ -1256,10 +1296,22 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
     prod.opciones = opciones;
   }
 
+  // Estructuración final con los datos del repartidor
+  orden.repartidor_asignado = orden.IDrepartidor !== null;
+  orden.repartidor = orden.IDrepartidor ? {
+    id: orden.IDrepartidor,
+    nombre: orden.repartidor_nombre,
+    apellido: orden.repartidor_apellido,
+    telefono: orden.repartidor_telefono
+  } : null;
+
+  delete orden.repartidor_nombre;
+  delete orden.repartidor_apellido;
+  delete orden.repartidor_telefono;
+
   orden.productos = productos;
   return orden;
 };
-
 // src/services/orders.service.js
 export const getMisPedidosAsignadosService = async (IDusuario) => {
   const [[repartidor]] = await pool.query(
@@ -1281,13 +1333,14 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
       o.IDestado,
       o.IDestado AS id_estado,
       e.nombre AS estado_orden,
-      c.direccion AS direccion_cliente
+      c.direccion AS direccion_cliente,
+      c.telefono AS telefono_cliente       -- 👈 Teléfono del Cliente agregado
     FROM ordenes o
     JOIN estados e ON e.id = o.IDestado
     JOIN clientes c ON c.IDusuario = o.IDcliente
     WHERE o.IDrepartidor = ?
-      AND o.IDestado IN (4, 5, 7, 3)
-    ORDER BY o.id DESC
+   AND o.IDestado IN (4, 5, 7, 8, 3)
+   ORDER BY o.id DESC
     `,
     [repartidor.id]
   );
@@ -1299,12 +1352,15 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
         do.id AS IDdetalle,
         p.nombre AS producto,
         do.cantidad,
-        do.IDestado AS IDestado_detalle,        -- 👈 Asegúrate de incluir este campo
+        do.IDestado AS IDestado_detalle,
         do.motivo_cancelacion AS motivo_rechazo,
-        e2.nombre AS estado_detalle
+        e2.nombre AS estado_detalle,
+        l.nombre AS local,                  -- 👈 Datos del Local agregados
+        l.telefono AS telefono_local        -- 👈 Teléfono del Local agregado
       FROM detalle_orden do
       JOIN productos p ON p.id = do.IDproducto
       JOIN estados e2 ON e2.id = do.IDestado
+      LEFT JOIN locales l ON l.id = do.IDlocal
       WHERE do.IDorden = ?
       `,
       [orden.IDorden]
@@ -1339,6 +1395,7 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       o.total,
       o.codigo_otp,
       c.direccion AS direccion_cliente,
+      c.telefono AS telefono_cliente,
       c.latitud AS cliente_latitud,
       c.longitud AS cliente_longitud,
       r.latitud AS repartidor_latitud,
@@ -1358,6 +1415,29 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     throw new Error('El pedido no existe o no está asignado a este repartidor');
   }
 
+  // 1. Obtener la consolidación de locales y su estado de retiro
+  const [localesConsolidados] = await pool.query(
+    `
+    SELECT 
+      l.id AS IDlocal,
+      l.nombre AS local_nombre,
+      l.direccion AS local_direccion,
+      l.latitud,
+      l.longitud,
+      IF(r.id IS NOT NULL, 1, 0) AS retirado,
+      r.fecha_retiro
+    FROM detalle_orden do
+    JOIN locales l ON do.IDlocal = l.id
+    LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
+    WHERE do.IDorden = ?
+    GROUP BY l.id, l.nombre, l.direccion, l.latitud, l.longitud, r.id, r.fecha_retiro
+    `,
+    [IDorden]
+  );
+
+  orden.localesRuta = localesConsolidados;
+
+  // 2. Obtener el detalle de los productos
   const [productos] = await pool.query(
     `
     SELECT
@@ -1369,7 +1449,9 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       d.comentario,
       d.IDestado AS IDestado_detalle,
       ed.nombre AS estado_detalle,
+      l.id AS IDlocal,
       l.nombre AS local,
+      l.telefono AS telefono_local,
       l.direccion AS direccion_local,
       l.latitud AS local_latitud,
       l.longitud AS local_longitud
@@ -1440,11 +1522,12 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
     }
 
     const { busqueda, fechaInicio, fechaFin, estado } = filtros;
-    
+
     let queryOrders = `
       SELECT DISTINCT
         o.id AS IDorden,
         o.IDcliente,
+        o.IDrepartidor,
         u.nombre AS cliente_nombre,
         u.apellido AS cliente_apellido,
         u.username AS cliente_username,
@@ -1556,6 +1639,153 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
       ...orden,
       productos: productosPorOrden[orden.IDorden] || []
     }));
+  } finally {
+    conn.release();
+  }
+};
+
+// 🚴 Repartidor libera/cancela la asignación de un pedido (sin cancelar la orden global)
+export const liberarPedidoRepartidorService = async (IDorden, IDusuario, motivo) => {
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // 1️⃣ Obtener el ID del repartidor
+    const [[repartidor]] = await conn.query(
+      `SELECT id FROM repartidores WHERE IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (!repartidor) {
+      throw new Error('El usuario autenticado no está registrado como repartidor.');
+    }
+
+    // 2️⃣ Obtener la orden y validar
+    const [[orden]] = await conn.query(
+      `SELECT id, IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
+      [IDorden]
+    );
+
+    if (!orden) {
+      throw new Error('La orden no existe.');
+    }
+
+    if (orden.IDrepartidor !== repartidor.id) {
+      throw new Error('Acción denegada: No eres el repartidor asignado a esta orden.');
+    }
+
+    // Solo se permite liberar si está asignado (4) o listo para retirar (7), antes de pasar a "En camino" (5)
+    if (Number(orden.IDestado) === 5) {
+      throw new Error('No se puede cancelar la asignación cuando el pedido ya está "En camino".');
+    }
+
+    // 3️⃣ Determinar el estado anterior al que debe retornar la orden
+    // Buscamos en el historial el último estado distinto a "Repartidor asignado" (4)
+    const [[historialPrevio]] = await conn.query(
+      `SELECT IDestado 
+       FROM hitorial_estado_orden 
+       WHERE IDorden = ? AND IDestado != 4 
+       ORDER BY id DESC LIMIT 1`,
+      [IDorden]
+    );
+
+    // Si no se encuentra un estado previo válido, se reestablece a "En preparación" (2)
+    const estadoAnteriorId = historialPrevio ? Number(historialPrevio.IDestado) : 2;
+
+    // 4️⃣ Desvincular al repartidor y restaurar el estado anterior
+    await conn.query(
+      `UPDATE ordenes 
+       SET IDrepartidor = NULL, IDestado = ? 
+       WHERE id = ?`,
+      [estadoAnteriorId, IDorden]
+    );
+
+    // 5️⃣ Registrar el retorno de estado en el historial
+    await conn.query(
+      `INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`,
+      [IDorden, estadoAnteriorId]
+    );
+
+    await conn.commit();
+
+    return {
+      message: 'Pedido liberado con éxito. El pedido volvió a la lista de disponibles.',
+      IDorden,
+      nuevoEstado: estadoAnteriorId
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
+export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) => {
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [[repartidor]] = await conn.query(
+      `SELECT id FROM repartidores WHERE IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (!repartidor) {
+      throw new Error('El usuario autenticado no está registrado como repartidor');
+    }
+
+    const [[orden]] = await conn.query(
+      `SELECT IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
+      [IDorden]
+    );
+
+    if (!orden) throw new Error('La orden especificada no existe');
+
+    if (orden.IDrepartidor !== repartidor.id) {
+      throw new Error('Acción denegada: No eres el repartidor asignado a esta orden');
+    }
+
+    // ⛔ 1. VALIDAR SI LOS PRODUCTOS DEL LOCAL YA ESTÁN PREPARADOS/LISTOS
+    const [detallesPendientes] = await conn.query(
+      `SELECT id, IDestado FROM detalle_orden 
+       WHERE IDorden = ? AND IDlocal = ? AND IDestado NOT IN (7, 8, 6)`,
+      [IDorden, IDlocal]
+    );
+
+    if (detallesPendientes.length > 0) {
+      throw new Error('El pedido aún no está listo para retirar en este local. El local debe marcarlo como "Listo para retiro" primero.');
+    }
+
+    const ESTADO_RETIRADO_ID = 8; // ID 8 = Retirado en Local
+
+    // 2. Actualizar estado de los ítems de este local
+    await conn.query(
+      `UPDATE detalle_orden SET IDestado = ? WHERE IDorden = ? AND IDlocal = ? AND IDestado != 6`,
+      [ESTADO_RETIRADO_ID, IDorden, IDlocal]
+    );
+
+    // 3. Registrar el retiro exitoso para desbloquear la pausa del simulador
+    await conn.query(
+      `INSERT INTO retiros_locales_orden (IDorden, IDlocal, IDrepartidor) 
+       VALUES (?, ?, ?) 
+       ON DUPLICATE KEY UPDATE fecha_retiro = CURRENT_TIMESTAMP`,
+      [IDorden, IDlocal, repartidor.id]
+    );
+
+    await conn.commit();
+
+    return {
+      message: `¡Producto retirado con éxito! El simulador reanudará el recorrido.`,
+      IDorden,
+      IDlocal,
+      retirado: true
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
   } finally {
     conn.release();
   }
