@@ -4,7 +4,8 @@ import { getClientes,
     updateMiPerfil,
     getMisDirecciones, 
     createMisDirecciones, 
-    deleteMisDirecciones
+    deleteMisDirecciones,
+    getHistorialCliente
 } from '../controllers/clientes.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole, requireAnyRole } from '../auth/roles.middleware.js';
@@ -17,5 +18,6 @@ router.put('/mi-perfil', authMiddleware, updateMiPerfil);
 router.get('/mis-direcciones', authMiddleware, getMisDirecciones);
 router.post('/mis-direcciones', authMiddleware, createMisDirecciones);
 router.delete('/mis-direcciones/:id', authMiddleware, deleteMisDirecciones);
+router.get('/:id/historial', authMiddleware, requireRole('administrador'), getHistorialCliente);
 
 export default router;

@@ -20,8 +20,19 @@ export const CrearCuentaPerfilAdmin = () => {
       IDtipo_vehiculo: '',
       marca: '',
       modelo: '',
-      patente: ''
+      anio: '',
+      patente: '',
+      seguro_vigente: false,
+      licencia_vigente: false,
+      bici_propia: false
     }
+  });
+
+  // Estado para los archivos adjuntos del vehículo
+  const [archivosVehiculo, setArchivosVehiculo] = useState({
+    cedula: null,
+    seguro: null,
+    licencia: null
   });
 
   const [ubicacionLocal, setUbicacionLocal] = useState({
@@ -52,14 +63,24 @@ export const CrearCuentaPerfilAdmin = () => {
   };
 
   const handleVehiculoChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setPerfilForm((prev) => ({
       ...prev,
       vehiculo: {
         ...prev.vehiculo,
-        [name]: value
+        [name]: type === 'checkbox' ? checked : value
       }
     }));
+  };
+
+  const handleFileChange = (e) => {
+    const { name, files } = e.target;
+    if (files && files[0]) {
+      setArchivosVehiculo((prev) => ({
+        ...prev,
+        [name]: files[0]
+      }));
+    }
   };
 
   const handleUbicacionLocalChange = (e) => {
@@ -75,29 +96,15 @@ export const CrearCuentaPerfilAdmin = () => {
       setLoading(true);
       setBanner({ tipo: '', texto: '' });
 
-      if (!usuarioForm.username.trim()) {
-        throw new Error('Debes ingresar un nombre de usuario.');
-      }
-
-      if (!usuarioForm.email.trim()) {
-        throw new Error('Debes ingresar un email.');
-      }
-
-      if (!usuarioForm.password.trim()) {
-        throw new Error('Debes ingresar una contraseña.');
-      }
+      if (!usuarioForm.username.trim()) throw new Error('Debes ingresar un nombre de usuario.');
+      if (!usuarioForm.email.trim()) throw new Error('Debes ingresar un email.');
+      if (!usuarioForm.password.trim()) throw new Error('Debes ingresar una contraseña.');
 
       if (tipo === 'local') {
         if (!ubicacionLocal.latitud || !ubicacionLocal.longitud) {
           throw new Error('Debes ingresar la latitud y longitud del local.');
         }
-      }
 
-      if (tipo === 'repartidor' && !perfilForm.dni.trim()) {
-        throw new Error('Debes ingresar el DNI del repartidor.');
-      }
-
-      if (tipo === 'local') {
         await crearLocalCompletoAdmin({
           username: usuarioForm.username,
           email: usuarioForm.email,
@@ -110,20 +117,42 @@ export const CrearCuentaPerfilAdmin = () => {
       }
 
       if (tipo === 'repartidor') {
-        await crearRepartidorCompletoAdmin({
-          username: usuarioForm.username,
-          email: usuarioForm.email,
-          password: usuarioForm.password,
-          dni: perfilForm.dni,
-          vehiculo: {
-            IDtipo_vehiculo: Number(
-              perfilForm.vehiculo.IDtipo_vehiculo
-            ),
-            marca: perfilForm.vehiculo.marca,
-            modelo: perfilForm.vehiculo.modelo,
-            patente: perfilForm.vehiculo.patente
-          }
-        });
+        if (!perfilForm.dni.trim()) {
+          throw new Error('Debes ingresar el DNI del repartidor.');
+        }
+
+        const esBicicleta = String(perfilForm.vehiculo.IDtipo_vehiculo) === '2';
+
+        // Construir el objeto normalizando los datos según el tipo de vehículo
+        const vehiculoPayload = {
+          IDtipo_vehiculo: Number(perfilForm.vehiculo.IDtipo_vehiculo),
+          marca: esBicicleta ? null : (perfilForm.vehiculo.marca || null),
+          modelo: esBicicleta ? null : (perfilForm.vehiculo.modelo || null),
+          anio: esBicicleta || !perfilForm.vehiculo.anio ? null : Number(perfilForm.vehiculo.anio),
+          patente: esBicicleta ? null : perfilForm.vehiculo.patente,
+          seguro_vigente: esBicicleta ? false : perfilForm.vehiculo.seguro_vigente,
+          licencia_vigente: esBicicleta ? false : perfilForm.vehiculo.licencia_vigente,
+          bici_propia: esBicicleta ? perfilForm.vehiculo.bici_propia : false
+        };
+
+        // Construcción de FormData para enviar archivos y JSON serializado
+        const formData = new FormData();
+        formData.append('username', usuarioForm.username);
+        formData.append('email', usuarioForm.email);
+        formData.append('password', usuarioForm.password);
+        formData.append('dni', perfilForm.dni);
+
+        // El backend realiza JSON.parse(req.body.vehiculo)
+        formData.append('vehiculo', JSON.stringify(vehiculoPayload));
+
+        // Adjuntar archivos solo si NO es bicicleta y existen
+        if (!esBicicleta) {
+          if (archivosVehiculo.cedula) formData.append('cedula', archivosVehiculo.cedula);
+          if (archivosVehiculo.seguro) formData.append('seguro', archivosVehiculo.seguro);
+          if (archivosVehiculo.licencia) formData.append('licencia', archivosVehiculo.licencia);
+        }
+
+        await crearRepartidorCompletoAdmin(formData);
       }
 
       setBanner({
@@ -131,12 +160,8 @@ export const CrearCuentaPerfilAdmin = () => {
         texto: `${tipo === 'local' ? 'Local' : 'Repartidor'} creado correctamente.`
       });
 
-      setUsuarioForm({
-        username: '',
-        email: '',
-        password: ''
-      });
-
+      // Limpiar formulario
+      setUsuarioForm({ username: '', email: '', password: '' });
       setPerfilForm({
         nombre: '',
         direccion: '',
@@ -145,26 +170,27 @@ export const CrearCuentaPerfilAdmin = () => {
           IDtipo_vehiculo: '',
           marca: '',
           modelo: '',
-          patente: ''
+          anio: '',
+          patente: '',
+          seguro_vigente: false,
+          licencia_vigente: false,
+          bici_propia: false
         }
       });
+      setArchivosVehiculo({ cedula: null, seguro: null, licencia: null });
+      setUbicacionLocal({ latitud: '', longitud: '' });
 
-      setUbicacionLocal({
-        latitud: '',
-        longitud: ''
-      });
     } catch (err) {
       setBanner({
         tipo: 'error',
-        texto:
-          err.response?.data?.error ||
-          err.message ||
-          'Error al crear la cuenta y perfil.'
+        texto: err.response?.data?.error || err.message || 'Error al crear la cuenta y perfil.'
       });
     } finally {
       setLoading(false);
     }
   };
+
+  const tipoVehiculoActual = String(perfilForm.vehiculo.IDtipo_vehiculo);
 
   return (
     <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '1.2rem' }}>
@@ -176,11 +202,8 @@ export const CrearCuentaPerfilAdmin = () => {
             marginBottom: '1rem',
             padding: '0.9rem 1rem',
             borderRadius: '8px',
-            backgroundColor:
-              banner.tipo === 'success' ? '#e6fcf5' : '#fff5f5',
-            border: `1px solid ${
-              banner.tipo === 'success' ? '#a9eec2' : '#ffc9c9'
-            }`,
+            backgroundColor: banner.tipo === 'success' ? '#e6fcf5' : '#fff5f5',
+            border: `1px solid ${banner.tipo === 'success' ? '#a9eec2' : '#ffc9c9'}`,
             color: banner.tipo === 'success' ? '#087f5b' : '#c92a2a',
             fontWeight: 'bold'
           }}
@@ -272,10 +295,6 @@ export const CrearCuentaPerfilAdmin = () => {
                 placeholder="Longitud del local"
               />
             </div>
-
-            <p style={{ color: '#666', fontSize: '0.85rem' }}>
-              📍 Próximamente: elegir la ubicación del local con un pin en el mapa.
-            </p>
           </>
         )}
 
@@ -299,32 +318,95 @@ export const CrearCuentaPerfilAdmin = () => {
               }}
             >
               <option value="">Seleccione tipo de vehículo</option>
-              <option value="1">A pie</option>
               <option value="4">Auto</option>
               <option value="2">Bicicleta</option>
               <option value="3">Moto</option>
             </select>
 
-            <input
-              name="marca"
-              value={perfilForm.vehiculo.marca}
-              onChange={handleVehiculoChange}
-              placeholder="Marca"
-            />
+            {/* Marca, Modelo y Año solo se muestran para Moto (3) y Auto (4) */}
+            {(tipoVehiculoActual === '3' || tipoVehiculoActual === '4') && (
+              <>
+                <input
+                  name="marca"
+                  value={perfilForm.vehiculo.marca}
+                  onChange={handleVehiculoChange}
+                  placeholder="Marca"
+                />
 
-            <input
-              name="modelo"
-              value={perfilForm.vehiculo.modelo}
-              onChange={handleVehiculoChange}
-              placeholder="Modelo"
-            />
+                <input
+                  name="modelo"
+                  value={perfilForm.vehiculo.modelo}
+                  onChange={handleVehiculoChange}
+                  placeholder="Modelo"
+                />
 
-            <input
-              name="patente"
-              value={perfilForm.vehiculo.patente}
-              onChange={handleVehiculoChange}
-              placeholder="Patente"
-            />
+                <input
+                  name="anio"
+                  type="number"
+                  value={perfilForm.vehiculo.anio}
+                  onChange={handleVehiculoChange}
+                  placeholder="Año del vehículo (Ej: 2022)"
+                />
+
+                <input
+                  name="patente"
+                  value={perfilForm.vehiculo.patente}
+                  onChange={handleVehiculoChange}
+                  placeholder="Patente"
+                />
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    name="seguro_vigente"
+                    checked={perfilForm.vehiculo.seguro_vigente}
+                    onChange={handleVehiculoChange}
+                  />
+                  Seguro vigente
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    name="licencia_vigente"
+                    checked={perfilForm.vehiculo.licencia_vigente}
+                    onChange={handleVehiculoChange}
+                  />
+                  Licencia vigente
+                </label>
+
+                {/* Campos de carga de archivos de documentación */}
+                <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.5rem' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    Foto/Archivo Cédula Verde/Azul:
+                    <input type="file" name="cedula" accept="image/*,.pdf" onChange={handleFileChange} />
+                  </label>
+
+                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    Foto/Archivo Comprobante Seguro:
+                    <input type="file" name="seguro" accept="image/*,.pdf" onChange={handleFileChange} />
+                  </label>
+
+                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                    Foto/Archivo Licencia de Conducir:
+                    <input type="file" name="licencia" accept="image/*,.pdf" onChange={handleFileChange} />
+                  </label>
+                </div>
+              </>
+            )}
+
+            {/* Opciones exclusivas para Bicicleta */}
+            {tipoVehiculoActual === '2' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  name="bici_propia"
+                  checked={perfilForm.vehiculo.bici_propia}
+                  onChange={handleVehiculoChange}
+                />
+                ¿Dispone de bicicleta propia?
+              </label>
+            )}
           </>
         )}
 

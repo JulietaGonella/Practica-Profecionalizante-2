@@ -592,10 +592,13 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
   if (!repartidor) throw new Error('El usuario no está registrado como repartidor');
 
   const [[tipo]] = await pool.query(
-    `SELECT id FROM tipos_vehiculo WHERE id = ?`,
+    `SELECT id, nombre FROM tipos_vehiculo WHERE id = ?`,
     [IDtipo_vehiculo]
   );
   if (!tipo) throw new Error('El tipo de vehículo no existe');
+
+  // Detectar si es bicicleta por ID o por nombre
+  const esBicicleta = Number(IDtipo_vehiculo) === 2 || tipo.nombre.toLowerCase().includes('bici');
 
   const [result] = await pool.query(
     `
@@ -608,16 +611,16 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
     [
       repartidor.id,
       IDtipo_vehiculo,
-      marca || null,
+      marca || (esBicicleta ? 'Bicicleta' : null),
       modelo || null,
       anio || null,
-      patente || null,
-      seguro_vigente !== undefined ? (seguro_vigente ? 1 : 0) : null,
-      licencia_vigente !== undefined ? (licencia_vigente ? 1 : 0) : null,
-      bici_propia !== undefined ? (bici_propia ? 1 : 0) : null,
-      archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null,
-      archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null,
-      archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null
+      esBicicleta ? null : (patente || null),
+      esBicicleta ? null : (seguro_vigente !== undefined ? (seguro_vigente ? 1 : 0) : null),
+      esBicicleta ? null : (licencia_vigente !== undefined ? (licencia_vigente ? 1 : 0) : null),
+      esBicicleta ? 1 : (bici_propia !== undefined ? (bici_propia ? 1 : 0) : 0),
+      esBicicleta ? null : (archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null),
+      esBicicleta ? null : (archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null),
+      esBicicleta ? null : (archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null)
     ]
   );
 

@@ -1,6 +1,15 @@
 /*auth.routes.js:
 import { Router } from 'express';
-import { login, refreshToken, logout, registerClient } from './auth.controller.js'; // 👈 Agregar registerClient
+import { 
+  login, 
+  refreshToken, 
+  logout, 
+  registerClient,
+  cambiarPasswordObligatorio,
+  solicitarRecuperacionPassword,
+  restablecerPassword
+} from './auth.controller.js';
+import { authMiddleware } from './auth.middleware.js';
 
 const router = Router();
 
@@ -8,11 +17,22 @@ router.post('/register', registerClient); // 👈 Nuevo endpoint público para c
 router.post('/login', login);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', logout);
+router.post('/cambiar-password-inicial', authMiddleware, cambiarPasswordObligatorio);
+router.post('/solicitar-recuperacion', solicitarRecuperacionPassword);
+router.post('/restablecer-password', restablecerPassword);
 
 export default router;*/
 
 /*auth.controller.js:
-mport { loginService, refreshTokenService, logoutService, registerClientService } from './auth.service.js';
+import { 
+  loginService, 
+  refreshTokenService, 
+  logoutService, 
+  registerClientService,
+  cambiarPasswordObligatorioService,
+  solicitarRecuperacionPasswordService,
+  restablecerPasswordService 
+} from './auth.service.js';
 
 export const login = async (req, res) => {
   try {
@@ -40,6 +60,12 @@ export const refreshToken = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     const { refreshToken } = req.body;
+    
+    // Validar en el controller que envíen el token[cite: 42]
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh Token requerido' });
+    }
+
     await logoutService(refreshToken);
     res.json({ message: 'Sesión cerrada correctamente' });
   } catch (error) {
@@ -54,30 +80,62 @@ export const registerClient = async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+};
+
+export const cambiarPasswordObligatorio = async (req, res) => {
+  try {
+    const { nuevaPassword } = req.body;
+    const userId = req.user.id; // Obtenido desde el authMiddleware
+
+    const result = await cambiarPasswordObligatorioService(userId, nuevaPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const solicitarRecuperacionPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await solicitarRecuperacionPasswordService(email);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const restablecerPassword = async (req, res) => {
+  try {
+    const { userId, token, nuevaPassword } = req.body;
+    const result = await restablecerPasswordService(userId, token, nuevaPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 };*/
 
 /*auth.service.js:
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/db.js';
 import { getUserByEmailService } from '../services/users.service.js';
 import { generateAccessToken, generateRefreshToken } from './auth.utils.js';
+import { enviarEmailRecuperacion } from '../helpers/email.helper.js';
 
 export const loginService = async (email, password, userAgent, ipAddress) => {
   if (!email || !password) {
     throw new Error('Email y password requeridos');
   }
 
-  // 1️⃣ Normalizar email[cite: 42]
   const cleanEmail = String(email).trim().toLowerCase();
-
   const user = await getUserByEmailService(cleanEmail);
+
   if (!user) {
     throw new Error('Credenciales inválidas');
   }
 
   const isMatch = await bcrypt.compare(password, user.password_hash);
-
   if (!isMatch) {
     throw new Error('Credenciales inválidas');
   }
@@ -93,7 +151,6 @@ export const loginService = async (email, password, userAgent, ipAddress) => {
 
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
-
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
   const expiraEn = new Date();
@@ -114,7 +171,8 @@ export const loginService = async (email, password, userAgent, ipAddress) => {
       nombre: user.nombre,
       apellido: user.apellido,
       email: user.email,
-      rol: user.rol
+      rol: user.rol,
+      debe_cambiar_pass: Boolean(user.debe_cambiar_pass) // 👈 Retornamos el estado de la bandera
     }
   };
 };
@@ -341,6 +399,139 @@ export const logoutService = async (refreshToken) => {
       }
     }
   }
+};
+
+// 🆕 Servicio para completar el restablecimiento/cambio obligatorio de clave
+export const cambiarPasswordObligatorioService = async (userId, nuevaPassword) => {
+  if (!nuevaPassword || String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  const newHash = await bcrypt.hash(nuevaPassword, 10);
+
+  const [result] = await pool.query(
+    `UPDATE usuarios 
+     SET password_hash = ?, debe_cambiar_pass = 0 
+     WHERE id = ?`,
+    [newHash, userId]
+  );
+
+  if (result.affectedRows === 0) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  return { message: 'Contraseña actualizada correctamente. Ya puedes continuar.' };
+};
+
+// 1️⃣ Solicitar token de recuperación y enviar correo/log
+export const solicitarRecuperacionPasswordService = async (email) => {
+  if (!email) {
+    throw new Error('El correo electrónico es requerido.');
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  const [[user]] = await pool.query(
+    `SELECT id, nombre, email FROM usuarios WHERE LOWER(email) = ?`,
+    [cleanEmail]
+  );
+
+  // Respuesta genérica para evitar la enumeración de usuarios por ciberseguridad
+  if (!user) {
+    return { message: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = await bcrypt.hash(resetToken, 10);
+  const expiraEn = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+  await pool.query(
+    `INSERT INTO password_resets (IDusuario, token_hash, expira_en) VALUES (?, ?, ?)`,
+    [user.id, tokenHash, expiraEn]
+  );
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const resetUrl = `${frontendUrl}/restablecer-password?token=${resetToken}&id=${user.id}`;
+
+  const previewUrl = await enviarEmailRecuperacion(user.email, resetUrl);
+
+  return {
+    message: 'Si el correo está registrado, recibirás un enlace de recuperación.',
+    ...(process.env.NODE_ENV !== 'production' && {
+      debugInfo: {
+        resetUrl,
+        emailPreviewUrl: previewUrl || 'Ver consola del servidor'
+      }
+    })
+  };
+};
+
+// 2️⃣ Consumir token y actualizar la clave en la BD
+export const restablecerPasswordService = async (userId, token, nuevaPassword) => {
+  if (!userId || !token || !nuevaPassword) {
+    throw new Error('Todos los campos (userId, token, nuevaPassword) son obligatorios.');
+  }
+
+  if (String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  // Buscar tokens vigentes y no usados para el usuario
+  const [tokens] = await pool.query(
+    `SELECT id, token_hash FROM password_resets 
+     WHERE IDusuario = ? AND usado = 0 AND expira_en > NOW()`,
+    [userId]
+  );
+
+  if (tokens.length === 0) {
+    throw new Error('El enlace de recuperación es inválido o ha expirado.');
+  }
+
+  let tokenValido = null;
+  for (const t of tokens) {
+    const isMatch = await bcrypt.compare(token, t.token_hash);
+    if (isMatch) {
+      tokenValido = t;
+      break;
+    }
+  }
+
+  if (!tokenValido) {
+    throw new Error('El enlace de recuperación es inválido o ha expirado.');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const newPasswordHash = await bcrypt.hash(nuevaPassword, 10);
+
+    // Actualizar clave y quitar flag de cambio obligatorio si existiera
+    await conn.query(
+      `UPDATE usuarios SET password_hash = ?, debe_cambiar_pass = 0 WHERE id = ?`,
+      [newPasswordHash, userId]
+    );
+
+    // Marcar el token como usado
+    await conn.query(
+      `UPDATE password_resets SET usado = 1 WHERE id = ?`,
+      [tokenValido.id]
+    );
+
+    // Revocar todas las sesiones activas del usuario
+    await conn.query(
+      `UPDATE sesiones_usuario SET revocado = 1 WHERE IDusuario = ?`,
+      [userId]
+    );
+
+    await conn.commit();
+    return { message: 'Contraseña restablecida con éxito. Puedes iniciar sesión con tu nueva clave.' };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };*/
 
 /*auth.utils.js:
@@ -440,18 +631,88 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    // 💡 Usar file.fieldname en lugar de 'producto' hardcodeado
     cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
   }
 });
 
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
+// Filtro unificado que permite imágenes y archivos PDF
+const documentoFilter = (req, file, cb) => {
+  const esImagen = file.mimetype.startsWith('image/');
+  const esPdf = file.mimetype === 'application/pdf';
+
+  if (esImagen || esPdf) {
     cb(null, true);
   } else {
-    cb(new Error('Solo se permiten archivos de imagen.'), false);
+    cb(new Error('Solo se permiten archivos de imagen y PDF.'), false);
   }
 };
 
-export const upload = multer({ storage, fileFilter });
+// Exportación de multers configurados con el filtro correspondiente
+export const upload = multer({ storage, fileFilter: documentoFilter });
+export const uploadDocumentos = multer({ storage, fileFilter: documentoFilter });
+*/
+
+/*email.helper.js:
+import nodemailer from 'nodemailer';
+
+let transporter = null;
+
+// Inicializa el transportador de correo
+const getTransporter = async () => {
+  if (transporter) return transporter;
+
+  if (process.env.SMTP_HOST) {
+    // Si en el futuro agregas un servidor real o Mailtrap
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  } else {
+    // 🧪 Servidor de prueba automático (Ethereal Email)
+    const testAccount = await nodemailer.createTestAccount();
+    transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass,
+      },
+    });
+    console.log('🧪 [EMAIL TEST] Cuenta de pruebas Ethereal creada:', testAccount.user);
+  }
+
+  return transporter;
+};
+
+export const enviarEmailRecuperacion = async (toEmail, resetUrl) => {
+  const mailer = await getTransporter();
+
+  const info = await mailer.sendMail({
+    from: '"SmartDrop Soporte" <no-reply@smartdrop.com>',
+    to: toEmail,
+    subject: 'Restablecer contraseña - SmartDrop',
+    html: `
+      <h2>Recuperación de Contraseña</h2>
+      <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para continuar:</p>
+      <a href="${resetUrl}" target="_blank" style="background-color: #4CAF50; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">Restablecer Contraseña</a>
+      <p>Este enlace expira en 15 minutos.</p>
+      <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
+    `,
+  });
+
+  console.log(`\n📧 [EMAIL ENVIADO] ID del mensaje: ${info.messageId}`);
+  
+  // Si estamos usando Ethereal, nos dará una URL pública para ver el email renderizado
+  const previewUrl = nodemailer.getTestMessageUrl(info);
+  if (previewUrl) {
+    console.log(`🔗 [VER EMAIL EN NAVEGADOR]: ${previewUrl}\n`);
+  }
+
+  return previewUrl;
+};
 */

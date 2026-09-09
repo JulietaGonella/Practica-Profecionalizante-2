@@ -9,8 +9,9 @@ export const crearLocalCompletoAdmin = async (payload) => {
   return data;
 };
 
-export const crearRepartidorCompletoAdmin = async (payload) => {
-  const { data } = await api.post('/admin/repartidores', payload);
+export const crearRepartidorCompletoAdmin = async (formData) => {
+  // Axios procesará automáticamente el FormData sin necesidad de forzar headers
+  const { data } = await api.post('/admin/repartidores', formData);
   return data;
 };
 
@@ -39,7 +40,7 @@ export const getRepartidoresAdmin = async () => {
 };
 
 export const getLocalesAdmin = async () => {
-  const { data } = await api.get('/locales');
+  const { data } = await api.get('/admin/locales');
   return data;
 };
 
@@ -83,5 +84,10 @@ export const evaluarSolicitudVehiculoAdmin = async (id, estado, motivo_rechazo =
     estado,
     motivo_rechazo
   });
+  return data;
+};
+
+export const getHistorialClienteAdmin = async (clienteUserId) => {
+  const { data } = await api.get(`/clientes/${clienteUserId}/historial`);
   return data;
 };

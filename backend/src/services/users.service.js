@@ -62,16 +62,16 @@ export const getUserByIdService = async (id) => {
 };
 
 export const getUserByEmailService = async (email) => {
-  const [rows] = await pool.query(
+  const [[user]] = await pool.query(
     `
-    SELECT
-      u.id,
-      u.nombre,
-      u.apellido,
-      u.username,
-      u.email,
-      u.password_hash,
-      u.rol_id,
+    SELECT 
+      u.id, 
+      u.username, 
+      u.nombre, 
+      u.apellido, 
+      u.email, 
+      u.password_hash, 
+      u.debe_cambiar_pass,
       r.nombre AS rol,
       rep.validado AS repartidor_validado
     FROM usuarios u
@@ -82,7 +82,7 @@ export const getUserByEmailService = async (email) => {
     [email]
   );
 
-  return rows[0] || null;
+  return user;
 };
 
 export const updateUserService = async (id, data) => {

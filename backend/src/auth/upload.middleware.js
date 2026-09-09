@@ -15,21 +15,11 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    // 💡 Usar file.fieldname en lugar de 'producto' hardcodeado
     cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
   }
 });
 
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Solo se permiten archivos de imagen.'), false);
-  }
-};
-
-export const upload = multer({ storage, fileFilter });
-
+// Filtro unificado que permite imágenes y archivos PDF
 const documentoFilter = (req, file, cb) => {
   const esImagen = file.mimetype.startsWith('image/');
   const esPdf = file.mimetype === 'application/pdf';
@@ -37,8 +27,10 @@ const documentoFilter = (req, file, cb) => {
   if (esImagen || esPdf) {
     cb(null, true);
   } else {
-    cb(new Error('Solo se permiten imágenes o archivos PDF.'), false);
+    cb(new Error('Solo se permiten archivos de imagen y PDF.'), false);
   }
 };
 
+// Exportación de multers configurados con el filtro correspondiente
+export const upload = multer({ storage, fileFilter: documentoFilter });
 export const uploadDocumentos = multer({ storage, fileFilter: documentoFilter });

@@ -170,18 +170,48 @@ export const PanelRepartidor = () => {
     }
   };
 
+  // Bicicleta = ID de tipo 2
+  const esBicicleta = Number(formVehiculo.IDtipo_vehiculo) === 2;
+
   const handleSolicitarVehiculo = async (e) => {
     e.preventDefault();
     setEnviandoSolicitud(true);
 
     try {
       const datos = new FormData();
+
       Object.entries(formVehiculo).forEach(([campo, valor]) => {
-        if (valor !== null && valor !== '') datos.append(campo, valor);
+        // Las bicicletas no envían patente ni documentación de vehículos con motor
+        if (
+          esBicicleta &&
+          ['patente', 'cedula', 'seguro', 'licencia'].includes(campo)
+        ) {
+          return;
+        }
+
+        if (valor !== null && valor !== '') {
+          datos.append(campo, valor);
+        }
       });
 
+      // El backend recibe automáticamente la bicicleta como propia
+      if (esBicicleta) {
+        datos.append('bici_propia', '1');
+      }
+
       await solicitarVehiculo(datos);
-      setFormVehiculo({ IDtipo_vehiculo: '', marca: '', modelo: '', patente: '', anio: '', cedula: null, seguro: null, licencia: null });
+
+      setFormVehiculo({
+        IDtipo_vehiculo: '',
+        marca: '',
+        modelo: '',
+        patente: '',
+        anio: '',
+        cedula: null,
+        seguro: null,
+        licencia: null
+      });
+
       await cargarTodo();
       alert('Solicitud enviada. Quedará pendiente de revisión administrativa.');
     } catch (err) {
@@ -801,20 +831,118 @@ export const PanelRepartidor = () => {
             <section>
               <h3>Solicitar alta de vehículo</h3>
               <form onSubmit={handleSolicitarVehiculo} style={{ display: 'grid', gap: '0.7rem' }}>
-                <select name="IDtipo_vehiculo" value={formVehiculo.IDtipo_vehiculo} onChange={(e) => setFormVehiculo({ ...formVehiculo, IDtipo_vehiculo: e.target.value })} required>
+                <select
+                  name="IDtipo_vehiculo"
+                  value={formVehiculo.IDtipo_vehiculo}
+                  onChange={(e) =>
+                    setFormVehiculo({
+                      ...formVehiculo,
+                      IDtipo_vehiculo: e.target.value
+                    })
+                  }
+                  required
+                >
                   <option value="">Tipo de vehículo</option>
-                  <option value="3">Moto</option>
-                  <option value="2">Bicicleta</option>
-                  <option value="4">Moto</option>
+                  <option value="2">Bicicleta 🚴</option>
+                  <option value="3">Moto 🛵</option>
+                  <option value="4">Auto 🚗</option>
                 </select>
-                <input name="marca" placeholder="Marca" value={formVehiculo.marca} onChange={(e) => setFormVehiculo({ ...formVehiculo, marca: e.target.value })} />
-                <input name="modelo" placeholder="Modelo" value={formVehiculo.modelo} onChange={(e) => setFormVehiculo({ ...formVehiculo, modelo: e.target.value })} />
-                <input name="patente" placeholder="Patente" value={formVehiculo.patente} onChange={(e) => setFormVehiculo({ ...formVehiculo, patente: e.target.value })} />
-                <input name="anio" type="number" placeholder="Año" value={formVehiculo.anio} onChange={(e) => setFormVehiculo({ ...formVehiculo, anio: e.target.value })} />
-                <label>Cédula verde <input name="cedula" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} /></label>
-                <label>Seguro <input name="seguro" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} /></label>
-                <label>Registro / licencia <input name="licencia" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} /></label>
-                <button type="submit" disabled={enviandoSolicitud}>{enviandoSolicitud ? 'Enviando...' : 'Enviar solicitud'}</button>
+
+                <input
+                  name="marca"
+                  placeholder={
+                    esBicicleta
+                      ? 'Marca o Color (Opcional, Ej: Venzo roja)'
+                      : 'Marca'
+                  }
+                  value={formVehiculo.marca}
+                  onChange={(e) =>
+                    setFormVehiculo({
+                      ...formVehiculo,
+                      marca: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  name="modelo"
+                  placeholder={
+                    esBicicleta
+                      ? 'Modelo / Tipo (Opcional, Ej: Mountain Bike)'
+                      : 'Modelo'
+                  }
+                  value={formVehiculo.modelo}
+                  onChange={(e) =>
+                    setFormVehiculo({
+                      ...formVehiculo,
+                      modelo: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  name="anio"
+                  type="number"
+                  placeholder="Año (Opcional)"
+                  value={formVehiculo.anio}
+                  onChange={(e) =>
+                    setFormVehiculo({
+                      ...formVehiculo,
+                      anio: e.target.value
+                    })
+                  }
+                />
+
+                {!esBicicleta && (
+                  <>
+                    <input
+                      name="patente"
+                      placeholder="Patente (Requerido para Moto/Auto)"
+                      value={formVehiculo.patente}
+                      onChange={(e) =>
+                        setFormVehiculo({
+                          ...formVehiculo,
+                          patente: e.target.value
+                        })
+                      }
+                      required={!esBicicleta}
+                    />
+
+                    <label>
+                      Cédula verde / azul
+                      <input
+                        name="cedula"
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleArchivoVehiculo}
+                      />
+                    </label>
+
+                    <label>
+                      Seguro
+                      <input
+                        name="seguro"
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleArchivoVehiculo}
+                      />
+                    </label>
+
+                    <label>
+                      Registro / Licencia de conducir
+                      <input
+                        name="licencia"
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleArchivoVehiculo}
+                      />
+                    </label>
+                  </>
+                )}
+
+                <button type="submit" disabled={enviandoSolicitud}>
+                  {enviandoSolicitud ? 'Enviando...' : 'Enviar solicitud'}
+                </button>
               </form>
             </section>
           </div>

@@ -4,7 +4,8 @@ import {
   updatePerfilClienteService,
   getDireccionesClienteService,
   createDireccionClienteService,
-  deleteDireccionClienteService
+  deleteDireccionClienteService,
+  getHistorialClienteService
 } from '../services/clientes.service.js';
 
 export const getClientes = async (req, res) => {
@@ -58,5 +59,15 @@ export const deleteMisDirecciones = async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+export const getHistorialCliente = async (req, res) => {
+  try {
+    const { id } = req.params; // ID de usuario del cliente
+    const historial = await getHistorialClienteService(id);
+    res.json(historial);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };

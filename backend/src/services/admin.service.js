@@ -6,7 +6,7 @@ import { COMMISSIONS } from '../config/commissions.js';
 // FUNCIONES AUXILIARES Y SERVICIOS DE CREACIÓN
 // ==========================================
 
-const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
+const crearUsuarioEnTransaccion = async (conn, data, rolNombre, debeCambiarPass = 1) => {
   const { username, email, password } = data;
 
   if (!username || !email || !password) {
@@ -52,10 +52,10 @@ const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
   const [resultado] = await conn.query(
     `
     INSERT INTO usuarios
-      (username, email, password_hash, rol_id)
-    VALUES (?, ?, ?, ?)
+      (username, email, password_hash, rol_id, debe_cambiar_pass)
+    VALUES (?, ?, ?, ?, ?)
     `,
-    [cleanUsername, cleanEmail, passwordHash, rol.id]
+    [cleanUsername, cleanEmail, passwordHash, rol.id, debeCambiarPass ? 1 : 0]
   );
 
   return {
@@ -63,7 +63,8 @@ const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
     username: cleanUsername,
     email: cleanEmail,
     rol_id: rol.id,
-    rol: rol.nombre
+    rol: rol.nombre,
+    debe_cambiar_pass: Boolean(debeCambiarPass)
   };
 };
 
@@ -174,20 +175,23 @@ export const crearLocalCompletoService = async (data) => {
   }
 };
 
-export const crearRepartidorCompletoService = async (data) => {
+// services/admin.service.js
+export const crearRepartidorCompletoService = async (data, archivos = {}) => {
   const {
     username,
     email,
     password,
     dni,
-    vehiculo
+    vehiculo // JSON con los datos del vehículo parseado si se envía como FormData
   } = data;
 
   if (!dni) {
     throw new Error('El DNI es obligatorio.');
   }
 
-  if (!vehiculo?.IDtipo_vehiculo) {
+  const datosVehiculo = typeof vehiculo === 'string' ? JSON.parse(vehiculo) : vehiculo;
+
+  if (!datosVehiculo?.IDtipo_vehiculo) {
     throw new Error('El tipo de vehículo es obligatorio.');
   }
 
@@ -196,12 +200,14 @@ export const crearRepartidorCompletoService = async (data) => {
   try {
     await conn.beginTransaction();
 
+    // 1. Crear el usuario con rol de repartidor
     const usuario = await crearUsuarioEnTransaccion(
       conn,
       { username, email, password },
       'repartidor'
     );
 
+    // 2. Crear registro de repartidor (Deshabilitado/Invalidado por defecto)
     const [repartidorResult] = await conn.query(
       `
       INSERT INTO repartidores
@@ -211,33 +217,63 @@ export const crearRepartidorCompletoService = async (data) => {
       [usuario.id, String(dni).trim()]
     );
 
-    await conn.query(
+    const IDrepartidor = repartidorResult.insertId;
+
+    // 3. Obtener las rutas de los archivos cargados (Cédula, Seguro, Licencia)
+    const cedulaUrl = archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null;
+    const seguroUrl = archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null;
+    const licenciaUrl = archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null;
+
+    // 4. Crear vehículo APROBADO directamente
+    const [vehiculoResult] = await conn.query(
       `
       INSERT INTO vehiculos_repartidor
-        (IDrepartidor, IDtipo_vehiculo, marca, modelo, patente, activo, estado)
-      VALUES (?, ?, ?, ?, ?, 1, 'APROBADO')
+        (IDrepartidor, IDtipo_vehiculo, marca, modelo, anio, patente,
+         seguro_vigente, licencia_vigente, bici_propia,
+         cedula_url, seguro_url, licencia_url, activo, estado)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'APROBADO')
       `,
       [
-        repartidorResult.insertId,
-        vehiculo.IDtipo_vehiculo,
-        vehiculo.marca || null,
-        vehiculo.modelo || null,
-        vehiculo.patente || null
+        IDrepartidor,
+        datosVehiculo.IDtipo_vehiculo,
+        datosVehiculo.marca || null,
+        datosVehiculo.modelo || null,
+        datosVehiculo.anio || null,
+        datosVehiculo.patente || null,
+        datosVehiculo.seguro_vigente ? 1 : 0,
+        datosVehiculo.licencia_vigente ? 1 : 0,
+        datosVehiculo.bici_propia ? 1 : 0,
+        cedulaUrl,
+        seguroUrl,
+        licenciaUrl
       ]
+    );
+
+    // 5. Asignar el vehículo creado como el activo en la ficha del repartidor
+    await conn.query(
+      `UPDATE repartidores SET IDvehiculo_activo = ? WHERE id = ?`,
+      [vehiculoResult.insertId, IDrepartidor]
     );
 
     await conn.commit();
 
     return {
-      message:
-        'Repartidor y usuario creados correctamente. Pendiente de validación.',
+      message: 'Repartidor creado en estado PENDIENTE/INVALIDADO. Vehículo APROBADO correctamente.',
       usuario,
       repartidor: {
-        id: repartidorResult.insertId,
+        id: IDrepartidor,
         IDusuario: usuario.id,
         dni,
         validado: 0,
-        disponible: 1
+        disponible: 1,
+        IDvehiculo_activo: vehiculoResult.insertId
+      },
+      vehiculo: {
+        id: vehiculoResult.insertId,
+        estado: 'APROBADO',
+        cedula_url: cedulaUrl,
+        seguro_url: seguroUrl,
+        licencia_url: licenciaUrl
       }
     };
   } catch (error) {
@@ -247,6 +283,53 @@ export const crearRepartidorCompletoService = async (data) => {
     conn.release();
   }
 };
+
+// Obtener todos los locales (habilitados y deshabilitados) para el admin
+export const getLocalesAdminService = async () => {
+  const [locales] = await pool.query(`
+    SELECT 
+      l.id,
+      l.nombre,
+      l.direccion,
+      l.telefono,
+      l.latitud,
+      l.longitud,
+      l.es_activo,
+      l.esta_operativo,
+      l.logo_url,
+      l.banner_url,
+      l.foto_url,
+      l.costo_envio_base,
+      l.tiempo_preparacion_promedio,
+      l.IDusuario,
+      u.username AS usuario_admin,
+      u.email AS email_admin
+    FROM locales l
+    LEFT JOIN usuarios u ON l.IDusuario = u.id
+    ORDER BY l.id DESC
+  `);
+
+  for (const local of locales) {
+    // Obtener todos los horarios asociados al local
+    const [horarios] = await pool.query(
+      `
+      SELECT
+        id,
+        dia_semana,
+        hora_apertura,
+        hora_cierre,
+        es_activo
+      FROM horarios_local
+      WHERE IDlocal = ?
+      `,
+      [local.id]
+    );
+
+    local.horarios = horarios;
+  }
+
+  return locales;
+}; 
 
 // ==========================================
 // SERVICIOS DE DASHBOARD Y MÉTRICAS

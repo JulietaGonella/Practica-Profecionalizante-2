@@ -13,7 +13,8 @@ import {
   evaluarSolicitudVehiculoAdmin,
   getClientesAdmin,
   getHorariosLocalAdmin,
-  eliminarUsuarioAdmin
+  eliminarUsuarioAdmin,
+  getHistorialClienteAdmin
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
 
@@ -106,6 +107,10 @@ export const PanelAdministrador = () => {
   const [paginaClientes, setPaginaClientes] = useState(1);
   const [registrosPorPagina, setRegistrosPorPagina] = useState(5);
   const [busqueda, setBusqueda] = useState('');
+  const [clienteHistorialSeleccionado, setClienteHistorialSeleccionado] = useState(null);
+  const [historialPedidos, setHistorialPedidos] = useState([]);
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [errorHistorial, setErrorHistorial] = useState('');
 
   // --- BÚSQUEDA Y FILTRADO DE DATOS ---
   const term = busqueda.trim().toLowerCase();
@@ -183,7 +188,6 @@ export const PanelAdministrador = () => {
     setPaginaClientes(1);
   };
 
-  // 1. Identificar el local seleccionado para los modales
   const localSeleccionado = locales.find(
     (local) =>
       String(local.id) === String(localEditando) ||
@@ -205,9 +209,7 @@ export const PanelAdministrador = () => {
 
       setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
       setLocales(Array.isArray(localesData) ? localesData : []);
-      setRepartidores(
-        Array.isArray(repartidoresData) ? repartidoresData : []
-      );
+      setRepartidores(Array.isArray(repartidoresData) ? repartidoresData : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
       setSolicitudesVehiculos(Array.isArray(solicitudesData) ? solicitudesData : []);
       setPaginaUsuarios(1);
@@ -224,11 +226,35 @@ export const PanelAdministrador = () => {
     }
   };
 
+  const consultarHistorialCliente = async (cliente) => {
+    try {
+      setClienteHistorialSeleccionado(cliente);
+      setHistorialPedidos([]);
+      setErrorHistorial('');
+      setLoadingHistorial(true);
+
+      const data = await getHistorialClienteAdmin(cliente.IDusuario);
+      setHistorialPedidos(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error consultando historial del cliente:', err);
+      setErrorHistorial(
+        err.response?.data?.error || 'No se pudo obtener el historial de pedidos.'
+      );
+    } finally {
+      setLoadingHistorial(false);
+    }
+  };
+
+  const cerrarHistorialCliente = () => {
+    setClienteHistorialSeleccionado(null);
+    setHistorialPedidos([]);
+    setErrorHistorial('');
+  };
+
   useEffect(() => {
     cargarDatos();
   }, []);
 
-  // Opcional: Limpiar la búsqueda al cambiar de pestaña/sección
   useEffect(() => {
     setBusqueda('');
   }, [seccion]);
@@ -247,10 +273,8 @@ export const PanelAdministrador = () => {
 
     try {
       setProcesandoId(`eliminar-usuario-${usuario.id}`);
-
       await eliminarUsuarioAdmin(usuario.id);
       await cargarDatos();
-
       alert('Usuario eliminado correctamente.');
     } catch (err) {
       alert(
@@ -325,7 +349,6 @@ export const PanelAdministrador = () => {
 
   const iniciarEdicionLocal = (local) => {
     setLocalEditando(local.id);
-
     setFormLocal({
       nombre: local.nombre || '',
       direccion: local.direccion || '',
@@ -337,7 +360,6 @@ export const PanelAdministrador = () => {
 
   const cancelarEdicionLocal = () => {
     setLocalEditando(null);
-
     setFormLocal({
       nombre: '',
       direccion: '',
@@ -349,7 +371,6 @@ export const PanelAdministrador = () => {
 
   const handleFormLocalChange = (e) => {
     const { name, value } = e.target;
-
     setFormLocal((prev) => ({
       ...prev,
       [name]: value
@@ -358,7 +379,6 @@ export const PanelAdministrador = () => {
 
   const guardarCambiosLocal = async (e) => {
     e.preventDefault();
-
     if (localEditando === null) return;
 
     try {
@@ -397,7 +417,6 @@ export const PanelAdministrador = () => {
       setLoadingHorarios(true);
 
       const data = await getHorariosLocalAdmin(local.id);
-
       setHorariosConsultados(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al consultar horarios del local:', err);
@@ -410,8 +429,6 @@ export const PanelAdministrador = () => {
       setLoadingHorarios(false);
     }
   };
-
-
 
   return (
     <div style={{ maxWidth: '1150px', margin: '0 auto', padding: '2rem' }}>
@@ -520,8 +537,7 @@ export const PanelAdministrador = () => {
             borderRadius: '8px',
             cursor: 'pointer',
             fontWeight: 'bold',
-            backgroundColor:
-              seccion === 'repartidores' ? '#d9480f' : '#e9ecef',
+            backgroundColor: seccion === 'repartidores' ? '#d9480f' : '#e9ecef',
             color: seccion === 'repartidores' ? '#fff' : '#333'
           }}
         >
@@ -543,12 +559,11 @@ export const PanelAdministrador = () => {
           🧑‍🤝‍🧑 Clientes
         </button>
       </nav>
-      {/* COMPONENTE DE BÚSQUEDA */}
+
       <BarraBusquedaFiltro
         busqueda={busqueda}
         setBusqueda={(valor) => {
           setBusqueda(valor);
-          // Reiniciar las páginas a 1 cuando el usuario busca para no quedar desfasado
           setPaginaUsuarios(1);
           setPaginaRepartidores(1);
           setPaginaClientes(1);
@@ -573,7 +588,7 @@ export const PanelAdministrador = () => {
                   <div
                     style={{
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justify: 'space-between',
                       alignItems: 'center',
                       gap: '1rem',
                       flexWrap: 'wrap',
@@ -911,7 +926,6 @@ export const PanelAdministrador = () => {
                 </div>
               )}
 
-              {/* Modal de edición */}
               {localEditando !== null && localSeleccionado && (
                 <div
                   role="dialog"
@@ -1166,7 +1180,6 @@ export const PanelAdministrador = () => {
                 </div>
               )}
 
-              {/* Modal de horarios */}
               {localHorariosAbiertos !== null && localSeleccionado && (
                 <div
                   role="dialog"
@@ -1415,7 +1428,7 @@ export const PanelAdministrador = () => {
                   <div
                     style={{
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justify: 'space-between',
                       alignItems: 'center',
                       gap: '1rem',
                       flexWrap: 'wrap',
@@ -1483,20 +1496,36 @@ export const PanelAdministrador = () => {
                             <td style={{ padding: '0.8rem' }}>{rep.username}</td>
                             <td style={{ padding: '0.8rem' }}>{rep.email}</td>
                             <td style={{ padding: '0.8rem' }}>{rep.dni}</td>
+                            
+                            {/* Visualización ajustada en tabla principal */}
                             <td style={{ padding: '0.8rem' }}>
                               {rep.tipo_vehiculo ? (
                                 <div>
                                   <strong>{rep.tipo_vehiculo}</strong>
-                                  {(rep.marca || rep.modelo) && (
-                                    <small style={{ display: 'block', color: '#666' }}>
-                                      {rep.marca} {rep.modelo} {rep.patente ? `(${rep.patente})` : ''}
-                                    </small>
-                                  )}
+                                  {(() => {
+                                    const esBici = rep.tipo_vehiculo.toLowerCase().includes('bici');
+                                    const detalles = [rep.marca, rep.modelo].filter(Boolean).join(' ');
+                                    
+                                    if (esBici) {
+                                      return detalles ? (
+                                        <small style={{ display: 'block', color: '#666' }}>
+                                          {detalles}
+                                        </small>
+                                      ) : null;
+                                    }
+
+                                    return (
+                                      <small style={{ display: 'block', color: '#666' }}>
+                                        {detalles} {rep.patente ? `(${rep.patente})` : ''}
+                                      </small>
+                                    );
+                                  })()}
                                 </div>
                               ) : (
                                 <span style={{ color: '#868e96' }}>Sin vehículo</span>
                               )}
                             </td>
+
                             <td style={{ padding: '0.8rem' }}>
                               <span
                                 style={{
@@ -1621,493 +1650,316 @@ export const PanelAdministrador = () => {
                 </div>
               )}
 
-              {/* Modal de detalle de repartidor */}
-              {repartidorSeleccionado && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  onClick={cerrarDetalleRepartidor}
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 3000,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem'
-                  }}
-                >
+              {/* Modal de detalle de repartidor ajustado */}
+              {repartidorSeleccionado && (() => {
+                const vehiculoActivo = repartidorSeleccionado.vehiculos?.find(
+                  (v) => Number(v.id) === Number(repartidorSeleccionado.IDvehiculo_activo)
+                ) || repartidorSeleccionado;
+
+                const tipoVehiculo = vehiculoActivo?.tipo_vehiculo || repartidorSeleccionado.tipo_vehiculo;
+                const esBici = tipoVehiculo?.toLowerCase().includes('bici');
+
+                return (
                   <div
-                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={cerrarDetalleRepartidor}
                     style={{
-                      width: '100%',
-                      maxWidth: '650px',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
+                      position: 'fixed',
+                      inset: 0,
+                      zIndex: 3000,
+                      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                      display: 'flex',
+                      justify: 'center',
+                      alignItems: 'center',
+                      padding: '1rem'
                     }}
                   >
                     <div
+                      onClick={(e) => e.stopPropagation()}
                       style={{
-                        display: 'flex',
-                        justify: 'space-between',
-                        alignItems: 'center',
-                        gap: '1rem',
-                        marginBottom: '1.2rem'
+                        width: '100%',
+                        maxWidth: '650px',
+                        maxHeight: '90vh',
+                        overflowY: 'auto',
+                        backgroundColor: '#fff',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
                       }}
                     >
-                      <div>
-                        <h2 style={{ margin: 0 }}>
-                          🚴 Detalle del repartidor
-                        </h2>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justify: 'space-between',
+                          alignItems: 'center',
+                          gap: '1rem',
+                          marginBottom: '1.2rem'
+                        }}
+                      >
+                        <div>
+                          <h2 style={{ margin: 0 }}>🚴 Detalle del repartidor</h2>
+                          <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
+                            Repartidor #{repartidorSeleccionado.id}
+                          </p>
+                        </div>
 
-                        <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
-                          Repartidor #{repartidorSeleccionado.id}
-                        </p>
+                        <button
+                          type="button"
+                          onClick={cerrarDetalleRepartidor}
+                          style={{
+                            border: 'none',
+                            backgroundColor: '#f1f3f5',
+                            borderRadius: '50%',
+                            width: '36px',
+                            height: '36px',
+                            fontSize: '1.1rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: '0.8rem'
+                        }}
+                      >
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Usuario</strong>
+                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.username || 'No informado'}</p>
+                        </div>
+
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Email</strong>
+                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.email || 'No informado'}</p>
+                        </div>
+
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>DNI</strong>
+                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.dni || 'No informado'}</p>
+                        </div>
+
+                        {/* Tipo de Vehículo Activo */}
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Tipo de vehículo</strong>
+                          <p style={{ margin: '0.3rem 0 0' }}>{tipoVehiculo || 'No informado'}</p>
+                        </div>
+
+                        {/* Marca: en Auto/Moto siempre; en Bici SOLO si tiene valor */}
+                        {(!esBici || vehiculoActivo?.marca) && (
+                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                            <strong>Marca</strong>
+                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.marca || 'No informada'}</p>
+                          </div>
+                        )}
+
+                        {/* Modelo: en Auto/Moto siempre; en Bici SOLO si tiene valor */}
+                        {(!esBici || vehiculoActivo?.modelo) && (
+                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                            <strong>Modelo</strong>
+                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.modelo || 'No informado'}</p>
+                          </div>
+                        )}
+
+                        {/* Patente: se muestra SOLO en Auto / Moto */}
+                        {!esBici && (
+                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                            <strong>Patente</strong>
+                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.patente || 'No informada'}</p>
+                          </div>
+                        )}
+
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Disponibilidad</strong>
+                          <p
+                            style={{
+                              margin: '0.3rem 0 0',
+                              color: Number(repartidorSeleccionado.disponible) === 1 ? '#2b8a3e' : '#6c757d',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {Number(repartidorSeleccionado.disponible) === 1 ? '🟢 Disponible' : '⚪ No disponible'}
+                          </p>
+                        </div>
+
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Estado de validación</strong>
+                          <p
+                            style={{
+                              margin: '0.3rem 0 0',
+                              color: Number(repartidorSeleccionado.validado) === 1 ? '#2b8a3e' : '#d9480f',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {Number(repartidorSeleccionado.validado) === 1 ? '✅ Validado' : '⏳ Pendiente de validación'}
+                          </p>
+                        </div>
+
+                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                          <strong>Fecha de registro</strong>
+                          <p style={{ margin: '0.3rem 0 0' }}>
+                            {repartidorSeleccionado.creado_en
+                              ? new Date(repartidorSeleccionado.creado_en).toLocaleString('es-AR')
+                              : 'No informada'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {(repartidorSeleccionado.latitud !== null ||
+                        repartidorSeleccionado.longitud !== null) && (
+                          <div
+                            style={{
+                              marginTop: '1rem',
+                              padding: '1rem',
+                              backgroundColor: '#e7f5ff',
+                              borderRadius: '8px',
+                              color: '#1864ab'
+                            }}
+                          >
+                            <strong>Última ubicación registrada</strong>
+                            <p style={{ margin: '0.4rem 0 0', fontFamily: 'monospace' }}>
+                              Latitud: {repartidorSeleccionado.latitud ?? 'No disponible'}<br />
+                              Longitud: {repartidorSeleccionado.longitud ?? 'No disponible'}
+                            </p>
+                            {repartidorSeleccionado.ultima_ubicacion && (
+                              <small>
+                                Última actualización:{' '}
+                                {new Date(repartidorSeleccionado.ultima_ubicacion).toLocaleString('es-AR')}
+                              </small>
+                            )}
+                          </div>
+                        )}
+
+                      {/* Lista de todos los vehículos asociados */}
+                      <div style={{ marginTop: '1.2rem' }}>
+                        <h3 style={{ margin: '0 0 0.8rem 0', fontSize: '1.1rem' }}>
+                          🚗 Vehículos Asociados y Estado Documental
+                        </h3>
+
+                        {(!repartidorSeleccionado.vehiculos ||
+                          repartidorSeleccionado.vehiculos.length === 0) ? (
+                          <div style={{ padding: '0.8rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
+                            El repartidor no posee vehículos registrados.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            {repartidorSeleccionado.vehiculos.map((v) => {
+                              const esActivo = Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
+
+                              return (
+                                <div
+                                  key={v.id}
+                                  style={{
+                                    padding: '1rem',
+                                    borderRadius: '8px',
+                                    border: esActivo ? '2px solid #1c7ed6' : '1px solid #dee2e6',
+                                    backgroundColor: esActivo ? '#e7f5ff' : '#f8f9fa'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <strong>
+                                      {v.tipo_vehiculo} · {v.marca} {v.modelo} {v.patente ? `(${v.patente})` : ''}
+                                    </strong>
+
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                      {esActivo && (
+                                        <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          ACTIVO ACTUAL
+                                        </span>
+                                      )}
+
+                                      <span
+                                        style={{
+                                          padding: '0.2rem 0.5rem',
+                                          borderRadius: '4px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 'bold',
+                                          backgroundColor:
+                                            v.estado === 'APROBADO'
+                                              ? '#d3f9d8'
+                                              : v.estado === 'RECHAZADO'
+                                                ? '#ffe3e3'
+                                                : '#fff3bf',
+                                          color:
+                                            v.estado === 'APROBADO'
+                                              ? '#2b8a3e'
+                                              : v.estado === 'RECHAZADO'
+                                                ? '#e03131'
+                                                : '#f59f00'
+                                        }}
+                                      >
+                                        {v.estado || 'PENDIENTE'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {v.motivo_rechazo && (
+                                    <p style={{ margin: '0.5rem 0 0', color: '#e03131', fontSize: '0.85rem' }}>
+                                      <strong>Motivo de rechazo:</strong> {v.motivo_rechazo}
+                                    </p>
+                                  )}
+
+                                  <div style={{ marginTop: '0.8rem', borderTop: '1px solid #e9ecef', paddingTop: '0.5rem' }}>
+                                    <small style={{ fontWeight: 'bold', color: '#495057' }}>
+                                      Documentación:
+                                    </small>
+
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.3rem', fontSize: '0.85rem' }}>
+                                      {[
+                                        ['Cédula Verde', v.cedula_url],
+                                        ['Seguro', v.seguro_url],
+                                        ['Licencia', v.licencia_url]
+                                      ].map(([docNombre, docRuta]) => {
+                                        const url = resolverDocumento(docRuta);
+
+                                        return (
+                                          <div key={docNombre}>
+                                            {url ? (
+                                              <a href={url} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline' }}>
+                                                📄 {docNombre}
+                                              </a>
+                                            ) : (
+                                              <span style={{ color: '#868e96' }}>
+                                                ❌ {docNombre} (Sin presentar)
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <button
                         type="button"
                         onClick={cerrarDetalleRepartidor}
                         style={{
+                          width: '100%',
+                          marginTop: '1.2rem',
+                          padding: '0.8rem',
                           border: 'none',
-                          backgroundColor: '#f1f3f5',
-                          borderRadius: '50%',
-                          width: '36px',
-                          height: '36px',
-                          fontSize: '1.1rem',
-                          cursor: 'pointer'
+                          borderRadius: '7px',
+                          backgroundColor: '#6c757d',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
                         }}
                       >
-                        ✕
+                        Cerrar
                       </button>
                     </div>
-
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                        gap: '0.8rem'
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Usuario</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.username || 'No informado'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Email</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.email || 'No informado'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>DNI</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.dni || 'No informado'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Tipo de vehículo</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.tipo_vehiculo || 'No informado'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Marca</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.marca || 'No informada'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Modelo</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.modelo || 'No informado'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Patente</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.patente || 'No informada'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Disponibilidad</strong>
-                        <p
-                          style={{
-                            margin: '0.3rem 0 0',
-                            color:
-                              Number(repartidorSeleccionado.disponible) === 1
-                                ? '#2b8a3e'
-                                : '#6c757d',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {Number(repartidorSeleccionado.disponible) === 1
-                            ? '🟢 Disponible'
-                            : '⚪ No disponible'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Estado de validación</strong>
-                        <p
-                          style={{
-                            margin: '0.3rem 0 0',
-                            color:
-                              Number(repartidorSeleccionado.validado) === 1
-                                ? '#2b8a3e'
-                                : '#d9480f',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {Number(repartidorSeleccionado.validado) === 1
-                            ? '✅ Validado'
-                            : '⏳ Pendiente de validación'}
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: '0.9rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <strong>Fecha de registro</strong>
-                        <p style={{ margin: '0.3rem 0 0' }}>
-                          {repartidorSeleccionado.creado_en
-                            ? new Date(
-                              repartidorSeleccionado.creado_en
-                            ).toLocaleString('es-AR')
-                            : 'No informada'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {(repartidorSeleccionado.latitud !== null ||
-                      repartidorSeleccionado.longitud !== null) && (
-                        <div
-                          style={{
-                            marginTop: '1rem',
-                            padding: '1rem',
-                            backgroundColor: '#e7f5ff',
-                            borderRadius: '8px',
-                            color: '#1864ab'
-                          }}
-                        >
-                          <strong>Última ubicación registrada</strong>
-
-                          <p
-                            style={{
-                              margin: '0.4rem 0 0',
-                              fontFamily: 'monospace'
-                            }}
-                          >
-                            Latitud:{' '}
-                            {repartidorSeleccionado.latitud ?? 'No disponible'}
-                            <br />
-                            Longitud:{' '}
-                            {repartidorSeleccionado.longitud ?? 'No disponible'}
-                          </p>
-
-                          {repartidorSeleccionado.ultima_ubicacion && (
-                            <small>
-                              Última actualización:{' '}
-                              {new Date(
-                                repartidorSeleccionado.ultima_ubicacion
-                              ).toLocaleString('es-AR')}
-                            </small>
-                          )}
-                        </div>
-                      )}
-
-                    {/* Bloque: Lista de todos los vehículos asociados y estado documental */}
-                    <div style={{ marginTop: '1.2rem' }}>
-                      <h3
-                        style={{
-                          margin: '0 0 0.8rem 0',
-                          fontSize: '1.1rem'
-                        }}
-                      >
-                        🚗 Vehículos Asociados y Estado Documental
-                      </h3>
-
-                      {(!repartidorSeleccionado.vehiculos ||
-                        repartidorSeleccionado.vehiculos.length === 0) ? (
-                        <div
-                          style={{
-                            padding: '0.8rem',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            color: '#666'
-                          }}
-                        >
-                          El repartidor no posee vehículos registrados.
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.8rem'
-                          }}
-                        >
-                          {repartidorSeleccionado.vehiculos.map((v) => {
-                            const esActivo =
-                              Number(repartidorSeleccionado.IDvehiculo_activo) ===
-                              Number(v.id);
-
-                            return (
-                              <div
-                                key={v.id}
-                                style={{
-                                  padding: '1rem',
-                                  borderRadius: '8px',
-                                  border: esActivo
-                                    ? '2px solid #1c7ed6'
-                                    : '1px solid #dee2e6',
-                                  backgroundColor: esActivo
-                                    ? '#e7f5ff'
-                                    : '#f8f9fa'
-                                }}
-                              >
-                                {/* Información principal del vehículo */}
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    flexWrap: 'wrap',
-                                    gap: '0.5rem'
-                                  }}
-                                >
-                                  <strong>
-                                    {v.tipo_vehiculo} · {v.marca}{' '}
-                                    {v.modelo}{' '}
-                                    {v.patente
-                                      ? `(${v.patente})`
-                                      : ''}
-                                  </strong>
-
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      gap: '0.5rem',
-                                      alignItems: 'center',
-                                      flexWrap: 'wrap'
-                                    }}
-                                  >
-                                    {esActivo && (
-                                      <span
-                                        style={{
-                                          backgroundColor: '#1c7ed6',
-                                          color: '#fff',
-                                          padding: '0.2rem 0.5rem',
-                                          borderRadius: '4px',
-                                          fontSize: '0.75rem',
-                                          fontWeight: 'bold'
-                                        }}
-                                      >
-                                        ACTIVO ACTUAL
-                                      </span>
-                                    )}
-
-                                    <span
-                                      style={{
-                                        padding: '0.2rem 0.5rem',
-                                        borderRadius: '4px',
-                                        fontSize: '0.8rem',
-                                        fontWeight: 'bold',
-                                        backgroundColor:
-                                          v.estado === 'APROBADO'
-                                            ? '#d3f9d8'
-                                            : v.estado === 'RECHAZADO'
-                                              ? '#ffe3e3'
-                                              : '#fff3bf',
-                                        color:
-                                          v.estado === 'APROBADO'
-                                            ? '#2b8a3e'
-                                            : v.estado === 'RECHAZADO'
-                                              ? '#e03131'
-                                              : '#f59f00'
-                                      }}
-                                    >
-                                      {v.estado || 'PENDIENTE'}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Motivo de rechazo */}
-                                {v.motivo_rechazo && (
-                                  <p
-                                    style={{
-                                      margin: '0.5rem 0 0',
-                                      color: '#e03131',
-                                      fontSize: '0.85rem'
-                                    }}
-                                  >
-                                    <strong>Motivo de rechazo:</strong>{' '}
-                                    {v.motivo_rechazo}
-                                  </p>
-                                )}
-
-                                {/* Documentación adjunta del vehículo */}
-                                <div
-                                  style={{
-                                    marginTop: '0.8rem',
-                                    borderTop: '1px solid #e9ecef',
-                                    paddingTop: '0.5rem'
-                                  }}
-                                >
-                                  <small
-                                    style={{
-                                      fontWeight: 'bold',
-                                      color: '#495057'
-                                    }}
-                                  >
-                                    Documentación:
-                                  </small>
-
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      gap: '1rem',
-                                      flexWrap: 'wrap',
-                                      marginTop: '0.3rem',
-                                      fontSize: '0.85rem'
-                                    }}
-                                  >
-                                    {[
-                                      ['Cédula Verde', v.cedula_url],
-                                      ['Seguro', v.seguro_url],
-                                      ['Licencia', v.licencia_url]
-                                    ].map(([docNombre, docRuta]) => {
-                                      const url = resolverDocumento(docRuta);
-
-                                      return (
-                                        <div key={docNombre}>
-                                          {url ? (
-                                            <a
-                                              href={url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              style={{
-                                                color: '#1c7ed6',
-                                                textDecoration: 'underline'
-                                              }}
-                                            >
-                                              📄 {docNombre}
-                                            </a>
-                                          ) : (
-                                            <span
-                                              style={{
-                                                color: '#868e96'
-                                              }}
-                                            >
-                                              ❌ {docNombre} (Sin presentar)
-                                            </span>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Botón cerrar */}
-                    <button
-                      type="button"
-                      onClick={cerrarDetalleRepartidor}
-                      style={{
-                        width: '100%',
-                        marginTop: '1.2rem',
-                        padding: '0.8rem',
-                        border: 'none',
-                        borderRadius: '7px',
-                        backgroundColor: '#6c757d',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Cerrar
-                    </button>
                   </div>
-                </div>
-              )}
-
+                );
+              })()}
             </section>
           )}
 
@@ -2122,7 +1974,7 @@ export const PanelAdministrador = () => {
                   <div
                     style={{
                       display: 'flex',
-                      justifyContent: 'space-between',
+                      justify: 'space-between',
                       alignItems: 'center',
                       gap: '1rem',
                       flexWrap: 'wrap',
@@ -2153,30 +2005,15 @@ export const PanelAdministrador = () => {
                     >
                       <thead>
                         <tr style={{ backgroundColor: '#e9ecef' }}>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            ID
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Usuario
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Nombre completo
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Email
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Teléfono
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Dirección
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Coordenadas
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Registro
-                          </th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>ID</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Usuario</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Nombre completo</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Email</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Teléfono</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Dirección</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Coordenadas</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Registro</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'center' }}>Acciones</th>
                         </tr>
                       </thead>
 
@@ -2184,84 +2021,61 @@ export const PanelAdministrador = () => {
                         {clientesVisibles.map((cliente) => (
                           <tr
                             key={cliente.id}
-                            style={{
-                              borderBottom: '1px solid #dee2e6'
-                            }}
+                            style={{ borderBottom: '1px solid #dee2e6' }}
                           >
+                            <td style={{ padding: '0.8rem' }}>{cliente.id}</td>
+                            <td style={{ padding: '0.8rem' }}>{cliente.username}</td>
                             <td style={{ padding: '0.8rem' }}>
-                              {cliente.id}
+                              {[cliente.nombre, cliente.apellido].filter(Boolean).join(' ') || 'No informado'}
                             </td>
-
-                            <td style={{ padding: '0.8rem' }}>
-                              {cliente.username}
-                            </td>
-
-                            <td style={{ padding: '0.8rem' }}>
-                              {[cliente.nombre, cliente.apellido]
-                                .filter(Boolean)
-                                .join(' ') || 'No informado'}
-                            </td>
-
-                            <td style={{ padding: '0.8rem' }}>
-                              {cliente.email}
-                            </td>
-
-                            <td style={{ padding: '0.8rem' }}>
-                              {cliente.telefono || 'No informado'}
-                            </td>
-
+                            <td style={{ padding: '0.8rem' }}>{cliente.email}</td>
+                            <td style={{ padding: '0.8rem' }}>{cliente.telefono || 'No informado'}</td>
                             <td style={{ padding: '0.8rem' }}>
                               <div>{cliente.direccion}</div>
-
                               {(cliente.piso || cliente.departamento) && (
                                 <small style={{ color: '#666' }}>
-                                  {cliente.piso
-                                    ? `Piso ${cliente.piso}`
-                                    : ''}
-                                  {cliente.departamento
-                                    ? ` - Depto. ${cliente.departamento}`
-                                    : ''}
+                                  {cliente.piso ? `Piso ${cliente.piso}` : ''}
+                                  {cliente.departamento ? ` - Depto. ${cliente.departamento}` : ''}
                                 </small>
                               )}
-
                               {cliente.referencia && (
-                                <small
-                                  style={{
-                                    display: 'block',
-                                    color: '#666'
-                                  }}
-                                >
+                                <small style={{ display: 'block', color: '#666' }}>
                                   Ref.: {cliente.referencia}
                                 </small>
                               )}
                             </td>
-
                             <td style={{ padding: '0.8rem' }}>
-                              {cliente.latitud !== null &&
-                                cliente.longitud !== null ? (
-                                <span
-                                  style={{
-                                    fontFamily: 'monospace',
-                                    fontSize: '0.85rem'
-                                  }}
-                                >
-                                  {Number(cliente.latitud).toFixed(6)}
-                                  <br />
+                              {cliente.latitud !== null && cliente.longitud !== null ? (
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                  {Number(cliente.latitud).toFixed(6)}<br />
                                   {Number(cliente.longitud).toFixed(6)}
                                 </span>
                               ) : (
-                                <span style={{ color: '#868e96' }}>
-                                  No asignadas
-                                </span>
+                                <span style={{ color: '#868e96' }}>No asignadas</span>
                               )}
                             </td>
-
                             <td style={{ padding: '0.8rem' }}>
                               {cliente.creado_en
-                                ? new Date(cliente.creado_en).toLocaleDateString(
-                                  'es-AR'
-                                )
+                                ? new Date(cliente.creado_en).toLocaleDateString('es-AR')
                                 : 'No informado'}
+                            </td>
+                            <td style={{ padding: '0.8rem', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => consultarHistorialCliente(cliente)}
+                                style={{
+                                  padding: '0.45rem 0.7rem',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#7048e8',
+                                  color: '#fff',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                📜 Ver pedidos
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -2279,6 +2093,136 @@ export const PanelAdministrador = () => {
                     </button>
                   </div>
                 </>
+              )}
+
+              {/* Modal del Historial de Pedidos */}
+              {clienteHistorialSeleccionado && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={cerrarHistorialCliente}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 3000,
+                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                    display: 'flex',
+                    justify: 'center',
+                    alignItems: 'center',
+                    padding: '1rem'
+                  }}
+                >
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: '100%',
+                      maxWidth: '700px',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      backgroundColor: '#fff',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
+                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+                      <div>
+                        <h2 style={{ margin: 0 }}>📜 Historial de Pedidos</h2>
+                        <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
+                          Cliente: {[clienteHistorialSeleccionado.nombre, clienteHistorialSeleccionado.apellido].filter(Boolean).join(' ') || clienteHistorialSeleccionado.username}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={cerrarHistorialCliente}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#f1f3f5',
+                          borderRadius: '50%',
+                          width: '36px',
+                          height: '36px',
+                          fontSize: '1.1rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {loadingHistorial ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: '#7048e8', fontWeight: 'bold' }}>
+                        ⏳ Cargando historial de pedidos...
+                      </div>
+                    ) : errorHistorial ? (
+                      <div style={{ padding: '1rem', backgroundColor: '#fff5f5', color: '#c92a2a', borderRadius: '8px' }}>
+                        {errorHistorial}
+                      </div>
+                    ) : historialPedidos.length === 0 ? (
+                      <div style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666', textAlign: 'center' }}>
+                        Este cliente aún no ha realizado ningún pedido.
+                      </div>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f1f3f5' }}>
+                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Orden #</th>
+                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Fecha</th>
+                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Local(es)</th>
+                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Estado</th>
+                            <th style={{ padding: '0.6rem', textAlign: 'right' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historialPedidos.map((pedido) => (
+                            <tr key={pedido.id} style={{ borderBottom: '1px solid #dee2e6' }}>
+                              <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>#{pedido.id}</td>
+                              <td style={{ padding: '0.6rem', fontSize: '0.9rem' }}>
+                                {pedido.creado_en ? new Date(pedido.creado_en).toLocaleString('es-AR') : '-'}
+                              </td>
+                              <td style={{ padding: '0.6rem', fontSize: '0.9rem' }}>{pedido.locales || 'N/A'}</td>
+                              <td style={{ padding: '0.6rem' }}>
+                                <span
+                                  style={{
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 'bold',
+                                    backgroundColor: pedido.estado === 'Entregado' ? '#d3f9d8' : pedido.estado === 'Cancelado' ? '#ffe3e3' : '#e7f5ff',
+                                    color: pedido.estado === 'Entregado' ? '#2b8a3e' : pedido.estado === 'Cancelado' ? '#e03131' : '#1c7ed6'
+                                  }}
+                                >
+                                  {pedido.estado}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold' }}>
+                                ${Number(pedido.total || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={cerrarHistorialCliente}
+                      style={{
+                        width: '100%',
+                        marginTop: '1.2rem',
+                        padding: '0.8rem',
+                        border: 'none',
+                        borderRadius: '7px',
+                        backgroundColor: '#6c757d',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
               )}
             </section>
           )}

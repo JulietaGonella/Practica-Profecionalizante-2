@@ -1,24 +1,24 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/db.js';
 import { getUserByEmailService } from '../services/users.service.js';
 import { generateAccessToken, generateRefreshToken } from './auth.utils.js';
+import { enviarEmailRecuperacion } from '../helpers/email.helper.js';
 
 export const loginService = async (email, password, userAgent, ipAddress) => {
   if (!email || !password) {
     throw new Error('Email y password requeridos');
   }
 
-  // 1️⃣ Normalizar email[cite: 42]
   const cleanEmail = String(email).trim().toLowerCase();
-
   const user = await getUserByEmailService(cleanEmail);
+
   if (!user) {
     throw new Error('Credenciales inválidas');
   }
 
   const isMatch = await bcrypt.compare(password, user.password_hash);
-
   if (!isMatch) {
     throw new Error('Credenciales inválidas');
   }
@@ -34,7 +34,6 @@ export const loginService = async (email, password, userAgent, ipAddress) => {
 
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
-
   const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
   const expiraEn = new Date();
@@ -55,7 +54,8 @@ export const loginService = async (email, password, userAgent, ipAddress) => {
       nombre: user.nombre,
       apellido: user.apellido,
       email: user.email,
-      rol: user.rol
+      rol: user.rol,
+      debe_cambiar_pass: Boolean(user.debe_cambiar_pass) // 👈 Retornamos el estado de la bandera
     }
   };
 };
@@ -281,5 +281,138 @@ export const logoutService = async (refreshToken) => {
         break;
       }
     }
+  }
+};
+
+// 🆕 Servicio para completar el restablecimiento/cambio obligatorio de clave
+export const cambiarPasswordObligatorioService = async (userId, nuevaPassword) => {
+  if (!nuevaPassword || String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  const newHash = await bcrypt.hash(nuevaPassword, 10);
+
+  const [result] = await pool.query(
+    `UPDATE usuarios 
+     SET password_hash = ?, debe_cambiar_pass = 0 
+     WHERE id = ?`,
+    [newHash, userId]
+  );
+
+  if (result.affectedRows === 0) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  return { message: 'Contraseña actualizada correctamente. Ya puedes continuar.' };
+};
+
+// 1️⃣ Solicitar token de recuperación y enviar correo/log
+export const solicitarRecuperacionPasswordService = async (email) => {
+  if (!email) {
+    throw new Error('El correo electrónico es requerido.');
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  const [[user]] = await pool.query(
+    `SELECT id, nombre, email FROM usuarios WHERE LOWER(email) = ?`,
+    [cleanEmail]
+  );
+
+  // Respuesta genérica para evitar la enumeración de usuarios por ciberseguridad
+  if (!user) {
+    return { message: 'Si el correo está registrado, recibirás un enlace de recuperación.' };
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = await bcrypt.hash(resetToken, 10);
+  const expiraEn = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+  await pool.query(
+    `INSERT INTO password_resets (IDusuario, token_hash, expira_en) VALUES (?, ?, ?)`,
+    [user.id, tokenHash, expiraEn]
+  );
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const resetUrl = `${frontendUrl}/restablecer-password?token=${resetToken}&id=${user.id}`;
+
+  const previewUrl = await enviarEmailRecuperacion(user.email, resetUrl);
+
+  return {
+    message: 'Si el correo está registrado, recibirás un enlace de recuperación.',
+    ...(process.env.NODE_ENV !== 'production' && {
+      debugInfo: {
+        resetUrl,
+        emailPreviewUrl: previewUrl || 'Ver consola del servidor'
+      }
+    })
+  };
+};
+
+// 2️⃣ Consumir token y actualizar la clave en la BD
+export const restablecerPasswordService = async (userId, token, nuevaPassword) => {
+  if (!userId || !token || !nuevaPassword) {
+    throw new Error('Todos los campos (userId, token, nuevaPassword) son obligatorios.');
+  }
+
+  if (String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  // Buscar tokens vigentes y no usados para el usuario
+  const [tokens] = await pool.query(
+    `SELECT id, token_hash FROM password_resets 
+     WHERE IDusuario = ? AND usado = 0 AND expira_en > NOW()`,
+    [userId]
+  );
+
+  if (tokens.length === 0) {
+    throw new Error('El enlace de recuperación es inválido o ha expirado.');
+  }
+
+  let tokenValido = null;
+  for (const t of tokens) {
+    const isMatch = await bcrypt.compare(token, t.token_hash);
+    if (isMatch) {
+      tokenValido = t;
+      break;
+    }
+  }
+
+  if (!tokenValido) {
+    throw new Error('El enlace de recuperación es inválido o ha expirado.');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const newPasswordHash = await bcrypt.hash(nuevaPassword, 10);
+
+    // Actualizar clave y quitar flag de cambio obligatorio si existiera
+    await conn.query(
+      `UPDATE usuarios SET password_hash = ?, debe_cambiar_pass = 0 WHERE id = ?`,
+      [newPasswordHash, userId]
+    );
+
+    // Marcar el token como usado
+    await conn.query(
+      `UPDATE password_resets SET usado = 1 WHERE id = ?`,
+      [tokenValido.id]
+    );
+
+    // Revocar todas las sesiones activas del usuario
+    await conn.query(
+      `UPDATE sesiones_usuario SET revocado = 1 WHERE IDusuario = ?`,
+      [userId]
+    );
+
+    await conn.commit();
+    return { message: 'Contraseña restablecida con éxito. Puedes iniciar sesión con tu nueva clave.' };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
 };

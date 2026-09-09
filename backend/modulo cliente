@@ -170,6 +170,28 @@ export const updatePerfilClienteService = async (userId, data) => {
   );
 
   return getPerfilClienteService(userId); // 👈 Asegúrate de usar el nuevo nombre aquí también
+};
+
+// Obtener el historial completo de pedidos de un cliente específico para el panel de administración
+export const getHistorialClienteService = async (clienteUserId) => {
+  const [rows] = await pool.query(
+    `SELECT 
+        o.id,
+        o.total,
+        o.creado_en,
+        e.nombre AS estado,
+        GROUP_CONCAT(DISTINCT l.nombre SEPARATOR ', ') AS locales
+     FROM ordenes o
+     JOIN estados e ON o.IDestado = e.id
+     JOIN detalle_orden do ON o.id = do.IDorden
+     JOIN locales l ON do.IDlocal = l.id
+     WHERE o.IDcliente = ?
+     GROUP BY o.id, o.total, o.creado_en, e.nombre
+     ORDER BY o.creado_en DESC`,
+    [clienteUserId]
+  );
+
+  return rows;
 };*/
 
 /*clientes.controller.js:
@@ -179,7 +201,8 @@ import {
   updatePerfilClienteService,
   getDireccionesClienteService,
   createDireccionClienteService,
-  deleteDireccionClienteService
+  deleteDireccionClienteService,
+  getHistorialClienteService
 } from '../services/clientes.service.js';
 
 export const getClientes = async (req, res) => {
@@ -234,6 +257,16 @@ export const deleteMisDirecciones = async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+};
+
+export const getHistorialCliente = async (req, res) => {
+  try {
+    const { id } = req.params; // ID de usuario del cliente
+    const historial = await getHistorialClienteService(id);
+    res.json(historial);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };*/
 
 /*clientes.routes.js:
@@ -243,7 +276,8 @@ import { getClientes,
     updateMiPerfil,
     getMisDirecciones, 
     createMisDirecciones, 
-    deleteMisDirecciones
+    deleteMisDirecciones,
+    getHistorialCliente
 } from '../controllers/clientes.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole, requireAnyRole } from '../auth/roles.middleware.js';
@@ -256,5 +290,6 @@ router.put('/mi-perfil', authMiddleware, updateMiPerfil);
 router.get('/mis-direcciones', authMiddleware, getMisDirecciones);
 router.post('/mis-direcciones', authMiddleware, createMisDirecciones);
 router.delete('/mis-direcciones/:id', authMiddleware, deleteMisDirecciones);
+router.get('/:id/historial', authMiddleware, requireRole('administrador'), getHistorialCliente);
 
 export default router;*/

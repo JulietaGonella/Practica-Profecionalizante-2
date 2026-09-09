@@ -170,3 +170,25 @@ export const updatePerfilClienteService = async (userId, data) => {
 
   return getPerfilClienteService(userId); // 👈 Asegúrate de usar el nuevo nombre aquí también
 };
+
+// Obtener el historial completo de pedidos de un cliente específico para el panel de administración
+export const getHistorialClienteService = async (clienteUserId) => {
+  const [rows] = await pool.query(
+    `SELECT 
+        o.id,
+        o.total,
+        o.creado_en,
+        e.nombre AS estado,
+        GROUP_CONCAT(DISTINCT l.nombre SEPARATOR ', ') AS locales
+     FROM ordenes o
+     JOIN estados e ON o.IDestado = e.id
+     JOIN detalle_orden do ON o.id = do.IDorden
+     JOIN locales l ON do.IDlocal = l.id
+     WHERE o.IDcliente = ?
+     GROUP BY o.id, o.total, o.creado_en, e.nombre
+     ORDER BY o.creado_en DESC`,
+    [clienteUserId]
+  );
+
+  return rows;
+}; 

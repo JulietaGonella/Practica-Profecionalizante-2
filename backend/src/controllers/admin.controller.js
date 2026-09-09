@@ -1,7 +1,8 @@
 import {
   crearAdministradorService,
   crearLocalCompletoService,
-  crearRepartidorCompletoService
+  crearRepartidorCompletoService,
+  getLocalesAdminService
 } from '../services/admin.service.js';
 import {
   getVehiculosPendientesService,
@@ -28,11 +29,11 @@ export const crearLocalCompleto = async (req, res) => {
   }
 };
 
+// controllers/admin.controller.js
 export const crearRepartidorCompleto = async (req, res) => {
   try {
-    res.status(201).json(
-      await crearRepartidorCompletoService(req.body)
-    );
+    const resultado = await crearRepartidorCompletoService(req.body, req.files || {});
+    res.status(201).json(resultado);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -58,6 +59,15 @@ export const evaluarSolicitudVehiculo = async (req, res) => {
       motivo_rechazo
     );
     res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const getLocalesAdmin = async (req, res) => {
+  try {
+    const locales = await getLocalesAdminService();
+    res.json(locales);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

@@ -1,4 +1,12 @@
-import { loginService, refreshTokenService, logoutService, registerClientService } from './auth.service.js';
+import { 
+  loginService, 
+  refreshTokenService, 
+  logoutService, 
+  registerClientService,
+  cambiarPasswordObligatorioService,
+  solicitarRecuperacionPasswordService,
+  restablecerPasswordService 
+} from './auth.service.js';
 
 export const login = async (req, res) => {
   try {
@@ -43,6 +51,38 @@ export const registerClient = async (req, res) => {
   try {
     const result = await registerClientService(req.body);
     res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const cambiarPasswordObligatorio = async (req, res) => {
+  try {
+    const { nuevaPassword } = req.body;
+    const userId = req.user.id; // Obtenido desde el authMiddleware
+
+    const result = await cambiarPasswordObligatorioService(userId, nuevaPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const solicitarRecuperacionPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await solicitarRecuperacionPasswordService(email);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const restablecerPassword = async (req, res) => {
+  try {
+    const { userId, token, nuevaPassword } = req.body;
+    const result = await restablecerPasswordService(userId, token, nuevaPassword);
+    res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

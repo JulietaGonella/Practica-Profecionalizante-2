@@ -546,3 +546,24 @@ CREATE TABLE IF NOT EXISTS retiros_locales_orden (
     FOREIGN KEY (IDrepartidor) REFERENCES repartidores(id),
     UNIQUE KEY unique_orden_local (IDorden, IDlocal)
 );
+
+USE BD_SmartDrop;
+
+-- Agregar columna debe_cambiar_pass (0 = No requiere cambio, 1 = Debe cambiar obligatoriamente)
+ALTER TABLE usuarios
+ADD COLUMN debe_cambiar_pass TINYINT(1) NOT NULL DEFAULT 0 AFTER password_hash;
+
+-- Asegurar que todos los usuarios actuales mantengan el acceso directo sin bloqueo
+UPDATE usuarios SET debe_cambiar_pass = 0;
+
+USE BD_SmartDrop;
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    IDusuario INT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expira_en DATETIME NOT NULL,
+    usado TINYINT(1) DEFAULT 0,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (IDusuario) REFERENCES usuarios(id) ON DELETE CASCADE
+);
