@@ -17,6 +17,7 @@ import {
   getHistorialClienteAdmin
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
+import { CambiarPasswordModal } from '../CambiarPasswordModal'
 
 const DIAS_SEMANA = [
   'Domingo',
@@ -110,6 +111,7 @@ export const PanelAdministrador = () => {
   const [clienteHistorialSeleccionado, setClienteHistorialSeleccionado] = useState(null);
   const [historialPedidos, setHistorialPedidos] = useState([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
   const [errorHistorial, setErrorHistorial] = useState('');
 
   // --- BÚSQUEDA Y FILTRADO DE DATOS ---
@@ -432,26 +434,51 @@ export const PanelAdministrador = () => {
 
   return (
     <div style={{ maxWidth: '1150px', margin: '0 auto', padding: '2rem' }}>
-      <header
-        style={{
-          display: 'flex',
-          justify: 'space-between',
-          alignItems: 'center',
-          gap: '1rem',
-          flexWrap: 'wrap',
-          marginBottom: '1.5rem'
-        }}
-      >
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ margin: 0 }}>Panel de Administración 🛡️</h1>
-          <p style={{ color: '#666' }}>
-            Gestión general del sistema SmartDrop
-          </p>
+          <p style={{ color: '#666' }}>Gestión general del sistema SmartDrop</p>
         </div>
 
-        <LogoutButton />
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={() => setMostrarCambioPass(true)}
+            style={{
+              padding: '0.6rem 1rem',
+              backgroundColor: '#495057',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            🔑 Cambiar Contraseña
+          </button>
+
+          <LogoutButton />
+        </div>
       </header>
 
+      {/* Renderizado condicional del modal de cambio de clave */}
+      {mostrarCambioPass && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justify: 'center',
+          alignItems: 'center',
+          zIndex: 3000
+        }}>
+          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', maxWidth: '400px', width: '100%' }}>
+            <CambiarPasswordModal
+              esObligatorio={false}
+              onClose={() => setMostrarCambioPass(false)}
+            />
+          </div>
+        </div>
+      )}
       <div
         style={{
           display: 'flex',
@@ -1496,7 +1523,7 @@ export const PanelAdministrador = () => {
                             <td style={{ padding: '0.8rem' }}>{rep.username}</td>
                             <td style={{ padding: '0.8rem' }}>{rep.email}</td>
                             <td style={{ padding: '0.8rem' }}>{rep.dni}</td>
-                            
+
                             {/* Visualización ajustada en tabla principal */}
                             <td style={{ padding: '0.8rem' }}>
                               {rep.tipo_vehiculo ? (
@@ -1505,7 +1532,7 @@ export const PanelAdministrador = () => {
                                   {(() => {
                                     const esBici = rep.tipo_vehiculo.toLowerCase().includes('bici');
                                     const detalles = [rep.marca, rep.modelo].filter(Boolean).join(' ');
-                                    
+
                                     if (esBici) {
                                       return detalles ? (
                                         <small style={{ display: 'block', color: '#666' }}>

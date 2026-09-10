@@ -15,7 +15,8 @@ import {
   revisarVehiculo,
   getRepartidoresAdmin,
   getMiPerfilRepartidor,
-  getGananciasHoy
+  getGananciasHoy,
+  actualizarDocumentosVehiculo
 } from '../controllers/repartidores.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole } from '../auth/roles.middleware.js';
@@ -60,6 +61,16 @@ router.post(
     { name: 'licencia', maxCount: 1 }
   ]),
   solicitarVehiculo
+);
+router.put(
+  '/vehiculos/:id/documentos',
+  authMiddleware,
+  uploadDocumentos.fields([
+    { name: 'licencia', maxCount: 1 },
+    { name: 'seguro', maxCount: 1 },
+    { name: 'cedula', maxCount: 1 }
+  ]),
+  actualizarDocumentosVehiculo
 );
 router.patch('/mis-vehiculos/:id/activo', authMiddleware, requireRole('repartidor'), seleccionarVehiculoActivo);
 router.put('/me/vehiculo-activo', authMiddleware, requireRole('repartidor'), seleccionarVehiculoActivo);

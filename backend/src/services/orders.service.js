@@ -3,6 +3,7 @@ import { pool } from '../config/db.js';
 import { calcularCostoEnvioMultiorigen, calcularDistanciaKM } from './ai.service.js';
 import { validarLocalDisponibleParaPedido } from './locales.service.js';
 import { crearPreferenciaMercadoPago } from './mercadopago.service.js';
+import { evaluarEstadoDocumentación } from './admin.service.js';
 
 const RADIO_MAXIMO_COBERTURA_KM = 5.0; // 📏 Cobertura máxima configurable (5 km)
 
@@ -392,6 +393,21 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       throw new Error('Acción denegada: Actualmente no estás marcado como disponible para tomar pedidos.');
     }
 
+    // En assignRepartidorService (orders.service.js)
+    const [[vehiculoActivo]] = await conn.query(
+      `SELECT v.* 
+   FROM vehiculos_repartidor v
+   JOIN repartidores r ON r.IDvehiculo_activo = v.id
+   WHERE r.IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (vehiculoActivo) {
+      const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
+      if (!evalDoc.documentacionValida) {
+        throw new Error('Acción denegada: Tu vehículo activo tiene documentación vencida.');
+      }
+    }
     const IDrepartidor = repartidor.id;
 
     // ⛔ NUEVA VALIDACIÓN: Límite de 1 pedido activo por repartidor

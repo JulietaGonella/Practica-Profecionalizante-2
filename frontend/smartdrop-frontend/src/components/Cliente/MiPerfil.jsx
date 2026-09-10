@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { getMiPerfil, updateMiPerfil } from '../../api/clientesService';
 import { MisDireccionesManager } from './MisDirecciones';
+import { CambiarPasswordModal } from '../CambiarPasswordModal';
 
 export const MiPerfil = () => {
   const [form, setForm] = useState({
@@ -29,6 +30,7 @@ export const MiPerfil = () => {
   const [loadingGps, setLoadingGps] = useState(false);
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
   const [seccion, setSeccion] = useState('perfil'); // 'perfil' | 'direcciones'
+  const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
 
   useEffect(() => {
     cargarPerfil();
@@ -118,7 +120,7 @@ export const MiPerfil = () => {
 
       const res = await updateMiPerfil(payload);
       setMensaje({ tipo: 'exito', texto: res.message || 'Perfil actualizado exitosamente.' });
-      
+
       // 🟢 Actualizamos la copia original con los nuevos datos y volvemos a bloquear los inputs
       setPerfilOriginal(form);
       setEditando(false);
@@ -136,7 +138,7 @@ export const MiPerfil = () => {
 
   return (
     <div style={{ maxWidth: '600px', margin: '1rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px', backgroundColor: '#fff' }}>
-      
+
       {/* 🟢 Navegación entre Pestañas */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', borderBottom: '2px solid #eee', paddingBottom: '0.8rem' }}>
         <button
@@ -178,21 +180,38 @@ export const MiPerfil = () => {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2>👤 Mi Cuenta / Perfil</h2>
-            
-            {/* 🟢 Botón para alternar la edición */}
-            {!editando && (
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* 🟢 Botón para abrir el formulario de cambio de clave */}
               <button
                 type="button"
-                onClick={() => {
-                  setEditando(true);
-                  setMensaje({ tipo: '', texto: '' });
-                }}
-                style={{ padding: '0.5rem 1rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
+                style={{ padding: '0.5rem 1rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
               >
-                ✏️ Editar Perfil
+                🔐 {mostrarCambioPass ? 'Ocultar Cambio Clave' : 'Cambiar Contraseña'}
               </button>
-            )}
+
+              {!editando && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditando(true);
+                    setMensaje({ tipo: '', texto: '' });
+                  }}
+                  style={{ padding: '0.5rem 1rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  ✏️ Editar Perfil
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Renderizar componente de cambio de clave si está desplegado */}
+          {mostrarCambioPass && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
+            </div>
+          )}
 
           {mensaje.texto && (
             <p style={{ color: mensaje.tipo === 'error' ? 'red' : 'green', fontWeight: 'bold' }}>

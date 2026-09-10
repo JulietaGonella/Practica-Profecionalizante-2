@@ -2,7 +2,8 @@ import {
   crearAdministradorService,
   crearLocalCompletoService,
   crearRepartidorCompletoService,
-  getLocalesAdminService
+  getLocalesAdminService,
+  actualizarVencimientosVehiculoService
 } from '../services/admin.service.js';
 import {
   getVehiculosPendientesService,
@@ -68,6 +69,15 @@ export const getLocalesAdmin = async (req, res) => {
   try {
     const locales = await getLocalesAdminService();
     res.json(locales);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const actualizarVencimientosVehiculo = async (req, res) => {
+  try {
+    const resultado = await actualizarVencimientosVehiculoService(req.params.id, req.body);
+    res.json(resultado);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

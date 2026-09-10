@@ -1,5 +1,6 @@
 import { pool } from '../config/db.js';
 import { generarEtapasRuta } from './ai.service.js';
+import { evaluarEstadoDocumentación } from './admin.service.js';
 
 // 🛠️ Helper de logs estructurados con identificador de contexto
 const createLoggerViaje = (IDrepartidor, IDorden) => {
@@ -446,6 +447,24 @@ export const getDisponibilidadService = async (IDusuario) => {
 export const updateDisponibilidadService = async (IDusuario, disponible) => {
   const estado = disponible === true || disponible === 1 || disponible === '1' ? 1 : 0;
 
+  if (estado === 1) {
+    // Buscar el vehículo activo del repartidor
+    const [[vehiculoActivo]] = await pool.query(
+      `SELECT v.* 
+       FROM vehiculos_repartidor v
+       JOIN repartidores r ON r.IDvehiculo_activo = v.id
+       WHERE r.IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (vehiculoActivo) {
+      const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
+      if (!evalDoc.documentacionValida) {
+        throw new Error('No puedes ponerte disponible. Tienes documentación vencida en tu vehículo activo.');
+      }
+    }
+  }
+
   const [result] = await pool.query(
     `UPDATE repartidores SET disponible = ? WHERE IDusuario = ?`,
     [estado, IDusuario]
@@ -496,6 +515,10 @@ export const getRepartidoresAdminService = async () => {
               'patente', COALESCE(v.patente, ''),
               'seguro_vigente', v.seguro_vigente,
               'licencia_vigente', v.licencia_vigente,
+              -- 1️⃣ VINCULACIÓN DE CAMPOS DE FECHAS EN LA CONSULTA
+              'fecha_vencimiento_licencia', v.fecha_vencimiento_licencia,
+              'fecha_vencimiento_seguro', v.fecha_vencimiento_seguro,
+              'fecha_vencimiento_cedula', v.fecha_vencimiento_cedula,
               'estado', v.estado,
               'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
               'cedula_url', COALESCE(v.cedula_url, ''),
@@ -517,18 +540,30 @@ export const getRepartidoresAdminService = async () => {
   `);
 
   return rows.map((r) => {
-    // Parsear el JSON si viene como String y descartar elementos nulos generados por agregación vacía
+    // Parsear el JSON si viene como String y descartar elementos nulos
     const listaVehiculos = (
       typeof r.vehiculos === 'string'
         ? JSON.parse(r.vehiculos)
         : (r.vehiculos || [])
     ).filter(Boolean);
 
-    const primerVehiculo = listaVehiculos[0] || {};
+    // 2️⃣ MAPEO Y EVALUACIÓN DE DOCUMENTACIÓN
+    const vehiculosEvaluados = listaVehiculos.map((v) => {
+      const evaluacion = evaluarEstadoDocumentación(v);
+      return {
+        ...v,
+        licencia_vencida: evaluacion.licenciaVencida,
+        seguro_vencido: evaluacion.seguroVencido,
+        cedula_vencida: evaluacion.cedulaVencida,
+        documentacion_valida: evaluacion.documentacionValida
+      };
+    });
+
+    const primerVehiculo = vehiculosEvaluados[0] || {};
 
     return {
       ...r,
-      vehiculos: listaVehiculos,
+      vehiculos: vehiculosEvaluados,
       tipo_vehiculo: r.tipo_vehiculo || primerVehiculo.tipo_vehiculo || null,
       marca: r.marca_activo || primerVehiculo.marca || '',
       modelo: r.modelo_activo || primerVehiculo.modelo || '',
@@ -552,6 +587,9 @@ export const getMisVehiculosService = async (IDusuario) => {
       v.cedula_url,
       v.seguro_url,
       v.licencia_url,
+      v.fecha_vencimiento_licencia, -- 👈 AGREGAR
+      v.fecha_vencimiento_seguro,   -- 👈 AGREGAR
+      v.fecha_vencimiento_cedula,   -- 👈 AGREGAR
       v.estado,
       v.motivo_rechazo,
       v.activo,
@@ -577,7 +615,10 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
     patente,
     seguro_vigente,
     licencia_vigente,
-    bici_propia
+    bici_propia,
+    fecha_vencimiento_licencia,
+    fecha_vencimiento_seguro,
+    fecha_vencimiento_cedula
   } = data;
 
   if (!IDtipo_vehiculo) {
@@ -596,7 +637,6 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
   );
   if (!tipo) throw new Error('El tipo de vehículo no existe');
 
-  // Detectar si es bicicleta por ID o por nombre
   const esBicicleta = Number(IDtipo_vehiculo) === 2 || tipo.nombre.toLowerCase().includes('bici');
 
   const [result] = await pool.query(
@@ -604,8 +644,10 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
     INSERT INTO vehiculos_repartidor
       (IDrepartidor, IDtipo_vehiculo, marca, modelo, anio, patente,
        seguro_vigente, licencia_vigente, bici_propia, cedula_url,
-       seguro_url, licencia_url, estado, activo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', 1)
+       seguro_url, licencia_url, 
+       fecha_vencimiento_licencia, fecha_vencimiento_seguro, fecha_vencimiento_cedula,
+       estado, activo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', 1)
     `,
     [
       repartidor.id,
@@ -619,7 +661,11 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
       esBicicleta ? 1 : (bici_propia !== undefined ? (bici_propia ? 1 : 0) : 0),
       esBicicleta ? null : (archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null),
       esBicicleta ? null : (archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null),
-      esBicicleta ? null : (archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null)
+      esBicicleta ? null : (archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null),
+      // Si vienen vacíos o es bici, se inserta NULL (comportamiento sin fecha)
+      esBicicleta ? null : (fecha_vencimiento_licencia || null),
+      esBicicleta ? null : (fecha_vencimiento_seguro || null),
+      esBicicleta ? null : (fecha_vencimiento_cedula || null)
     ]
   );
 
@@ -753,4 +799,37 @@ export const getGananciasHoyService = async (IDusuario) => {
     efectivoRecaudadoHoy: Number(resumen.efectivo_recaudado_hoy || 0),
     efectivoARendirHoy: Number(resumen.efectivo_a_rendir_hoy || 0)
   };
+};
+
+export const actualizarDocumentosVehiculoService = async (IDusuario, vehiculoId, files) => {
+  // Verificar que el vehículo pertenece al repartidor
+  const [[vehiculo]] = await pool.query(
+    `SELECT v.id 
+     FROM vehiculos_repartidor v
+     JOIN repartidores r ON v.IDrepartidor = r.id
+     WHERE v.id = ? AND r.IDusuario = ?`,
+    [vehiculoId, IDusuario]
+  );
+
+  if (!vehiculo) {
+    throw new Error('Vehículo no encontrado o no pertenece a tu usuario.');
+  }
+
+  const licencia_url = files?.licencia?.[0]?.path || null;
+  const seguro_url = files?.seguro?.[0]?.path || null;
+  const cedula_url = files?.cedula?.[0]?.path || null;
+
+  // Actualizar solo las URLs provistas y reiniciar estado a PENDIENTE
+  await pool.query(
+    `UPDATE vehiculos_repartidor 
+     SET licencia_url = COALESCE(?, licencia_url),
+         seguro_url = COALESCE(?, seguro_url),
+         cedula_url = COALESCE(?, cedula_url),
+         estado = 'PENDIENTE',
+         motivo_rechazo = NULL
+     WHERE id = ?`,
+    [licencia_url, seguro_url, cedula_url, vehiculoId]
+  );
+
+  return { message: 'Documentación actualizada correctamente. Pendiente de validación administrativa.' };
 };

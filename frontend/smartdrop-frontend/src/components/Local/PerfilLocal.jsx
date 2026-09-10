@@ -1,6 +1,7 @@
 // src/components/Local/PerfilLocal.jsx
 import { useState, useEffect } from 'react';
 import { getMiLocal, updatePerfilLocal } from '../../api/localService';
+import { CambiarPasswordModal } from '../CambiarPasswordModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -9,6 +10,7 @@ export const PerfilLocal = () => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [editando, setEditando] = useState(false);
+    const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
     const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
 
     // Estados para campos editables
@@ -110,16 +112,34 @@ export const PerfilLocal = () => {
                     </p>
                 </div>
 
-                {!editando && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    {/* 🟢 Botón para alternar la visibilidad del cambio de contraseña */}
                     <button
                         type="button"
-                        onClick={() => setEditando(true)}
-                        style={{ padding: '0.6rem 1.2rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
+                        style={{ padding: '0.6rem 1.2rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
                     >
-                        ✏️ Editar Perfil
+                        🔐 {mostrarCambioPass ? 'Ocultar Cambio Clave' : 'Cambiar Contraseña'}
                     </button>
-                )}
+
+                    {!editando && (
+                        <button
+                            type="button"
+                            onClick={() => setEditando(true)}
+                            style={{ padding: '0.6rem 1.2rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            ✏️ Editar Perfil
+                        </button>
+                    )}
+                </div>
             </div>
+
+            {/* Renderizado condicional del modal/formulario para cambiar contraseña */}
+            {mostrarCambioPass && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
+                </div>
+            )}
 
             {mensaje.texto && (
                 <p style={{ color: mensaje.tipo === 'error' ? 'red' : 'green', fontWeight: 'bold', marginBottom: '1rem' }}>

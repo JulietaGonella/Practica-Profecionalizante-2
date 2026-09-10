@@ -1,50 +1,35 @@
 // src/App.jsx
-
 import { useState, useEffect } from 'react';
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useNavigate,
-  useLocation
-} from 'react-router-dom';
-
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
-
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { LogoutButton } from './components/LogoutButton';
-
 import { CatalogoCliente } from './components/Cliente/CatalogoCliente';
 import { MisPedidos } from './components/Cliente/MisPedidos';
 import { CarritoPage } from './pages/Cliente/CarritoPage';
 import { CartFloatingButton } from './components/Cliente/CartFloatingButton';
 import { CartProvider, useCart } from './context/CartContext';
 import { MiPerfil } from './components/Cliente/MiPerfil';
-
 import { getMiLocal, toggleOperativoLocal } from './api/localService';
-
 import { ComanderaLocal } from './components/Local/ComanderaLocal';
 import { GestionMenuLocal } from './components/Local/GestionMenuLocal';
 import { GestionHorariosLocal } from './components/Local/GestionHorariosLocal';
 import { PerfilLocal } from './components/Local/PerfilLocal';
-
 import { SeguimientoPedido } from './components/Cliente/SeguimientoPedido';
 import { getMisPedidos } from './api/ordersService';
-
 import { PanelRepartidor } from './components/Repartidor/PanelRepartidor';
 import { DetallePedidoRepartidor } from './components/Repartidor/DetallePedidoRepartidor';
-
 import { estaLocalAbierto } from './utils/horarios';
-
 import { PanelAdministrador } from './components/Admin/PanelAdministrador';
 import { CrearCuentaPerfilAdmin } from './components/Admin/CrearCuentaPerfil';
 import { CrearAdminForm } from './components/Admin/CrearCuentaAdmin';
-
 import { MisDireccionesManager } from './components/Cliente/MisDirecciones';
 import { ClienteLayout } from './components/Cliente/ClienteLayout';
+import { ActualizarPasswordInicialPage } from './pages/ActualizarPasswordInicialPage';
+import { SolicitarRecuperacionPage } from './pages/SolicitarRecuperacionPage';
+import { RestablecerPasswordPage } from './pages/RestablecerPasswordPage';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -286,7 +271,7 @@ const LocalInicio = () => {
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1150px', margin: '0 auto' }}>
-      
+
       {/* ========================================================= */}
       {/* 🖼️ ENCABEZADO PERSISTENTE DEL LOCAL (BANNER + FOTOS + INFO) */}
       {/* ========================================================= */}
@@ -328,7 +313,7 @@ const LocalInicio = () => {
 
             {/* Contenido Principal del Encabezado */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', width: '100%', flexWrap: 'wrap' }}>
-              
+
               {/* 2. LOGO DEL COMERCIO */}
               <div
                 style={{
@@ -696,182 +681,54 @@ export default function App() {
 
         <Routes>
 
-          {/* 🔓 RUTAS PÚBLICAS */}
-          <Route
-            path="/login"
-            element={<LoginPage />}
-          />
+          {/* 🔓 RUTAS PÚBLICAS DE AUTENTICACIÓN */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/recuperar-password" element={<SolicitarRecuperacionPage />} />
+          <Route path="/restablecer-password" element={<RestablecerPasswordPage />} />
 
-          <Route
-            path="/register"
-            element={<RegisterPage />}
-          />
-
+          {/* 🔒 RUTA DE CAMBIO DE CONTRASEÑA (Protegida para usuarios autenticados) */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/actualizar-password-inicial" element={<ActualizarPasswordInicialPage />} />
+          </Route>
 
           {/* 🛒 RUTAS DEL CLIENTE */}
-          <Route
-            element={
-              <ProtectedRoute
-                allowedRoles={['cliente']}
-              />
-            }
-          >
-
+          <Route element={<ProtectedRoute allowedRoles={['cliente']} />}>
             <Route element={<ClienteLayout />}>
-
-              <Route
-                path="/cliente/inicio"
-                element={<ClienteInicio />}
-              />
-
-              <Route
-                path="/cliente/pedidos"
-                element={<MisPedidos />}
-              />
-
-              <Route
-                path="/cliente/perfil"
-                element={<MiPerfil />}
-              />
-
-              <Route
-                path="/cliente/direcciones"
-                element={<MisDireccionesManager />}
-              />
-
-              <Route
-                path="/cliente/carrito"
-                element={<CarritoPage />}
-              />
-
-              <Route
-                path="/cliente/locales/*"
-                element={
-                  <CatalogoCliente
-                    onAgregarAlCarrito={
-                      agregarAlCarrito
-                    }
-                  />
-                }
-              />
-
-              <Route
-                path="/cliente/tablero"
-                element={
-                  <TableroEstadisticas
-                    rol="Cliente"
-                  />
-                }
-              />
-
-              <Route
-                path="/cliente/seguimiento/:ordenId"
-                element={<SeguimientoPedido />}
-              />
-
+              <Route path="/cliente/inicio" element={<ClienteInicio />} />
+              <Route path="/cliente/pedidos" element={<MisPedidos />} />
+              <Route path="/cliente/perfil" element={<MiPerfil />} />
+              <Route path="/cliente/direcciones" element={<MisDireccionesManager />} />
+              <Route path="/cliente/carrito" element={<CarritoPage />} />
+              <Route path="/cliente/locales/*" element={<CatalogoCliente onAgregarAlCarrito={agregarAlCarrito} />} />
+              <Route path="/cliente/tablero" element={<TableroEstadisticas rol="Cliente" />} />
+              <Route path="/cliente/seguimiento/:ordenId" element={<SeguimientoPedido />} /> 
             </Route>
-
           </Route>
 
 
           {/* 🏪 RUTAS DEL LOCAL */}
-          <Route
-            element={
-              <ProtectedRoute
-                allowedRoles={[
-                  'local',
-                  'administrador local'
-                ]}
-              />
-            }
-          >
-
-            <Route
-              path="/local/inicio"
-              element={<LocalInicio />}
-            />
-
+          <Route element={ <ProtectedRoute allowedRoles={[ 'local', 'administrador local' ]} /> } >
+            <Route path="/local/inicio" element={<LocalInicio />} />
           </Route>
-
 
           {/* 🚴 RUTAS DEL REPARTIDOR */}
-          <Route
-            element={
-              <ProtectedRoute
-                allowedRoles={['repartidor']}
-              />
-            }
-          >
-
-            <Route
-              path="/repartidor/inicio"
-              element={<PanelRepartidor />}
-            />
-
-            <Route
-              path="/repartidor/orden/:ordenId"
-              element={<DetallePedidoRepartidor />}
-            />
-
-            <Route
-              path="/repartidor/tablero"
-              element={
-                <TableroEstadisticas
-                  rol="Repartidor"
-                />
-              }
-            />
-
+          <Route element={ <ProtectedRoute allowedRoles={['repartidor']} /> }>
+            <Route path="/repartidor/inicio" element={<PanelRepartidor />}/>
+            <Route path="/repartidor/orden/:ordenId" element={<DetallePedidoRepartidor />} />
+            <Route path="/repartidor/tablero" element={ <TableroEstadisticas rol="Repartidor" /> }/>
           </Route>
-
 
           {/* 🛡️ RUTAS DEL ADMINISTRADOR */}
-          <Route
-            element={
-              <ProtectedRoute
-                allowedRoles={['administrador']}
-              />
-            }
-          >
-
-            <Route
-              path="/admin/inicio"
-              element={<PanelAdministrador />}
-            />
-
-            <Route
-              path="/admin/crear-cuenta"
-              element={<CrearCuentaPerfilAdmin />}
-            />
-
-            <Route
-              path="/admin/crear-admin"
-              element={<CrearAdminForm />}
-            />
-
-            <Route
-              path="/admin/tablero"
-              element={
-                <TableroEstadisticas
-                  rol="Administrador"
-                />
-              }
-            />
-
+          <Route element={ <ProtectedRoute allowedRoles={['administrador']} /> }>
+            <Route path="/admin/inicio" element={<PanelAdministrador />}/>
+            <Route path="/admin/crear-cuenta" element={<CrearCuentaPerfilAdmin />}/>
+            <Route path="/admin/crear-admin" element={<CrearAdminForm />}/>
+            <Route path="/admin/tablero" element={ <TableroEstadisticas rol="Administrador" /> }/>
           </Route>
 
-
           {/* 🔄 REDIRECCIÓN POR DEFECTO */}
-          <Route
-            path="*"
-            element={
-              <Navigate
-                to="/login"
-                replace
-              />
-            }
-          />
-
+          <Route path="*" element={ <Navigate to="/login" replace /> }/>
         </Routes>
 
       </BrowserRouter>

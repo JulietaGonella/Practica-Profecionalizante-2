@@ -7,7 +7,8 @@ import {
   registerClient,
   cambiarPasswordObligatorio,
   solicitarRecuperacionPassword,
-  restablecerPassword
+  restablecerPassword,
+  cambiarPasswordVoluntario
 } from './auth.controller.js';
 import { authMiddleware } from './auth.middleware.js';
 
@@ -20,6 +21,7 @@ router.post('/logout', logout);
 router.post('/cambiar-password-inicial', authMiddleware, cambiarPasswordObligatorio);
 router.post('/solicitar-recuperacion', solicitarRecuperacionPassword);
 router.post('/restablecer-password', restablecerPassword);
+router.post('/cambiar-password', authMiddleware, cambiarPasswordVoluntario);
 
 export default router;*/
 
@@ -31,7 +33,8 @@ import {
   registerClientService,
   cambiarPasswordObligatorioService,
   solicitarRecuperacionPasswordService,
-  restablecerPasswordService 
+  restablecerPasswordService,
+  cambiarPasswordVoluntarioService
 } from './auth.service.js';
 
 export const login = async (req, res) => {
@@ -108,6 +111,18 @@ export const restablecerPassword = async (req, res) => {
   try {
     const { userId, token, nuevaPassword } = req.body;
     const result = await restablecerPasswordService(userId, token, nuevaPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const cambiarPasswordVoluntario = async (req, res) => {
+  try {
+    const { passwordActual, nuevaPassword } = req.body;
+    const userId = req.user.id; // Obtenido del token por authMiddleware
+
+    const result = await cambiarPasswordVoluntarioService(userId, passwordActual, nuevaPassword);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -532,6 +547,41 @@ export const restablecerPasswordService = async (userId, token, nuevaPassword) =
   } finally {
     conn.release();
   }
+};
+
+export const cambiarPasswordVoluntarioService = async (userId, passwordActual, nuevaPassword) => {
+  if (!passwordActual || !nuevaPassword) {
+    throw new Error('Debes ingresar tu contraseña actual y la nueva contraseña.');
+  }
+
+  if (String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  // 1. Obtener la contraseña actual guardada en BD
+  const [[user]] = await pool.query(
+    `SELECT password_hash FROM usuarios WHERE id = ?`,
+    [userId]
+  );
+
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  // 2. Verificar que la clave actual sea correcta
+  const isMatch = await bcrypt.compare(passwordActual, user.password_hash);
+  if (!isMatch) {
+    throw new Error('La contraseña actual es incorrecta.');
+  }
+
+  // 3. Hashear la nueva contraseña y actualizar
+  const newHash = await bcrypt.hash(nuevaPassword, 10);
+  await pool.query(
+    `UPDATE usuarios SET password_hash = ? WHERE id = ?`,
+    [newHash, userId]
+  );
+
+  return { message: 'Contraseña actualizada con éxito.' };
 };*/
 
 /*auth.utils.js:
@@ -610,6 +660,46 @@ export const requireRepartidorValidado = async (req, res, next) => {
   } catch (error) {
     res.status(500).json({ error: 'Error al verificar estado del repartidor.' });
   }
+};
+
+export const updateDisponibilidadService = async (IDusuario, disponible) => {
+  const estado = disponible === true || disponible === 1 || disponible === '1' ? 1 : 0;
+
+  if (estado === 1) {
+    // Validar documentación del vehículo activo antes de permitir ponerse disponible
+    const [[vehiculoActivo]] = await pool.query(
+      `
+      SELECT v.* 
+      FROM vehiculos_repartidor v
+      JOIN repartidores r ON r.IDvehiculo_activo = v.id
+      WHERE r.IDusuario = ?
+      `,
+      [IDusuario]
+    );
+
+    if (vehiculoActivo) {
+      const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
+      if (!evalDoc.documentacionValida) {
+        throw new Error('No puedes ponerte disponible. Tienes documentación vencida en tu vehículo activo.');
+      }
+    }
+  }
+
+  const [result] = await pool.query(
+    `UPDATE repartidores SET disponible = ? WHERE IDusuario = ?`,
+    [estado, IDusuario]
+  );
+
+  if (result.affectedRows === 0) {
+    throw new Error('No se encontró el registro de repartidor para este usuario');
+  }
+
+  return {
+    disponible: estado === 1,
+    message: estado === 1
+      ? 'Ahora estás disponible para recibir pedidos.'
+      : 'Dejaste de recibir nuevos pedidos.'
+  };
 };
 */
 

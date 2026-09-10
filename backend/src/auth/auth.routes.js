@@ -6,7 +6,8 @@ import {
   registerClient,
   cambiarPasswordObligatorio,
   solicitarRecuperacionPassword,
-  restablecerPassword
+  restablecerPassword,
+  cambiarPasswordVoluntario
 } from './auth.controller.js';
 import { authMiddleware } from './auth.middleware.js';
 
@@ -19,5 +20,6 @@ router.post('/logout', logout);
 router.post('/cambiar-password-inicial', authMiddleware, cambiarPasswordObligatorio);
 router.post('/solicitar-recuperacion', solicitarRecuperacionPassword);
 router.post('/restablecer-password', restablecerPassword);
+router.post('/cambiar-password', authMiddleware, cambiarPasswordVoluntario);
 
 export default router;

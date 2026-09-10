@@ -14,7 +14,8 @@ import {
   revisarVehiculoService,
   getRepartidoresAdminService,
   getMiPerfilRepartidorService,
-  getGananciasHoyService
+  getGananciasHoyService,
+  actualizarDocumentosVehiculoService
 } from '../services/repartidores.service.js';
 
 export const createRepartidor = async (req, res) => {
@@ -189,6 +190,17 @@ export const getGananciasHoy = async (req, res) => {
     const ganancias = await getGananciasHoyService(IDusuario);
     
     res.json(ganancias);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const actualizarDocumentosVehiculo = async (req, res) => {
+  try {
+    const IDusuario = req.user.id;
+    const { id } = req.params; // ID del vehículo
+    const result = await actualizarDocumentosVehiculoService(IDusuario, id, req.files);
+    res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

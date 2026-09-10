@@ -416,3 +416,38 @@ export const restablecerPasswordService = async (userId, token, nuevaPassword) =
     conn.release();
   }
 };
+
+export const cambiarPasswordVoluntarioService = async (userId, passwordActual, nuevaPassword) => {
+  if (!passwordActual || !nuevaPassword) {
+    throw new Error('Debes ingresar tu contraseña actual y la nueva contraseña.');
+  }
+
+  if (String(nuevaPassword).length < 8) {
+    throw new Error('La nueva contraseña debe tener al menos 8 caracteres.');
+  }
+
+  // 1. Obtener la contraseña actual guardada en BD
+  const [[user]] = await pool.query(
+    `SELECT password_hash FROM usuarios WHERE id = ?`,
+    [userId]
+  );
+
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  // 2. Verificar que la clave actual sea correcta
+  const isMatch = await bcrypt.compare(passwordActual, user.password_hash);
+  if (!isMatch) {
+    throw new Error('La contraseña actual es incorrecta.');
+  }
+
+  // 3. Hashear la nueva contraseña y actualizar
+  const newHash = await bcrypt.hash(nuevaPassword, 10);
+  await pool.query(
+    `UPDATE usuarios SET password_hash = ? WHERE id = ?`,
+    [newHash, userId]
+  );
+
+  return { message: 'Contraseña actualizada con éxito.' };
+};

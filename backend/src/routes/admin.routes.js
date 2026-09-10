@@ -5,7 +5,8 @@ import {
   crearRepartidorCompleto,
   getSolicitudesVehiculos,
   evaluarSolicitudVehiculo,
-  getLocalesAdmin
+  getLocalesAdmin,
+  actualizarVencimientosVehiculo
 } from '../controllers/admin.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole } from '../auth/roles.middleware.js';
@@ -21,6 +22,7 @@ router.post('/locales', crearLocalCompleto);
 router.post('/repartidores', upload.fields([ { name: 'cedula', maxCount: 1 }, { name: 'seguro', maxCount: 1 }, { name: 'licencia', maxCount: 1 } ]), crearRepartidorCompleto);
 router.get('/solicitudes-vehiculos', getSolicitudesVehiculos);
 router.put('/solicitudes-vehiculos/:id/evaluar', evaluarSolicitudVehiculo);
+router.put('/vehiculos/:id/vencimientos', actualizarVencimientosVehiculo);
 router.get('/locales', getLocalesAdmin);
 
 export default router;

@@ -567,3 +567,11 @@ CREATE TABLE IF NOT EXISTS password_resets (
     creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (IDusuario) REFERENCES usuarios(id) ON DELETE CASCADE
 );
+
+USE BD_SmartDrop;
+
+-- Agregar fechas de vencimiento opcionales en la tabla vehiculos_repartidor
+ALTER TABLE vehiculos_repartidor
+  ADD COLUMN fecha_vencimiento_licencia DATE NULL AFTER licencia_url,
+  ADD COLUMN fecha_vencimiento_seguro DATE NULL AFTER fecha_vencimiento_licencia,
+  ADD COLUMN fecha_vencimiento_cedula DATE NULL AFTER fecha_vencimiento_seguro;

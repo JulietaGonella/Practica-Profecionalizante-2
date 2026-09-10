@@ -390,3 +390,50 @@ export const getDashboardMetricsService = async ({ desde, hasta, local_id, repar
     evolucion_temporal: evolucionTemporal
   };
 };
+
+// Helper reutilizable para evaluar vencimientos
+export const evaluarEstadoDocumentación = (vehiculo) => {
+  const hoy = new Date();
+  
+  // Si la fecha es NULL (datos de prueba), no está vencido
+  const licenciaVencida = vehiculo.fecha_vencimiento_licencia 
+    ? new Date(vehiculo.fecha_vencimiento_licencia) < hoy 
+    : false;
+
+  const seguroVencido = vehiculo.fecha_vencimiento_seguro 
+    ? new Date(vehiculo.fecha_vencimiento_seguro) < hoy 
+    : false;
+
+  const cedulaVencida = vehiculo.fecha_vencimiento_cedula 
+    ? new Date(vehiculo.fecha_vencimiento_cedula) < hoy 
+    : false;
+
+  const tieneDocumentosVencidos = licenciaVencida || seguroVencido || cedulaVencida;
+
+  return {
+    licenciaVencida,
+    seguroVencido,
+    cedulaVencida,
+    documentacionValida: !tieneDocumentosVencidos
+  };
+};
+
+export const actualizarVencimientosVehiculoService = async (vehiculoId, datos) => {
+  const { fecha_vencimiento_licencia, fecha_vencimiento_seguro, fecha_vencimiento_cedula } = datos;
+
+  await pool.query(
+    `UPDATE vehiculos_repartidor 
+     SET fecha_vencimiento_licencia = ?, 
+         fecha_vencimiento_seguro = ?, 
+         fecha_vencimiento_cedula = ? 
+     WHERE id = ?`,
+    [
+      fecha_vencimiento_licencia || null,
+      fecha_vencimiento_seguro || null,
+      fecha_vencimiento_cedula || null,
+      vehiculoId
+    ]
+  );
+
+  return { message: 'Fechas de vencimiento actualizadas correctamente.' };
+};

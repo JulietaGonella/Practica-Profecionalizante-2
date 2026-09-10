@@ -5,7 +5,8 @@ import {
   registerClientService,
   cambiarPasswordObligatorioService,
   solicitarRecuperacionPasswordService,
-  restablecerPasswordService 
+  restablecerPasswordService,
+  cambiarPasswordVoluntarioService
 } from './auth.service.js';
 
 export const login = async (req, res) => {
@@ -82,6 +83,18 @@ export const restablecerPassword = async (req, res) => {
   try {
     const { userId, token, nuevaPassword } = req.body;
     const result = await restablecerPasswordService(userId, token, nuevaPassword);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const cambiarPasswordVoluntario = async (req, res) => {
+  try {
+    const { passwordActual, nuevaPassword } = req.body;
+    const userId = req.user.id; // Obtenido del token por authMiddleware
+
+    const result = await cambiarPasswordVoluntarioService(userId, passwordActual, nuevaPassword);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });

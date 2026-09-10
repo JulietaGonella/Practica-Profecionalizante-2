@@ -13,6 +13,7 @@ import {
   getResumenGananciasHoy
 } from '../../api/repartidorService';
 import { LogoutButton } from '../LogoutButton';
+import { CambiarPasswordModal } from '../CambiarPasswordModal'; // 👈 Importamos el modal
 
 export const PanelRepartidor = () => {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ export const PanelRepartidor = () => {
   const [mostrarVehiculos, setMostrarVehiculos] = useState(false);
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
+  const [mostrarCambioPass, setMostrarCambioPass] = useState(false); // 👈 Estado para alternar el formulario de contraseña
   const [perfil, setPerfil] = useState(null);
   const [resumenGanancias, setResumenGanancias] = useState({
     totalPedidosHoy: 0,
@@ -46,9 +48,11 @@ export const PanelRepartidor = () => {
     anio: '',
     cedula: null,
     seguro: null,
-    licencia: null
+    licencia: null,
+    fecha_vencimiento_licencia: '',
+    fecha_vencimiento_seguro: '',
+    fecha_vencimiento_cedula: ''
   });
-
   const cargarTodo = async () => {
     try {
       setLoading(true);
@@ -84,7 +88,6 @@ export const PanelRepartidor = () => {
       setMisPedidos(
         pedidos.filter((pedido) => {
           const estado = Number(pedido.IDestado ?? pedido.id_estado ?? 0);
-          // Incluir todos los estados activos durante el ciclo de vida de reparto (4, 5, 7 y 8)
           return estado === 4 || estado === 5 || estado === 7 || estado === 8;
         })
       );
@@ -170,7 +173,6 @@ export const PanelRepartidor = () => {
     }
   };
 
-  // Bicicleta = ID de tipo 2
   const esBicicleta = Number(formVehiculo.IDtipo_vehiculo) === 2;
 
   const handleSolicitarVehiculo = async (e) => {
@@ -181,10 +183,18 @@ export const PanelRepartidor = () => {
       const datos = new FormData();
 
       Object.entries(formVehiculo).forEach(([campo, valor]) => {
-        // Las bicicletas no envían patente ni documentación de vehículos con motor
+        // Si es bici, omitir datos de motor y licencias
         if (
           esBicicleta &&
-          ['patente', 'cedula', 'seguro', 'licencia'].includes(campo)
+          [
+            'patente',
+            'cedula',
+            'seguro',
+            'licencia',
+            'fecha_vencimiento_licencia',
+            'fecha_vencimiento_seguro',
+            'fecha_vencimiento_cedula'
+          ].includes(campo)
         ) {
           return;
         }
@@ -194,7 +204,6 @@ export const PanelRepartidor = () => {
         }
       });
 
-      // El backend recibe automáticamente la bicicleta como propia
       if (esBicicleta) {
         datos.append('bici_propia', '1');
       }
@@ -209,7 +218,10 @@ export const PanelRepartidor = () => {
         anio: '',
         cedula: null,
         seguro: null,
-        licencia: null
+        licencia: null,
+        fecha_vencimiento_licencia: '',
+        fecha_vencimiento_seguro: '',
+        fecha_vencimiento_cedula: ''
       });
 
       await cargarTodo();
@@ -227,35 +239,29 @@ export const PanelRepartidor = () => {
     RECHAZADO: { color: '#c92a2a', backgroundColor: '#fff5f5' }
   };
 
+  // 🟢 Función actualizada con parámetro urlDoc
+  const evaluarDocumento = (fechaStr, urlDoc) => {
+    if (!fechaStr) {
+      return {
+        vencido: false,
+        texto: urlDoc ? 'Registrado (Sin fecha)' : 'No registra'
+      };
+    }
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fecha = new Date(fechaStr);
+
+    const vencido = fecha < hoy;
+    return {
+      vencido,
+      texto: fecha.toLocaleDateString('es-AR')
+    };
+  };
+
   const renderCardPedido = (pedido, tipo, mostrarDetalle = false) => {
     const ordenId = pedido.IDorden || pedido.id;
     const esAceptado = tipo === 'aceptado';
     const estado = pedido.estado_orden || (esAceptado ? 'Asignado' : tipo === 'historial' ? 'Entregado' : 'Disponible');
-
-    // 1. Obtener solo los productos que NO estén cancelados/rechazados (estado != 6)
-    // 1. Obtener solo los productos que NO estén cancelados/rechazados (estado != 6)
-    const productosEntregados = (pedido.productos || []).filter((producto) => {
-      // Evaluamos los posibles nombres del campo de estado
-      const estadoDetalle = Number(
-        producto.IDestado_detalle ??
-        producto.IDestado_item ??
-        producto.IDestado ??
-        producto.id_estado ??
-        0
-      );
-
-      const textoEstado = (producto.estado_detalle || producto.estado_item || '').toLowerCase();
-
-      // Es cancelado si su estado es 6, si la cadena es 'cancelado'/'rechazado' o si posee un motivo de rechazo explícito
-      const esCancelado =
-        estadoDetalle === 6 ||
-        textoEstado === 'cancelado' ||
-        textoEstado === 'rechazado' ||
-        producto.cancelado === true ||
-        Boolean(producto.motivo_rechazo);
-
-      return !esCancelado;
-    });
 
     return (
       <div
@@ -321,7 +327,6 @@ export const PanelRepartidor = () => {
             </strong>
           </div>
 
-          {/* 📦 Productos entregados (se excluyen los cancelados/rechazados) */}
           <div style={{ marginBottom: '1rem' }}>
             <strong style={{ display: 'block', marginBottom: '0.5rem' }}>
               Productos
@@ -340,7 +345,6 @@ export const PanelRepartidor = () => {
 
                   const textoEstado = (producto.estado_detalle || producto.estado_item || '').toLowerCase();
 
-                  // Determinar si el ítem está cancelado o rechazado
                   const esCancelado =
                     estadoDetalle === 6 ||
                     textoEstado === 'cancelado' ||
@@ -515,6 +519,7 @@ export const PanelRepartidor = () => {
           <LogoutButton />
         </div>
       </header>
+
       {/* 💰 RESUMEN FINANCIERO DEL DÍA */}
       <div
         style={{
@@ -524,129 +529,44 @@ export const PanelRepartidor = () => {
           marginBottom: '1.5rem'
         }}
       >
-        {/* Ganancias por envíos */}
-        <div
-          style={{
-            padding: '1rem',
-            backgroundColor: '#e6fcf5',
-            borderRadius: '10px',
-            border: '1px solid #96f2d7'
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.85rem',
-              color: '#087f5b',
-              fontWeight: 'bold'
-            }}
-          >
+        <div style={{ padding: '1rem', backgroundColor: '#e6fcf5', borderRadius: '10px', border: '1px solid #96f2d7' }}>
+          <span style={{ fontSize: '0.85rem', color: '#087f5b', fontWeight: 'bold' }}>
             💰 Ganancias por Envíos (Hoy)
           </span>
-
-          <h2
-            style={{
-              margin: '0.3rem 0 0 0',
-              color: '#087f5b'
-            }}
-          >
+          <h2 style={{ margin: '0.3rem 0 0 0', color: '#087f5b' }}>
             $ {Number(resumenGanancias.gananciasEnvioHoy || 0).toFixed(2)}
           </h2>
         </div>
 
-        {/* Efectivo Cobrado en Mano */}
-        <div
-          style={{
-            padding: '1rem',
-            backgroundColor: '#fff9db',
-            borderRadius: '10px',
-            border: '1px solid #ffe066'
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.85rem',
-              color: '#f59f00',
-              fontWeight: 'bold'
-            }}
-          >
+        <div style={{ padding: '1rem', backgroundColor: '#fff9db', borderRadius: '10px', border: '1px solid #ffe066' }}>
+          <span style={{ fontSize: '0.85rem', color: '#f59f00', fontWeight: 'bold' }}>
             💵 Efectivo Cobrado (Bruto)
           </span>
-
-          <h2
-            style={{
-              margin: '0.3rem 0 0 0',
-              color: '#f59f00'
-            }}
-          >
+          <h2 style={{ margin: '0.3rem 0 0 0', color: '#f59f00' }}>
             $ {Number(resumenGanancias.efectivoRecaudadoHoy || 0).toFixed(2)}
           </h2>
         </div>
 
-        {/* Deuda Real a Rendir */}
-        <div
-          style={{
-            padding: '1rem',
-            backgroundColor: '#fff0f6',
-            borderRadius: '10px',
-            border: '1px solid #ffdeeb'
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.85rem',
-              color: '#d6336c',
-              fontWeight: 'bold'
-            }}
-          >
+        <div style={{ padding: '1rem', backgroundColor: '#fff0f6', borderRadius: '10px', border: '1px solid #ffdeeb' }}>
+          <span style={{ fontSize: '0.85rem', color: '#d6336c', fontWeight: 'bold' }}>
             🏦 Efectivo a Rendir (Nivel Central/Local)
           </span>
-
-          <h2
-            style={{
-              margin: '0.3rem 0 0 0',
-              color: '#d6336c'
-            }}
-          >
+          <h2 style={{ margin: '0.3rem 0 0 0', color: '#d6336c' }}>
             $ {Number(resumenGanancias.efectivoARendirHoy || 0).toFixed(2)}
           </h2>
         </div>
-        {/* Entregas realizadas */}
-        <div
-          style={{
-            padding: '1rem',
-            backgroundColor: '#e7f5ff',
-            borderRadius: '10px',
-            border: '1px solid #a5d8ff'
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.85rem',
-              color: '#1c7ed6',
-              fontWeight: 'bold'
-            }}
-          >
+
+        <div style={{ padding: '1rem', backgroundColor: '#e7f5ff', borderRadius: '10px', border: '1px solid #a5d8ff' }}>
+          <span style={{ fontSize: '0.85rem', color: '#1c7ed6', fontWeight: 'bold' }}>
             📦 Entregas Realizadas
           </span>
-
-          <h2
-            style={{
-              margin: '0.3rem 0 0 0',
-              color: '#1c7ed6'
-            }}
-          >
+          <h2 style={{ margin: '0.3rem 0 0 0', color: '#1c7ed6' }}>
             {resumenGanancias.totalPedidosHoy || 0}
           </h2>
         </div>
       </div>
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap'
-        }}
-      >
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button
           onClick={() => setVista('disponibles')}
           style={{
@@ -703,59 +623,25 @@ export const PanelRepartidor = () => {
           <h3>🚴 Pedidos actuales</h3>
 
           {misPedidos.length === 0 ? (
-            <div
-              style={{
-                padding: '1.5rem',
-                textAlign: 'center',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '10px',
-                color: '#666'
-              }}
-            >
+            <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '10px', color: '#666' }}>
               No tenés pedidos en curso.
             </div>
           ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
-                gap: '1.25rem'
-              }}
-            >
-              {misPedidos.map((pedido) =>
-                renderCardPedido(pedido, 'aceptado', true)
-              )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
+              {misPedidos.map((pedido) => renderCardPedido(pedido, 'aceptado', true))}
             </div>
           )}
 
-          <h3 style={{ marginTop: '2rem' }}>
-            📜 Historial de entregas
-          </h3>
+          <h3 style={{ marginTop: '2rem' }}>📜 Historial de entregas</h3>
 
           {historialPedidos.length === 0 ? (
-            <div
-              style={{
-                padding: '1.5rem',
-                textAlign: 'center',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '10px',
-                color: '#666'
-              }}
-            >
+            <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '10px', color: '#666' }}>
               Todavía no tenés pedidos entregados.
             </div>
           ) : (
             <>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
-                  gap: '1.25rem'
-                }}
-              >
-                {historialVisible.map((pedido) =>
-                  renderCardPedido(pedido, 'historial', false)
-                )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
+                {historialVisible.map((pedido) => renderCardPedido(pedido, 'historial', false))}
               </div>
 
               {historialPedidos.length > 3 && (
@@ -814,17 +700,58 @@ export const PanelRepartidor = () => {
             <section style={{ marginBottom: '1.2rem' }}>
               <h3>Mis vehículos registrados</h3>
               <div style={{ display: 'grid', gap: '0.7rem' }}>
-                {vehiculos.length === 0 ? <p style={{ color: '#666' }}>Todavía no tenés vehículos registrados.</p> : vehiculos.map((vehiculo) => {
-                  const estilo = estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE;
-                  return (
-                    <div key={vehiculo.IDvehiculo} style={{ padding: '0.8rem', borderRadius: '8px', backgroundColor: estilo.backgroundColor, border: `1px solid ${estilo.color}` }}>
-                      <strong>{vehiculo.tipo_vehiculo} - {vehiculo.marca || 'Sin marca'} {vehiculo.modelo || ''}</strong>
-                      <div style={{ color: estilo.color, fontWeight: 'bold', fontSize: '0.85rem' }}>{vehiculo.estado}</div>
-                      {vehiculo.patente && <div>Patente: {vehiculo.patente}</div>}
-                      {vehiculo.estado === 'RECHAZADO' && vehiculo.motivo_rechazo && <div>Motivo: {vehiculo.motivo_rechazo}</div>}
-                    </div>
-                  );
-                })}
+                {vehiculos.length === 0 ? (
+                  <p style={{ color: '#666' }}>Todavía no tenés vehículos registrados.</p>
+                ) : (
+                  vehiculos.map((vehiculo) => {
+                    const estilo = estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE;
+
+                    const lic = evaluarDocumento(vehiculo.fecha_vencimiento_licencia, vehiculo.licencia_url || vehiculo.licencia);
+                    const seg = evaluarDocumento(vehiculo.fecha_vencimiento_seguro, vehiculo.seguro_url || vehiculo.seguro);
+                    const ced = evaluarDocumento(vehiculo.fecha_vencimiento_cedula, vehiculo.cedula_url || vehiculo.cedula);
+
+                    const tieneVencidos = lic.vencido || seg.vencido || ced.vencido;
+
+                    return (
+                      <div
+                        key={vehiculo.IDvehiculo}
+                        style={{
+                          padding: '0.8rem',
+                          borderRadius: '8px',
+                          backgroundColor: estilo.backgroundColor,
+                          border: `1px solid ${tieneVencidos ? '#e03131' : estilo.color}`
+                        }}
+                      >
+                        <strong>{vehiculo.tipo_vehiculo} - {vehiculo.marca || 'Sin marca'} {vehiculo.modelo || ''}</strong>
+                        <div style={{ color: estilo.color, fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          {vehiculo.estado}
+                        </div>
+                        {vehiculo.patente && <div>Patente: {vehiculo.patente}</div>}
+
+                        {/* ⚠️ Alertas de vencimientos de documentación */}
+                        {Number(vehiculo.IDtipo_vehiculo) !== 2 && (
+                          <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', display: 'grid', gap: '0.2rem' }}>
+                            <span style={{ color: lic.vencido ? '#e03131' : '#2b8a3e', fontWeight: lic.vencido ? 'bold' : 'normal' }}>
+                              🪪 Licencia: {lic.texto} {lic.vencido && '❌ (VENCIDA)'}
+                            </span>
+                            <span style={{ color: seg.vencido ? '#e03131' : '#2b8a3e', fontWeight: seg.vencido ? 'bold' : 'normal' }}>
+                              🛡️ Seguro: {seg.texto} {seg.vencido && '❌ (VENCIDO)'}
+                            </span>
+                            <span style={{ color: ced.vencido ? '#e03131' : '#2b8a3e', fontWeight: ced.vencido ? 'bold' : 'normal' }}>
+                              📄 Cédula: {ced.texto} {ced.vencido && '❌ (VENCIDA)'}
+                            </span>
+                          </div>
+                        )}
+
+                        {vehiculo.estado === 'RECHAZADO' && vehiculo.motivo_rechazo && (
+                          <div style={{ color: '#c92a2a', marginTop: '0.4rem', fontSize: '0.85rem' }}>
+                            Motivo: {vehiculo.motivo_rechazo}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </section>
 
@@ -834,12 +761,7 @@ export const PanelRepartidor = () => {
                 <select
                   name="IDtipo_vehiculo"
                   value={formVehiculo.IDtipo_vehiculo}
-                  onChange={(e) =>
-                    setFormVehiculo({
-                      ...formVehiculo,
-                      IDtipo_vehiculo: e.target.value
-                    })
-                  }
+                  onChange={(e) => setFormVehiculo({ ...formVehiculo, IDtipo_vehiculo: e.target.value })}
                   required
                 >
                   <option value="">Tipo de vehículo</option>
@@ -850,34 +772,16 @@ export const PanelRepartidor = () => {
 
                 <input
                   name="marca"
-                  placeholder={
-                    esBicicleta
-                      ? 'Marca o Color (Opcional, Ej: Venzo roja)'
-                      : 'Marca'
-                  }
+                  placeholder={esBicicleta ? 'Marca o Color (Opcional, Ej: Venzo roja)' : 'Marca'}
                   value={formVehiculo.marca}
-                  onChange={(e) =>
-                    setFormVehiculo({
-                      ...formVehiculo,
-                      marca: e.target.value
-                    })
-                  }
+                  onChange={(e) => setFormVehiculo({ ...formVehiculo, marca: e.target.value })}
                 />
 
                 <input
                   name="modelo"
-                  placeholder={
-                    esBicicleta
-                      ? 'Modelo / Tipo (Opcional, Ej: Mountain Bike)'
-                      : 'Modelo'
-                  }
+                  placeholder={esBicicleta ? 'Modelo / Tipo (Opcional, Ej: Mountain Bike)' : 'Modelo'}
                   value={formVehiculo.modelo}
-                  onChange={(e) =>
-                    setFormVehiculo({
-                      ...formVehiculo,
-                      modelo: e.target.value
-                    })
-                  }
+                  onChange={(e) => setFormVehiculo({ ...formVehiculo, modelo: e.target.value })}
                 />
 
                 <input
@@ -885,12 +789,7 @@ export const PanelRepartidor = () => {
                   type="number"
                   placeholder="Año (Opcional)"
                   value={formVehiculo.anio}
-                  onChange={(e) =>
-                    setFormVehiculo({
-                      ...formVehiculo,
-                      anio: e.target.value
-                    })
-                  }
+                  onChange={(e) => setFormVehiculo({ ...formVehiculo, anio: e.target.value })}
                 />
 
                 {!esBicicleta && (
@@ -899,44 +798,47 @@ export const PanelRepartidor = () => {
                       name="patente"
                       placeholder="Patente (Requerido para Moto/Auto)"
                       value={formVehiculo.patente}
-                      onChange={(e) =>
-                        setFormVehiculo({
-                          ...formVehiculo,
-                          patente: e.target.value
-                        })
-                      }
+                      onChange={(e) => setFormVehiculo({ ...formVehiculo, patente: e.target.value })}
                       required={!esBicicleta}
                     />
 
-                    <label>
-                      Cédula verde / azul
-                      <input
-                        name="cedula"
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={handleArchivoVehiculo}
-                      />
-                    </label>
+                    <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                        Cédula verde / azul (Archivo y Vencimiento)
+                        <input name="cedula" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_cedula"
+                          value={formVehiculo.fecha_vencimiento_cedula}
+                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_cedula: e.target.value })}
+                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        />
+                      </label>
 
-                    <label>
-                      Seguro
-                      <input
-                        name="seguro"
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={handleArchivoVehiculo}
-                      />
-                    </label>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                        Póliza de Seguro (Archivo y Vencimiento)
+                        <input name="seguro" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_seguro"
+                          value={formVehiculo.fecha_vencimiento_seguro}
+                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_seguro: e.target.value })}
+                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        />
+                      </label>
 
-                    <label>
-                      Registro / Licencia de conducir
-                      <input
-                        name="licencia"
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={handleArchivoVehiculo}
-                      />
-                    </label>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                        Licencia de Conducir (Archivo y Vencimiento)
+                        <input name="licencia" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_licencia"
+                          value={formVehiculo.fecha_vencimiento_licencia}
+                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_licencia: e.target.value })}
+                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        />
+                      </label>
+                    </div>
                   </>
                 )}
 
@@ -951,7 +853,7 @@ export const PanelRepartidor = () => {
 
       {mostrarPerfil && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
-          <div style={{ width: '100%', maxWidth: '500px', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+          <div style={{ width: '100%', maxWidth: '500px', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem' }}>
               <h2 style={{ margin: 0, fontSize: '1.25rem' }}>👤 Perfil del Repartidor</h2>
               <button
@@ -1053,9 +955,39 @@ export const PanelRepartidor = () => {
                   )}
                 </div>
 
+                {/* 🟢 Botón para desplegar/ocultar el formulario de cambio de clave */}
+                <div style={{ marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
+                    style={{
+                      width: '100%',
+                      padding: '0.6rem 1rem',
+                      backgroundColor: '#6c757d',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔐 {mostrarCambioPass ? 'Ocultar Cambio de Contraseña' : 'Cambiar Contraseña'}
+                  </button>
+                </div>
+
+                {/* Formulario/Modal de cambio de contraseña integrado */}
+                {mostrarCambioPass && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
+                  </div>
+                )}
+
                 <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
                   <button
-                    onClick={() => setMostrarPerfil(false)}
+                    onClick={() => {
+                      setMostrarPerfil(false);
+                      setMostrarCambioPass(false);
+                    }}
                     style={{
                       padding: '0.6rem 1.2rem',
                       backgroundColor: '#2b8a3e',

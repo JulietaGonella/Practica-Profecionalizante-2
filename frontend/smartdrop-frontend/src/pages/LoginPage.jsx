@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
-  const { user, login } = useAuth(); // 👈 Obtener user
+  const { user, login } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -12,14 +12,29 @@ export const LoginPage = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🟢 Si el usuario ya está autenticado e intenta entrar a /login, redirigir a su panel
+  // 🟢 Función unificada para resolver la navegación según el estado del usuario
+  const redirigirPorUsuario = (usuario) => {
+    if (!usuario) return;
+
+    // 1️⃣ Si debe cambiar la contraseña obligatoriamente, redirigir a la pantalla de actualización
+    if (usuario.debe_cambiar_pass) {
+      navigate('/actualizar-password-inicial', { replace: true });
+      return;
+    }
+
+    // 2️⃣ Si la contraseña está en orden, redirigir según su rol correspondiente
+    const rol = usuario.rol ? usuario.rol.toLowerCase() : '';
+    if (rol === 'cliente') navigate('/cliente/inicio', { replace: true });
+    else if (rol === 'local' || rol === 'administrador local') navigate('/local/inicio', { replace: true });
+    else if (rol === 'repartidor') navigate('/repartidor/inicio', { replace: true });
+    else if (rol === 'administrador') navigate('/admin/inicio', { replace: true });
+    else navigate('/login', { replace: true });
+  };
+
+  // 🟢 Si el usuario ya está autenticado e intenta ingresar a /login
   useEffect(() => {
     if (user) {
-      const rol = user.rol ? user.rol.toLowerCase() : '';
-      if (rol === 'cliente') navigate('/cliente/inicio', { replace: true });
-      else if (rol === 'local' || rol === 'administrador local') navigate('/local/inicio', { replace: true });
-      else if (rol === 'repartidor') navigate('/repartidor/inicio', { replace: true });
-      else if (rol === 'administrador') navigate('/admin/inicio', { replace: true });
+      redirigirPorUsuario(user);
     }
   }, [user, navigate]);
 
@@ -30,15 +45,7 @@ export const LoginPage = () => {
 
     try {
       const userLogged = await login(email, password);
-      const rol = userLogged.rol ? userLogged.rol.toLowerCase() : '';
-
-      // 🟢 Reemplazar entrada en el historial con { replace: true }
-      if (rol === 'cliente') navigate('/cliente/inicio', { replace: true });
-      else if (rol === 'local' || rol === 'administrador local') navigate('/local/inicio', { replace: true });
-      else if (rol === 'repartidor') navigate('/repartidor/inicio', { replace: true });
-      else if (rol === 'administrador') navigate('/admin/inicio', { replace: true });
-      else navigate('/login', { replace: true });
-
+      redirigirPorUsuario(userLogged);
     } catch (err) {
       setError(err.response?.data?.error || 'Credenciales inválidas');
     } finally {
@@ -52,22 +59,22 @@ export const LoginPage = () => {
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       <form onSubmit={handleSubmit}>
-        <input 
-          type="email" 
-          placeholder="Correo electrónico" 
-          value={email} 
-          onChange={(e) => setEmail(e.target.value)} 
+        <input
+          type="email"
+          placeholder="Correo electrónico"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           disabled={isSubmitting}
-          required 
+          required
         />
         <br /><br />
-        <input 
-          type="password" 
-          placeholder="Contraseña" 
-          value={password} 
-          onChange={(e) => setPassword(e.target.value)} 
+        <input
+          type="password"
+          placeholder="Contraseña"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           disabled={isSubmitting}
-          required 
+          required
         />
         <br /><br />
 
@@ -76,7 +83,10 @@ export const LoginPage = () => {
         </button>
       </form>
 
-      <p><small>¿No tienes cuenta? <Link to="/register">Regístrate como cliente</Link></small></p>
+      <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+        <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
+        <Link to="/register">Regístrate como cliente</Link>
+      </div>
     </div>
   );
 };
