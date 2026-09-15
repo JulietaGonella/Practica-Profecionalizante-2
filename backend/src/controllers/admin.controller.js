@@ -3,7 +3,8 @@ import {
   crearLocalCompletoService,
   crearRepartidorCompletoService,
   getLocalesAdminService,
-  actualizarVencimientosVehiculoService
+  actualizarVencimientosVehiculoService,
+  getAlertasDocumentacionVencidaService
 } from '../services/admin.service.js';
 import {
   getVehiculosPendientesService,
@@ -80,5 +81,14 @@ export const actualizarVencimientosVehiculo = async (req, res) => {
     res.json(resultado);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+export const getAlertasDocumentacion = async (req, res) => {
+  try {
+    const alertas = await getAlertasDocumentacionVencidaService();
+    res.json(alertas);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };

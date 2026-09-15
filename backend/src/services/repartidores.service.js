@@ -487,23 +487,18 @@ export const getRepartidoresAdminService = async () => {
     SELECT
       r.id,
       r.IDusuario,
-      u.username,
-      u.email,
       r.dni,
       r.validado,
       r.disponible,
-      r.IDvehiculo_activo,
-      r.creado_en,
       r.latitud,
       r.longitud,
       r.ultima_ubicacion,
-      -- Obtener datos resumidos del vehículo activo actual para la tabla principal
-      va.marca AS marca_activo,
-      va.modelo AS modelo_activo,
-      va.patente AS patente_activo,
-      tva.nombre AS tipo_vehiculo,
-      
-      -- Lista completa de vehículos asociados y sus metadatos
+      r.creado_en,
+      r.IDvehiculo_activo,
+      u.username,
+      u.email,
+      u.nombre,
+      u.apellido,
       COALESCE(
         (
           SELECT JSON_ARRAYAGG(
@@ -513,17 +508,13 @@ export const getRepartidoresAdminService = async () => {
               'marca', COALESCE(v.marca, ''),
               'modelo', COALESCE(v.modelo, ''),
               'patente', COALESCE(v.patente, ''),
-              'seguro_vigente', v.seguro_vigente,
-              'licencia_vigente', v.licencia_vigente,
-              -- 1️⃣ VINCULACIÓN DE CAMPOS DE FECHAS EN LA CONSULTA
+              'cedula_url', COALESCE(v.cedula_url, ''),
+              'seguro_url', COALESCE(v.seguro_url, ''),
+              'licencia_url', COALESCE(v.licencia_url, ''),
               'fecha_vencimiento_licencia', v.fecha_vencimiento_licencia,
               'fecha_vencimiento_seguro', v.fecha_vencimiento_seguro,
               'fecha_vencimiento_cedula', v.fecha_vencimiento_cedula,
-              'estado', v.estado,
-              'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
-              'cedula_url', COALESCE(v.cedula_url, ''),
-              'seguro_url', COALESCE(v.seguro_url, ''),
-              'licencia_url', COALESCE(v.licencia_url, '')
+              'estado', v.estado
             )
           )
           FROM vehiculos_repartidor v
@@ -534,8 +525,6 @@ export const getRepartidoresAdminService = async () => {
       ) AS vehiculos
     FROM repartidores r
     JOIN usuarios u ON u.id = r.IDusuario
-    LEFT JOIN vehiculos_repartidor va ON va.id = r.IDvehiculo_activo
-    LEFT JOIN tipos_vehiculo tva ON tva.id = va.IDtipo_vehiculo
     ORDER BY r.id DESC
   `);
 
@@ -547,27 +536,59 @@ export const getRepartidoresAdminService = async () => {
         : (r.vehiculos || [])
     ).filter(Boolean);
 
-    // 2️⃣ MAPEO Y EVALUACIÓN DE DOCUMENTACIÓN
+    // Mapeo y evaluación formal de la documentación del vehículo
     const vehiculosEvaluados = listaVehiculos.map((v) => {
       const evaluacion = evaluarEstadoDocumentación(v);
       return {
-        ...v,
+        id: v.id,
+        tipo_vehiculo: v.tipo_vehiculo,
+        marca: v.marca,
+        modelo: v.modelo,
+        patente: v.patente,
+        cedula_url: v.cedula_url,
+        seguro_url: v.seguro_url,
+        licencia_url: v.licencia_url,
+        fecha_vencimiento_licencia: evaluacion.fecha_vencimiento_licencia,
+        fecha_vencimiento_seguro: evaluacion.fecha_vencimiento_seguro,
+        fecha_vencimiento_cedula: evaluacion.fecha_vencimiento_cedula,
         licencia_vencida: evaluacion.licenciaVencida,
         seguro_vencido: evaluacion.seguroVencido,
         cedula_vencida: evaluacion.cedulaVencida,
-        documentacion_valida: evaluacion.documentacionValida
+        documentacion_valida: evaluacion.documentacionValida,
+        estado: v.estado
       };
     });
 
-    const primerVehiculo = vehiculosEvaluados[0] || {};
+    // Identificar el vehículo activo para facilitar el acceso plano en el frontend si es necesario
+    const vehiculoActivo = vehiculosEvaluados.find(v => v.id === r.IDvehiculo_activo) || vehiculosEvaluados[0] || null;
 
     return {
-      ...r,
+      id: r.id,
+      IDusuario: r.IDusuario,
+      username: r.username,
+      email: r.email,
+      nombre: r.nombre,
+      apellido: r.apellido,
+      dni: r.dni,
+      validado: r.validado,
+      disponible: r.disponible,
+      latitud: r.latitud,
+      longitud: r.longitud,
+      ultima_ubicacion: r.ultima_ubicacion,
+      creado_en: r.creado_en,
+      IDvehiculo_activo: r.IDvehiculo_activo,
+      
+      // Mantenemos el array completo procesado
       vehiculos: vehiculosEvaluados,
-      tipo_vehiculo: r.tipo_vehiculo || primerVehiculo.tipo_vehiculo || null,
-      marca: r.marca_activo || primerVehiculo.marca || '',
-      modelo: r.modelo_activo || primerVehiculo.modelo || '',
-      patente: r.patente_activo || primerVehiculo.patente || ''
+
+      // Atajos directos del vehículo activo para evitar que el frontend devuelva "Sin vehículo"
+      tipo_vehiculo: vehiculoActivo?.tipo_vehiculo || null,
+      marca: vehiculoActivo?.marca || null,
+      modelo: vehiculoActivo?.modelo || null,
+      patente: vehiculoActivo?.patente || null,
+      cedula_url: vehiculoActivo?.cedula_url || null,
+      seguro_url: vehiculoActivo?.seguro_url || null,
+      licencia_url: vehiculoActivo?.licencia_url || null
     };
   });
 };
@@ -832,4 +853,105 @@ export const actualizarDocumentosVehiculoService = async (IDusuario, vehiculoId,
   );
 
   return { message: 'Documentación actualizada correctamente. Pendiente de validación administrativa.' };
+};
+
+// repartidores.service.js (o admin.service.js según tu estructura backend)
+export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, datos, archivos = {}) => {
+  // 1. Obtener el vehículo actual para consultar sus fechas registradas
+  const [[vehiculo]] = await pool.query(
+    `
+    SELECT v.* 
+    FROM vehiculos_repartidor v
+    JOIN repartidores r ON r.id = v.IDrepartidor
+    WHERE v.id = ? AND r.IDusuario = ?
+    `,
+    [IDvehiculo, IDusuario]
+  );
+
+  if (!vehiculo) {
+    throw new Error('El vehículo no existe o no te pertenece.');
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  // Helper para verificar si un documento está vencido en la BD
+  const estaVencido = (fechaStr) => {
+    if (!fechaStr) return false;
+    return new Date(fechaStr) < hoy;
+  };
+
+  const licenciaVencida = estaVencido(vehiculo.fecha_vencimiento_licencia);
+  const seguroVencido = estaVencido(vehiculo.fecha_vencimiento_seguro);
+  const cedulaVencida = estaVencido(vehiculo.fecha_vencimiento_cedula);
+
+  // 2. Definir valores manteniendo los originales salvo que estén vencidos y se hayan enviado nuevos datos
+  
+  // Cédula
+  let cedulaUrl = vehiculo.cedula_url;
+  let fechaCedula = vehiculo.fecha_vencimiento_cedula;
+  if (cedulaVencida && (archivos.cedula?.[0] || datos.fecha_vencimiento_cedula)) {
+    if (archivos.cedula?.[0]) {
+      cedulaUrl = `/uploads/${archivos.cedula[0].filename}`;
+    }
+    if (datos.fecha_vencimiento_cedula) {
+      fechaCedula = datos.fecha_vencimiento_cedula;
+    }
+  }
+
+  // Seguro
+  let seguroUrl = vehiculo.seguro_url;
+  let fechaSeguro = vehiculo.fecha_vencimiento_seguro;
+  if (seguroVencido && (archivos.seguro?.[0] || datos.fecha_vencimiento_seguro)) {
+    if (archivos.seguro?.[0]) {
+      seguroUrl = `/uploads/${archivos.seguro[0].filename}`;
+    }
+    if (datos.fecha_vencimiento_seguro) {
+      fechaSeguro = datos.fecha_vencimiento_seguro;
+    }
+  }
+
+  // Licencia
+  let licenciaUrl = vehiculo.licencia_url;
+  let fechaLicencia = vehiculo.fecha_vencimiento_licencia;
+  if (licenciaVencida && (archivos.licencia?.[0] || datos.fecha_vencimiento_licencia)) {
+    if (archivos.licencia?.[0]) {
+      licenciaUrl = `/uploads/${archivos.licencia[0].filename}`;
+    }
+    if (datos.fecha_vencimiento_licencia) {
+      fechaLicencia = datos.fecha_vencimiento_licencia;
+    }
+  }
+
+  // 3. Actualizar en Base de Datos y pasar el vehículo a estado PENDIENTE para revisión del Admin
+  await pool.query(
+    `
+    UPDATE vehiculos_repartidor
+    SET 
+      cedula_url = ?,
+      fecha_vencimiento_cedula = ?,
+      seguro_url = ?,
+      fecha_vencimiento_seguro = ?,
+      licencia_url = ?,
+      fecha_vencimiento_licencia = ?,
+      estado = 'PENDIENTE',
+      motivo_rechazo = NULL
+    WHERE id = ?
+    `,
+    [
+      cedulaUrl,
+      fechaCedula,
+      seguroUrl,
+      fechaSeguro,
+      licenciaUrl,
+      fechaLicencia,
+      IDvehiculo
+    ]
+  );
+
+  return {
+    message: 'Renovación de documentación enviada correctamente. Queda pendiente de aprobación administrativa.',
+    IDvehiculo,
+    estado: 'PENDIENTE'
+  };
 };

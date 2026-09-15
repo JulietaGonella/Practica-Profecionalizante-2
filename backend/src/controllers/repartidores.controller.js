@@ -1,5 +1,5 @@
-import { 
-  simularRecorridoOrdenService, 
+import {
+  simularRecorridoOrdenService,
   createRepartidorService,
   getTiposVehiculoService,
   addVehiculoRepartidorService,
@@ -15,7 +15,8 @@ import {
   getRepartidoresAdminService,
   getMiPerfilRepartidorService,
   getGananciasHoyService,
-  actualizarDocumentosVehiculoService
+  actualizarDocumentosVehiculoService,
+  actualizarVehiculoExistenteService
 } from '../services/repartidores.service.js';
 
 export const createRepartidor = async (req, res) => {
@@ -188,7 +189,7 @@ export const getGananciasHoy = async (req, res) => {
   try {
     const IDusuario = req.user.id; // Extraído del token JWT por authMiddleware
     const ganancias = await getGananciasHoyService(IDusuario);
-    
+
     res.json(ganancias);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -201,6 +202,24 @@ export const actualizarDocumentosVehiculo = async (req, res) => {
     const { id } = req.params; // ID del vehículo
     const result = await actualizarDocumentosVehiculoService(IDusuario, id, req.files);
     res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const solicitarActualizacionVehiculo = async (req, res) => {
+  try {
+    const IDusuario = req.user.id;
+    const { id } = req.params; // ID del vehículo desde la URL (/repartidores/vehiculos/:id)
+
+    const resultado = await actualizarVehiculoExistenteService(
+      id,
+      IDusuario,
+      req.body,
+      req.files || {}
+    );
+
+    res.json(resultado);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

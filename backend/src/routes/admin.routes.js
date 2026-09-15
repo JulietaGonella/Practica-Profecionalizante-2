@@ -6,7 +6,8 @@ import {
   getSolicitudesVehiculos,
   evaluarSolicitudVehiculo,
   getLocalesAdmin,
-  actualizarVencimientosVehiculo
+  actualizarVencimientosVehiculo,
+  getAlertasDocumentacion
 } from '../controllers/admin.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole } from '../auth/roles.middleware.js';
@@ -24,5 +25,6 @@ router.get('/solicitudes-vehiculos', getSolicitudesVehiculos);
 router.put('/solicitudes-vehiculos/:id/evaluar', evaluarSolicitudVehiculo);
 router.put('/vehiculos/:id/vencimientos', actualizarVencimientosVehiculo);
 router.get('/locales', getLocalesAdmin);
+router.get('/admin/alertas-documentacion', authMiddleware, getAlertasDocumentacion);
 
 export default router;

@@ -24,11 +24,13 @@ export const CrearCuentaPerfilAdmin = () => {
       patente: '',
       seguro_vigente: false,
       licencia_vigente: false,
-      bici_propia: false
+      bici_propia: false,
+      fecha_vencimiento_licencia: '',
+      fecha_vencimiento_seguro: '',
+      fecha_vencimiento_cedula: ''
     }
   });
 
-  // Estado para los archivos adjuntos del vehículo
   const [archivosVehiculo, setArchivosVehiculo] = useState({
     cedula: null,
     seguro: null,
@@ -123,7 +125,6 @@ export const CrearCuentaPerfilAdmin = () => {
 
         const esBicicleta = String(perfilForm.vehiculo.IDtipo_vehiculo) === '2';
 
-        // Construir el objeto normalizando los datos según el tipo de vehículo
         const vehiculoPayload = {
           IDtipo_vehiculo: Number(perfilForm.vehiculo.IDtipo_vehiculo),
           marca: esBicicleta ? null : (perfilForm.vehiculo.marca || null),
@@ -132,20 +133,19 @@ export const CrearCuentaPerfilAdmin = () => {
           patente: esBicicleta ? null : perfilForm.vehiculo.patente,
           seguro_vigente: esBicicleta ? false : perfilForm.vehiculo.seguro_vigente,
           licencia_vigente: esBicicleta ? false : perfilForm.vehiculo.licencia_vigente,
-          bici_propia: esBicicleta ? perfilForm.vehiculo.bici_propia : false
+          bici_propia: esBicicleta ? perfilForm.vehiculo.bici_propia : false,
+          fecha_vencimiento_licencia: esBicicleta ? null : (perfilForm.vehiculo.fecha_vencimiento_licencia || null),
+          fecha_vencimiento_seguro: esBicicleta ? null : (perfilForm.vehiculo.fecha_vencimiento_seguro || null),
+          fecha_vencimiento_cedula: esBicicleta ? null : (perfilForm.vehiculo.fecha_vencimiento_cedula || null)
         };
 
-        // Construcción de FormData para enviar archivos y JSON serializado
         const formData = new FormData();
         formData.append('username', usuarioForm.username);
         formData.append('email', usuarioForm.email);
         formData.append('password', usuarioForm.password);
         formData.append('dni', perfilForm.dni);
-
-        // El backend realiza JSON.parse(req.body.vehiculo)
         formData.append('vehiculo', JSON.stringify(vehiculoPayload));
 
-        // Adjuntar archivos solo si NO es bicicleta y existen
         if (!esBicicleta) {
           if (archivosVehiculo.cedula) formData.append('cedula', archivosVehiculo.cedula);
           if (archivosVehiculo.seguro) formData.append('seguro', archivosVehiculo.seguro);
@@ -160,7 +160,6 @@ export const CrearCuentaPerfilAdmin = () => {
         texto: `${tipo === 'local' ? 'Local' : 'Repartidor'} creado correctamente.`
       });
 
-      // Limpiar formulario
       setUsuarioForm({ username: '', email: '', password: '' });
       setPerfilForm({
         nombre: '',
@@ -174,7 +173,10 @@ export const CrearCuentaPerfilAdmin = () => {
           patente: '',
           seguro_vigente: false,
           licencia_vigente: false,
-          bici_propia: false
+          bici_propia: false,
+          fecha_vencimiento_licencia: '',
+          fecha_vencimiento_seguro: '',
+          fecha_vencimiento_cedula: ''
         }
       });
       setArchivosVehiculo({ cedula: null, seguro: null, licencia: null });
@@ -192,14 +194,44 @@ export const CrearCuentaPerfilAdmin = () => {
 
   const tipoVehiculoActual = String(perfilForm.vehiculo.IDtipo_vehiculo);
 
+  // Estilos reutilizables para homogeneizar los controles
+  const inputStyle = {
+    padding: '0.75rem',
+    borderRadius: '6px',
+    border: '1px solid #ced4da',
+    fontSize: '0.95rem',
+    width: '100%',
+    boxSizing: 'border-box'
+  };
+
+  const labelStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.4rem',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    color: '#495057'
+  };
+
+  const cardStyle = {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e9ecef',
+    borderRadius: '8px',
+    padding: '1.25rem',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  };
+
   return (
-    <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '1.2rem' }}>
-      <h2>Crear cuenta y perfil</h2>
+    <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '1.2rem', fontFamily: 'system-ui, sans-serif' }}>
+      <h2 style={{ color: '#212529', marginBottom: '1.5rem' }}>Crear cuenta y perfil</h2>
 
       {banner.texto && (
         <div
           style={{
-            marginBottom: '1rem',
+            marginBottom: '1.5rem',
             padding: '0.9rem 1rem',
             borderRadius: '8px',
             backgroundColor: banner.tipo === 'success' ? '#e6fcf5' : '#fff5f5',
@@ -212,16 +244,20 @@ export const CrearCuentaPerfilAdmin = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
+      {/* Selector de Perfil */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
         <button
           onClick={() => handleTipoChange('local')}
           style={{
-            backgroundColor: tipo === 'local' ? '#2b8a3e' : '#e9ecef',
-            color: tipo === 'local' ? '#fff' : '#333',
-            padding: '0.7rem 1rem',
+            flex: 1,
+            backgroundColor: tipo === 'local' ? '#2b8a3e' : '#f1f3f5',
+            color: tipo === 'local' ? '#fff' : '#495057',
+            padding: '0.75rem',
             border: 'none',
             borderRadius: '8px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            transition: 'all 0.2s'
           }}
         >
           Local
@@ -230,197 +266,285 @@ export const CrearCuentaPerfilAdmin = () => {
         <button
           onClick={() => handleTipoChange('repartidor')}
           style={{
-            backgroundColor: tipo === 'repartidor' ? '#d9480f' : '#e9ecef',
-            color: tipo === 'repartidor' ? '#fff' : '#333',
-            padding: '0.7rem 1rem',
+            flex: 1,
+            backgroundColor: tipo === 'repartidor' ? '#d9480f' : '#f1f3f5',
+            color: tipo === 'repartidor' ? '#fff' : '#495057',
+            padding: '0.75rem',
             border: 'none',
             borderRadius: '8px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            transition: 'all 0.2s'
           }}
         >
           Repartidor
         </button>
       </div>
 
-      <div style={{ display: 'grid', gap: '0.8rem' }}>
-        <input
-          name="username"
-          value={usuarioForm.username}
-          onChange={handleUsuarioChange}
-          placeholder="Nombre de usuario"
-        />
+      <div style={{ display: 'grid', gap: '1.25rem' }}>
+        
+        {/* Sección: Datos de Cuenta */}
+        <div style={cardStyle}>
+          <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
+            🔐 Datos de la Cuenta
+          </strong>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            <input
+              name="username"
+              value={usuarioForm.username}
+              onChange={handleUsuarioChange}
+              placeholder="Nombre de usuario"
+              style={inputStyle}
+            />
+            <input
+              name="email"
+              type="email"
+              value={usuarioForm.email}
+              onChange={handleUsuarioChange}
+              placeholder="Correo Electrónico"
+              style={inputStyle}
+            />
+            <input
+              name="password"
+              type="password"
+              value={usuarioForm.password}
+              onChange={handleUsuarioChange}
+              placeholder="Contraseña"
+              style={inputStyle}
+            />
+          </div>
+        </div>
 
-        <input
-          name="email"
-          value={usuarioForm.email}
-          onChange={handleUsuarioChange}
-          placeholder="Email"
-        />
-
-        <input
-          name="password"
-          type="password"
-          value={usuarioForm.password}
-          onChange={handleUsuarioChange}
-          placeholder="Contraseña"
-        />
-
+        {/* Sección: Datos del Local */}
         {tipo === 'local' && (
-          <>
-            <input
-              name="nombre"
-              value={perfilForm.nombre}
-              onChange={handlePerfilChange}
-              placeholder="Nombre del local"
-            />
-
-            <input
-              name="direccion"
-              value={perfilForm.direccion}
-              onChange={handlePerfilChange}
-              placeholder="Dirección del local"
-            />
-
-            <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={cardStyle}>
+            <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
+              🏪 Información del Local
+            </strong>
+            <div style={{ display: 'grid', gap: '1rem' }}>
               <input
-                name="latitud"
-                value={ubicacionLocal.latitud}
-                onChange={handleUbicacionLocalChange}
-                placeholder="Latitud del local"
+                name="nombre"
+                value={perfilForm.nombre}
+                onChange={handlePerfilChange}
+                placeholder="Nombre del local"
+                style={inputStyle}
               />
               <input
-                name="longitud"
-                value={ubicacionLocal.longitud}
-                onChange={handleUbicacionLocalChange}
-                placeholder="Longitud del local"
+                name="direccion"
+                value={perfilForm.direccion}
+                onChange={handlePerfilChange}
+                placeholder="Dirección del local"
+                style={inputStyle}
               />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <input
+                  name="latitud"
+                  value={ubicacionLocal.latitud}
+                  onChange={handleUbicacionLocalChange}
+                  placeholder="Latitud (ej. -31.41)"
+                  style={inputStyle}
+                />
+                <input
+                  name="longitud"
+                  value={ubicacionLocal.longitud}
+                  onChange={handleUbicacionLocalChange}
+                  placeholder="Longitud (ej. -64.18)"
+                  style={inputStyle}
+                />
+              </div>
             </div>
-          </>
+          </div>
         )}
 
+        {/* Sección: Datos del Repartidor */}
         {tipo === 'repartidor' && (
-          <>
-            <input
-              name="dni"
-              value={perfilForm.dni}
-              onChange={handlePerfilChange}
-              placeholder="DNI"
-            />
+          <div style={cardStyle}>
+            <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
+              🛵 Perfil de Repartidor
+            </strong>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <input
+                name="dni"
+                value={perfilForm.dni}
+                onChange={handlePerfilChange}
+                placeholder="DNI del repartidor"
+                style={inputStyle}
+              />
+              <select
+                name="IDtipo_vehiculo"
+                value={perfilForm.vehiculo.IDtipo_vehiculo}
+                onChange={handleVehiculoChange}
+                style={inputStyle}
+              >
+                <option value="">Seleccione tipo de vehículo</option>
+                <option value="4">Auto</option>
+                <option value="3">Moto</option>
+                <option value="2">Bicicleta</option>
+              </select>
+            </div>
 
-            <select
-              name="IDtipo_vehiculo"
-              value={perfilForm.vehiculo.IDtipo_vehiculo}
-              onChange={handleVehiculoChange}
-              style={{
-                padding: '0.7rem',
-                borderRadius: '6px',
-                border: '1px solid #ced4da'
-              }}
-            >
-              <option value="">Seleccione tipo de vehículo</option>
-              <option value="4">Auto</option>
-              <option value="2">Bicicleta</option>
-              <option value="3">Moto</option>
-            </select>
-
-            {/* Marca, Modelo y Año solo se muestran para Moto (3) y Auto (4) */}
+            {/* Campos condicionales para Moto (3) y Auto (4) */}
             {(tipoVehiculoActual === '3' || tipoVehiculoActual === '4') && (
-              <>
-                <input
-                  name="marca"
-                  value={perfilForm.vehiculo.marca}
-                  onChange={handleVehiculoChange}
-                  placeholder="Marca"
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+                
+                {/* Datos del Vehículo */}
+                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
+                    DETALLES DEL VEHÍCULO
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+                    <input
+                      name="marca"
+                      value={perfilForm.vehiculo.marca}
+                      onChange={handleVehiculoChange}
+                      placeholder="Marca"
+                      style={inputStyle}
+                    />
+                    <input
+                      name="modelo"
+                      value={perfilForm.vehiculo.modelo}
+                      onChange={handleVehiculoChange}
+                      placeholder="Modelo"
+                      style={inputStyle}
+                    />
+                    <input
+                      name="anio"
+                      type="number"
+                      value={perfilForm.vehiculo.anio}
+                      onChange={handleVehiculoChange}
+                      placeholder="Año (Ej: 2022)"
+                      style={inputStyle}
+                    />
+                    <input
+                      name="patente"
+                      value={perfilForm.vehiculo.patente}
+                      onChange={handleVehiculoChange}
+                      placeholder="Patente"
+                      style={inputStyle}
+                    />
+                  </div>
 
-                <input
-                  name="modelo"
-                  value={perfilForm.vehiculo.modelo}
-                  onChange={handleVehiculoChange}
-                  placeholder="Modelo"
-                />
+                  <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.75rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        name="seguro_vigente"
+                        checked={perfilForm.vehiculo.seguro_vigente}
+                        onChange={handleVehiculoChange}
+                      />
+                      Seguro vigente
+                    </label>
 
-                <input
-                  name="anio"
-                  type="number"
-                  value={perfilForm.vehiculo.anio}
-                  onChange={handleVehiculoChange}
-                  placeholder="Año del vehículo (Ej: 2022)"
-                />
-
-                <input
-                  name="patente"
-                  value={perfilForm.vehiculo.patente}
-                  onChange={handleVehiculoChange}
-                  placeholder="Patente"
-                />
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    name="seguro_vigente"
-                    checked={perfilForm.vehiculo.seguro_vigente}
-                    onChange={handleVehiculoChange}
-                  />
-                  Seguro vigente
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    name="licencia_vigente"
-                    checked={perfilForm.vehiculo.licencia_vigente}
-                    onChange={handleVehiculoChange}
-                  />
-                  Licencia vigente
-                </label>
-
-                {/* Campos de carga de archivos de documentación */}
-                <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.5rem' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                    Foto/Archivo Cédula Verde/Azul:
-                    <input type="file" name="cedula" accept="image/*,.pdf" onChange={handleFileChange} />
-                  </label>
-
-                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                    Foto/Archivo Comprobante Seguro:
-                    <input type="file" name="seguro" accept="image/*,.pdf" onChange={handleFileChange} />
-                  </label>
-
-                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                    Foto/Archivo Licencia de Conducir:
-                    <input type="file" name="licencia" accept="image/*,.pdf" onChange={handleFileChange} />
-                  </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        name="licencia_vigente"
+                        checked={perfilForm.vehiculo.licencia_vigente}
+                        onChange={handleVehiculoChange}
+                      />
+                      Licencia vigente
+                    </label>
+                  </div>
                 </div>
-              </>
+
+                {/* Fechas de Vencimiento */}
+                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
+                    FECHAS DE VENCIMIENTO
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    <label style={labelStyle}>
+                      Vencimiento Licencia
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_licencia"
+                        value={perfilForm.vehiculo.fecha_vencimiento_licencia}
+                        onChange={handleVehiculoChange}
+                        style={inputStyle}
+                      />
+                    </label>
+
+                    <label style={labelStyle}>
+                      Vencimiento Seguro
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_seguro"
+                        value={perfilForm.vehiculo.fecha_vencimiento_seguro}
+                        onChange={handleVehiculoChange}
+                        style={inputStyle}
+                      />
+                    </label>
+
+                    <label style={labelStyle}>
+                      Vencimiento Cédula
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_cedula"
+                        value={perfilForm.vehiculo.fecha_vencimiento_cedula}
+                        onChange={handleVehiculoChange}
+                        style={inputStyle}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Carga de Documentación */}
+                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
+                    DOCUMENTACIÓN EN ADJUNTO
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    <label style={labelStyle}>
+                      Cédula Verde/Azul
+                      <input type="file" name="cedula" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
+                    </label>
+
+                    <label style={labelStyle}>
+                      Comprobante Seguro
+                      <input type="file" name="seguro" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
+                    </label>
+
+                    <label style={labelStyle}>
+                      Licencia de Conducir
+                      <input type="file" name="licencia" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
+                    </label>
+                  </div>
+                </div>
+
+              </div>
             )}
 
-            {/* Opciones exclusivas para Bicicleta */}
+            {/* Opción única para Bicicleta */}
             {tipoVehiculoActual === '2' && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '0.5rem' }}>
-                <input
-                  type="checkbox"
-                  name="bici_propia"
-                  checked={perfilForm.vehiculo.bici_propia}
-                  onChange={handleVehiculoChange}
-                />
-                ¿Dispone de bicicleta propia?
-              </label>
+              <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', marginTop: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    name="bici_propia"
+                    checked={perfilForm.vehiculo.bici_propia}
+                    onChange={handleVehiculoChange}
+                  />
+                  ¿Dispone de bicicleta propia?
+                </label>
+              </div>
             )}
-          </>
+          </div>
         )}
 
         <button
           onClick={crearUsuarioYPerfil}
           disabled={loading}
           style={{
-            padding: '0.9rem',
+            padding: '1rem',
             border: 'none',
             borderRadius: '8px',
             backgroundColor: '#1c7ed6',
             color: '#fff',
             cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            fontSize: '1rem',
+            marginTop: '0.5rem',
+            transition: 'background-color 0.2s'
           }}
         >
           {loading ? '⏳ Creando...' : 'Crear cuenta y perfil'}

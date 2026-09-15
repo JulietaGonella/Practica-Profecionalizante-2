@@ -91,3 +91,8 @@ export const getHistorialClienteAdmin = async (clienteUserId) => {
   const { data } = await api.get(`/clientes/${clienteUserId}/historial`);
   return data;
 };
+
+export const getAlertasDocumentacionAdmin = async () => {
+  const { data } = await api.get('/admin/alertas-documentacion');
+  return data;
+};

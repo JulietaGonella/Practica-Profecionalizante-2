@@ -182,12 +182,10 @@ export const crearRepartidorCompletoService = async (data, archivos = {}) => {
     email,
     password,
     dni,
-    vehiculo // JSON con los datos del vehículo parseado si se envía como FormData
+    vehiculo
   } = data;
 
-  if (!dni) {
-    throw new Error('El DNI es obligatorio.');
-  }
+  if (!dni) throw new Error('El DNI es obligatorio.');
 
   const datosVehiculo = typeof vehiculo === 'string' ? JSON.parse(vehiculo) : vehiculo;
 
@@ -200,14 +198,12 @@ export const crearRepartidorCompletoService = async (data, archivos = {}) => {
   try {
     await conn.beginTransaction();
 
-    // 1. Crear el usuario con rol de repartidor
     const usuario = await crearUsuarioEnTransaccion(
       conn,
       { username, email, password },
       'repartidor'
     );
 
-    // 2. Crear registro de repartidor (Deshabilitado/Invalidado por defecto)
     const [repartidorResult] = await conn.query(
       `
       INSERT INTO repartidores
@@ -219,19 +215,20 @@ export const crearRepartidorCompletoService = async (data, archivos = {}) => {
 
     const IDrepartidor = repartidorResult.insertId;
 
-    // 3. Obtener las rutas de los archivos cargados (Cédula, Seguro, Licencia)
     const cedulaUrl = archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null;
     const seguroUrl = archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null;
     const licenciaUrl = archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null;
 
-    // 4. Crear vehículo APROBADO directamente
+    // 👈 Actualización de la consulta SQL insertando las fechas de vencimiento
     const [vehiculoResult] = await conn.query(
       `
       INSERT INTO vehiculos_repartidor
         (IDrepartidor, IDtipo_vehiculo, marca, modelo, anio, patente,
          seguro_vigente, licencia_vigente, bici_propia,
-         cedula_url, seguro_url, licencia_url, activo, estado)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'APROBADO')
+         cedula_url, seguro_url, licencia_url,
+         fecha_vencimiento_licencia, fecha_vencimiento_seguro, fecha_vencimiento_cedula,
+         activo, estado)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'APROBADO')
       `,
       [
         IDrepartidor,
@@ -245,11 +242,13 @@ export const crearRepartidorCompletoService = async (data, archivos = {}) => {
         datosVehiculo.bici_propia ? 1 : 0,
         cedulaUrl,
         seguroUrl,
-        licenciaUrl
+        licenciaUrl,
+        datosVehiculo.fecha_vencimiento_licencia || null, // 👈
+        datosVehiculo.fecha_vencimiento_seguro || null,   // 👈
+        datosVehiculo.fecha_vencimiento_cedula || null,   // 👈
       ]
     );
 
-    // 5. Asignar el vehículo creado como el activo en la ficha del repartidor
     await conn.query(
       `UPDATE repartidores SET IDvehiculo_activo = ? WHERE id = ?`,
       [vehiculoResult.insertId, IDrepartidor]
@@ -391,26 +390,35 @@ export const getDashboardMetricsService = async ({ desde, hasta, local_id, repar
   };
 };
 
-// Helper reutilizable para evaluar vencimientos
+// admin.service.js
+
+// Helper para formatear objeto Date a 'YYYY-MM-DD'
+const formatearFechaSQL = (fecha) => {
+  if (!fecha) return null;
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+};
+
 export const evaluarEstadoDocumentación = (vehiculo) => {
+  // Ajustamos la comparación a la medianoche de hoy
   const hoy = new Date();
-  
-  // Si la fecha es NULL (datos de prueba), no está vencido
-  const licenciaVencida = vehiculo.fecha_vencimiento_licencia 
-    ? new Date(vehiculo.fecha_vencimiento_licencia) < hoy 
-    : false;
+  hoy.setHours(0, 0, 0, 0);
 
-  const seguroVencido = vehiculo.fecha_vencimiento_seguro 
-    ? new Date(vehiculo.fecha_vencimiento_seguro) < hoy 
-    : false;
+  const fechaLicencia = vehiculo.fecha_vencimiento_licencia ? new Date(vehiculo.fecha_vencimiento_licencia) : null;
+  const fechaSeguro = vehiculo.fecha_vencimiento_seguro ? new Date(vehiculo.fecha_vencimiento_seguro) : null;
+  const fechaCedula = vehiculo.fecha_vencimiento_cedula ? new Date(vehiculo.fecha_vencimiento_cedula) : null;
 
-  const cedulaVencida = vehiculo.fecha_vencimiento_cedula 
-    ? new Date(vehiculo.fecha_vencimiento_cedula) < hoy 
-    : false;
+  const licenciaVencida = fechaLicencia ? fechaLicencia < hoy : false;
+  const seguroVencido = fechaSeguro ? fechaSeguro < hoy : false;
+  const cedulaVencida = fechaCedula ? fechaCedula < hoy : false;
 
   const tieneDocumentosVencidos = licenciaVencida || seguroVencido || cedulaVencida;
 
   return {
+    fecha_vencimiento_licencia: formatearFechaSQL(vehiculo.fecha_vencimiento_licencia),
+    fecha_vencimiento_seguro: formatearFechaSQL(vehiculo.fecha_vencimiento_seguro),
+    fecha_vencimiento_cedula: formatearFechaSQL(vehiculo.fecha_vencimiento_cedula),
     licenciaVencida,
     seguroVencido,
     cedulaVencida,
@@ -436,4 +444,82 @@ export const actualizarVencimientosVehiculoService = async (vehiculoId, datos) =
   );
 
   return { message: 'Fechas de vencimiento actualizadas correctamente.' };
+};
+
+// Obtener alertas de documentación vencida o a vencer hoy
+export const getAlertasDocumentacionVencidaService = async () => {
+  const query = `
+    SELECT 
+      r.id AS repartidor_id,
+      u.username,
+      u.nombre,
+      u.apellido,
+      u.email,
+      v.id AS vehiculo_id,
+      v.tipo_vehiculo,
+      v.patente,
+      
+      -- Verificación de Licencia
+      CASE 
+        WHEN v.fecha_vencimiento_licencia IS NOT NULL AND v.fecha_vencimiento_licencia <= CURDATE() 
+        THEN v.fecha_vencimiento_licencia 
+        ELSE NULL 
+      END AS licencia_vencida_fecha,
+      
+      -- Verificación de Seguro
+      CASE 
+        WHEN v.fecha_vencimiento_seguro IS NOT NULL AND v.fecha_vencimiento_seguro <= CURDATE() 
+        THEN v.fecha_vencimiento_seguro 
+        ELSE NULL 
+      END AS seguro_vencido_fecha,
+      
+      -- Verificación de Cédula
+      CASE 
+        WHEN v.fecha_vencimiento_cedula IS NOT NULL AND v.fecha_vencimiento_cedula <= CURDATE() 
+        THEN v.fecha_vencimiento_cedula 
+        ELSE NULL 
+      END AS cedula_vencida_fecha
+
+    FROM vehiculos_repartidor v
+    JOIN repartidores r ON v.IDrepartidor = r.id
+    JOIN usuarios u ON r.IDusuario = u.id
+    WHERE 
+      (v.fecha_vencimiento_licencia IS NOT NULL AND v.fecha_vencimiento_licencia <= CURDATE())
+      OR (v.fecha_vencimiento_seguro IS NOT NULL AND v.fecha_vencimiento_seguro <= CURDATE())
+      OR (v.fecha_vencimiento_cedula IS NOT NULL AND v.fecha_vencimiento_cedula <= CURDATE());
+  `;
+
+  const [rows] = await db.query(query);
+
+  // Formateamos los resultados para que la estructura devuelta sea clara
+  const alertas = [];
+
+  rows.forEach((row) => {
+    const repartidorNombre = [row.nombre, row.apellido].filter(Boolean).join(' ') || row.username;
+
+    const agregarAlerta = (documento, fecha, tipo) => {
+      if (!fecha) return;
+      
+      // Determinar si vence hoy o si ya venció
+      const hoy = new Date().toISOString().split('T')[0];
+      const fechaDoc = new Date(fecha).toISOString().split('T')[0];
+      const estado = fechaDoc === hoy ? 'VENCE_HOY' : 'VENCIDO';
+
+      alertas.push({
+        repartidor_id: row.repartidor_id,
+        repartidor: repartidorNombre,
+        email: row.email,
+        vehiculo: `${row.tipo_vehiculo} ${row.patente ? `(${row.patente})` : ''}`,
+        documento, // 'Licencia de Conducir', 'Seguro Obligatorio', 'Cédula'
+        fecha_vencimiento: fechaDoc,
+        estado // 'VENCE_HOY' o 'VENCIDO'
+      });
+    };
+
+    agregarAlerta('Licencia de Conducir', row.licencia_vencida_fecha);
+    agregarAlerta('Seguro Obligatorio', row.seguro_vencido_fecha);
+    agregarAlerta('Cédula', row.cedula_vencida_fecha);
+  });
+
+  return alertas;
 };

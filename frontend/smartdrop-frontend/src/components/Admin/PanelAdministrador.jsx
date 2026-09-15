@@ -14,7 +14,8 @@ import {
   getClientesAdmin,
   getHorariosLocalAdmin,
   eliminarUsuarioAdmin,
-  getHistorialClienteAdmin
+  getHistorialClienteAdmin,
+  getAlertasDocumentacionAdmin
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
 import { CambiarPasswordModal } from '../CambiarPasswordModal'
@@ -103,6 +104,7 @@ export const PanelAdministrador = () => {
   const [repartidorSeleccionado, setRepartidorSeleccionado] = useState(null);
   const [solicitudesVehiculos, setSolicitudesVehiculos] = useState([]);
   const [documentacionVehiculo, setDocumentacionVehiculo] = useState(null);
+  const [alertasDoc, setAlertasDoc] = useState([]);
   const [paginaUsuarios, setPaginaUsuarios] = useState(1);
   const [paginaRepartidores, setPaginaRepartidores] = useState(1);
   const [paginaClientes, setPaginaClientes] = useState(1);
@@ -201,12 +203,20 @@ export const PanelAdministrador = () => {
       setLoading(true);
       setError('');
 
-      const [usuariosData, localesData, repartidoresData, clientesData, solicitudesData] = await Promise.all([
+      const [
+        usuariosData,
+        localesData,
+        repartidoresData,
+        clientesData,
+        solicitudesData,
+        alertasData // 👈 Petición agregada a la desestructuración
+      ] = await Promise.all([
         getUsuariosAdmin(),
         getLocalesAdmin(),
         getRepartidoresAdmin(),
         getClientesAdmin(),
-        getSolicitudesVehiculosAdmin()
+        getSolicitudesVehiculosAdmin(),
+        getAlertasDocumentacionAdmin() // 👈 Petición ejecutada en paralelo
       ]);
 
       setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
@@ -214,6 +224,8 @@ export const PanelAdministrador = () => {
       setRepartidores(Array.isArray(repartidoresData) ? repartidoresData : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
       setSolicitudesVehiculos(Array.isArray(solicitudesData) ? solicitudesData : []);
+      setAlertasDoc(Array.isArray(alertasData) ? alertasData : []); // 👈 Guardar alertas en el estado
+
       setPaginaUsuarios(1);
       setPaginaRepartidores(1);
       setPaginaClientes(1);
@@ -460,6 +472,80 @@ export const PanelAdministrador = () => {
         </div>
       </header>
 
+      {/* 👈 4. BANNER DE ALERTAS DE DOCUMENTACIÓN VENCIDA O POR VENCER */}
+      {alertasDoc.length > 0 && (
+        <div
+          style={{
+            marginBottom: '1.5rem',
+            padding: '1rem',
+            border: '1px solid #ffc9c9',
+            borderRadius: '10px',
+            backgroundColor: '#fff5f5'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0, color: '#c92a2a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              ⚠️ Alertas de Documentación Vencida / Por Vencer
+            </h3>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#c92a2a', backgroundColor: '#ffe3e3', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+              {alertasDoc.length} Alerta(s)
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.8rem' }}>
+            {alertasDoc.map((alerta, index) => {
+              const esHoy = alerta.estado === 'VENCE_HOY';
+
+              return (
+                <div
+                  key={`${alerta.repartidor_id}-${alerta.documento}-${index}`}
+                  style={{
+                    display: 'flex',
+                    justify: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.8rem',
+                    padding: '0.75rem 1rem',
+                    backgroundColor: '#fff',
+                    borderLeft: `5px solid ${esHoy ? '#f59f00' : '#e03131'}`,
+                    borderTop: '1px solid #ffc9c9',
+                    borderRight: '1px solid #ffc9c9',
+                    borderBottom: '1px solid #ffc9c9',
+                    borderRadius: '6px'
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: '0.95rem' }}>{alerta.repartidor}</strong>
+                    <small style={{ display: 'block', color: '#666' }}>
+                      {alerta.vehiculo} · {alerta.email}
+                    </small>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
+                      📄 <strong>{alerta.documento}:</strong> {alerta.fecha_vencimiento}
+                    </span>
+
+                    <span
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        color: '#fff',
+                        backgroundColor: esHoy ? '#f59f00' : '#e03131'
+                      }}
+                    >
+                      {esHoy ? '⏳ VENCE HOY' : '❌ VENCIDO'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Renderizado condicional del modal de cambio de clave */}
       {mostrarCambioPass && (
         <div style={{
@@ -479,6 +565,7 @@ export const PanelAdministrador = () => {
           </div>
         </div>
       )}
+
       <div
         style={{
           display: 'flex',
@@ -1649,30 +1736,155 @@ export const PanelAdministrador = () => {
               )}
 
               {documentacionVehiculo && (
-                <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 4000, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 4000,
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    display: 'flex',
+                    justify: 'center',
+                    alignItems: 'center',
+                    padding: '1rem'
+                  }}
+                >
                   <div style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '10px', padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ margin: 0 }}>📄 Documentación del vehículo</h3>
+                      <h3 style={{ margin: 0 }}>📄 Detalle de Solicitud de Vehículo</h3>
                       <button type="button" onClick={() => setDocumentacionVehiculo(null)}>✕</button>
                     </div>
+
+                    {/* Indicador de Tipo de Solicitud */}
+                    <div style={{ padding: '0.8rem', borderRadius: '8px', marginBottom: '1rem', backgroundColor: documentacionVehiculo.es_nuevo_vehiculo ? '#e7f5ff' : '#fff9db', border: documentacionVehiculo.es_nuevo_vehiculo ? '1px solid #74c0fc' : '1px solid #ffe066' }}>
+                      <strong>Tipo de Solicitud: </strong>
+                      {documentacionVehiculo.es_nuevo_vehiculo ? (
+                        <span style={{ color: '#1c7ed6', fontWeight: 'bold' }}>🆕 Alta de Nuevo Vehículo</span>
+                      ) : (
+                        <span style={{ color: '#f59f00', fontWeight: 'bold' }}>🔄 Renovación / Actualización Documental</span>
+                      )}
+                    </div>
+
                     <p>
                       <strong>Repartidor:</strong>{' '}
                       {[documentacionVehiculo.nombre, documentacionVehiculo.apellido].filter(Boolean).join(' ') || documentacionVehiculo.username}
                     </p>
-                    {[
-                      ['Cédula verde', documentacionVehiculo.cedula_url],
-                      ['Seguro', documentacionVehiculo.seguro_url],
-                      ['Registro / licencia', documentacionVehiculo.licencia_url]
-                    ].map(([etiqueta, ruta]) => {
-                      const url = resolverDocumento(ruta);
-                      return (
-                        <div key={etiqueta} style={{ marginBottom: '1rem' }}>
-                          <strong>{etiqueta}</strong>
-                          {url ? <a href={url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: '0.35rem' }}>Abrir documento</a> : <p style={{ color: '#868e96' }}>No presentado</p>}
-                          {url && /\.(jpg|jpeg|png|gif|webp)$/i.test(url) && <img src={url} alt={etiqueta} style={{ maxWidth: '100%', maxHeight: '220px', display: 'block', marginTop: '0.5rem', objectFit: 'contain' }} />}
-                        </div>
-                      );
-                    })}
+
+                    <p>
+                      <strong>Vehículo:</strong> {documentacionVehiculo.tipo_vehiculo} · {documentacionVehiculo.marca || 'Sin marca'} {documentacionVehiculo.modelo || ''} {documentacionVehiculo.patente ? `(${documentacionVehiculo.patente})` : ''}
+                    </p>
+
+                    {/* Sección de Documentos y Fechas de Vencimiento */}
+                    {/* Sección de Documentos y Fechas de Vencimiento */}
+                    <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
+                      {documentacionVehiculo.es_nuevo_vehiculo
+                        ? 'Documentación Presentada'
+                        : 'Archivos y Vencimientos Actualizados'}
+                    </h4>
+
+                    {(() => {
+                      // 1. Mapeamos la lista completa de documentos disponibles
+                      const listaDocumentos = [
+                        {
+                          etiqueta: 'Cédula Verde',
+                          ruta: documentacionVehiculo.cedula_url,
+                          vencimiento: documentacionVehiculo.fecha_vencimiento_cedula
+                        },
+                        {
+                          etiqueta: 'Seguro Obligatorio',
+                          ruta: documentacionVehiculo.seguro_url,
+                          vencimiento: documentacionVehiculo.fecha_vencimiento_seguro
+                        },
+                        {
+                          etiqueta: 'Licencia de Conducir',
+                          ruta: documentacionVehiculo.licencia_url,
+                          vencimiento: documentacionVehiculo.fecha_vencimiento_licencia
+                        }
+                      ];
+
+                      // 2. Si no es un vehículo nuevo, filtramos para mostrar SOLO aquellos campos que incluyan un nuevo archivo o fecha
+                      const documentosAMostrar = documentacionVehiculo.es_nuevo_vehiculo
+                        ? listaDocumentos
+                        : listaDocumentos.filter(doc => Boolean(doc.ruta) || Boolean(doc.vencimiento));
+
+                      if (documentosAMostrar.length === 0) {
+                        return (
+                          <div style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666', fontStyle: 'italic' }}>
+                            No se adjuntaron nuevos archivos ni fechas de vencimiento en esta solicitud.
+                          </div>
+                        );
+                      }
+
+                      return documentosAMostrar.map(({ etiqueta, ruta, vencimiento }) => {
+                        const url = resolverDocumento(ruta);
+                        const fechaFormateada = vencimiento ? new Date(vencimiento).toLocaleDateString('es-AR') : null;
+                        const estaVencido = vencimiento ? new Date(vencimiento) < new Date() : false;
+
+                        return (
+                          <div
+                            key={etiqueta}
+                            style={{
+                              marginBottom: '1rem',
+                              padding: '0.8rem',
+                              border: '1px solid #dee2e6',
+                              borderRadius: '8px',
+                              backgroundColor: !documentacionVehiculo.es_nuevo_vehiculo ? '#fffde7' : '#fff' // Resaltado especial si es actualización
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <strong>{etiqueta}</strong>
+
+                              {/* Fecha de vencimiento si fue enviada */}
+                              {vencimiento && (
+                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: estaVencido ? '#e03131' : '#2b8a3e' }}>
+                                  Vence: {fechaFormateada} {estaVencido ? '(⚠️ VENCIDO)' : ''}
+                                </span>
+                              )}
+                            </div>
+
+                            {url ? (
+                              <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: '0.35rem', color: '#1c7ed6', fontWeight: '500' }}>
+                                🔗 Abrir nuevo archivo enviado
+                              </a>
+                            ) : (
+                              <p style={{ color: '#868e96', margin: '0.35rem 0 0', fontSize: '0.9rem' }}>
+                                {documentacionVehiculo.es_nuevo_vehiculo ? 'No presentado' : 'Sin nuevo archivo adjunto (Mantiene anterior)'}
+                              </p>
+                            )}
+
+                            {url && /\.(jpg|jpeg|png|gif|webp)$/i.test(url) && (
+                              <img
+                                src={url}
+                                alt={etiqueta}
+                                style={{ maxWidth: '100%', maxHeight: '180px', display: 'block', marginTop: '0.5rem', objectFit: 'contain', borderRadius: '4px' }}
+                              />
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+
+                    {/* Botones de Evaluación */}
+                    <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')}
+                        disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
+                        style={{ flex: 1, backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        ✅ Aprobar {documentacionVehiculo.es_nuevo_vehiculo ? 'Vehículo' : 'Renovación'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')}
+                        disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
+                        style={{ flex: 1, backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                      >
+                        ❌ Rechazar Solicitud
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1862,6 +2074,7 @@ export const PanelAdministrador = () => {
                         )}
 
                       {/* Lista de todos los vehículos asociados */}
+                      {/* Lista de todos los vehículos asociados */}
                       <div style={{ marginTop: '1.2rem' }}>
                         <h3 style={{ margin: '0 0 0.8rem 0', fontSize: '1.1rem' }}>
                           🚗 Vehículos Asociados y Estado Documental
@@ -1873,9 +2086,10 @@ export const PanelAdministrador = () => {
                             El repartidor no posee vehículos registrados.
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {repartidorSeleccionado.vehiculos.map((v) => {
                               const esActivo = Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
+                              const esBici = v.tipo_vehiculo?.toLowerCase().includes('bici');
 
                               return (
                                 <div
@@ -1884,11 +2098,12 @@ export const PanelAdministrador = () => {
                                     padding: '1rem',
                                     borderRadius: '8px',
                                     border: esActivo ? '2px solid #1c7ed6' : '1px solid #dee2e6',
-                                    backgroundColor: esActivo ? '#e7f5ff' : '#f8f9fa'
+                                    backgroundColor: esActivo ? '#f8f9fa' : '#ffffff'
                                   }}
                                 >
+                                  {/* Cabecera del Vehículo */}
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    <strong>
+                                    <strong style={{ fontSize: '1rem' }}>
                                       {v.tipo_vehiculo} · {v.marca} {v.modelo} {v.patente ? `(${v.patente})` : ''}
                                     </strong>
 
@@ -1906,17 +2121,9 @@ export const PanelAdministrador = () => {
                                           fontSize: '0.8rem',
                                           fontWeight: 'bold',
                                           backgroundColor:
-                                            v.estado === 'APROBADO'
-                                              ? '#d3f9d8'
-                                              : v.estado === 'RECHAZADO'
-                                                ? '#ffe3e3'
-                                                : '#fff3bf',
+                                            v.estado === 'APROBADO' ? '#d3f9d8' : v.estado === 'RECHAZADO' ? '#ffe3e3' : '#fff3bf',
                                           color:
-                                            v.estado === 'APROBADO'
-                                              ? '#2b8a3e'
-                                              : v.estado === 'RECHAZADO'
-                                                ? '#e03131'
-                                                : '#f59f00'
+                                            v.estado === 'APROBADO' ? '#2b8a3e' : v.estado === 'RECHAZADO' ? '#e03131' : '#f59f00'
                                         }}
                                       >
                                         {v.estado || 'PENDIENTE'}
@@ -1930,35 +2137,77 @@ export const PanelAdministrador = () => {
                                     </p>
                                   )}
 
-                                  <div style={{ marginTop: '0.8rem', borderTop: '1px solid #e9ecef', paddingTop: '0.5rem' }}>
-                                    <small style={{ fontWeight: 'bold', color: '#495057' }}>
-                                      Documentación:
-                                    </small>
+                                  {/* Estado de Documentación y Fechas de Vencimiento */}
+                                  {!esBici && (
+                                    <div style={{ marginTop: '0.8rem', borderTop: '1px solid #e9ecef', paddingTop: '0.8rem' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <small style={{ fontWeight: 'bold', color: '#495057', fontSize: '0.9rem' }}>
+                                          Estado de Documentación:
+                                        </small>
 
-                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.3rem', fontSize: '0.85rem' }}>
-                                      {[
-                                        ['Cédula Verde', v.cedula_url],
-                                        ['Seguro', v.seguro_url],
-                                        ['Licencia', v.licencia_url]
-                                      ].map(([docNombre, docRuta]) => {
-                                        const url = resolverDocumento(docRuta);
+                                        <span
+                                          style={{
+                                            fontSize: '0.8rem',
+                                            fontWeight: 'bold',
+                                            padding: '0.15rem 0.5rem',
+                                            borderRadius: '4px',
+                                            backgroundColor: v.documentacion_valida ? '#e6fcf5' : '#fff5f5',
+                                            color: v.documentacion_valida ? '#0ca678' : '#e03131',
+                                            border: `1px solid ${v.documentacion_valida ? '#96f2d7' : '#ffc9c9'}`
+                                          }}
+                                        >
+                                          {v.documentacion_valida ? '✅ VÁLIDA / VIGENTE' : '⚠️ INVÁLIDA O CON VENCIMIENTOS'}
+                                        </span>
+                                      </div>
 
-                                        return (
-                                          <div key={docNombre}>
-                                            {url ? (
-                                              <a href={url} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline' }}>
-                                                📄 {docNombre}
-                                              </a>
-                                            ) : (
-                                              <span style={{ color: '#868e96' }}>
-                                                ❌ {docNombre} (Sin presentar)
-                                              </span>
-                                            )}
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', fontSize: '0.85rem' }}>
+                                        {/* Licencia */}
+                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.licencia_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.licencia_vencida ? '#ffc9c9' : '#dee2e6'}` }}>
+                                          <div><strong>Licencia:</strong></div>
+                                          <div style={{ color: v.licencia_vencida ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_licencia || 'N/A'} {v.licencia_vencida ? '(VENCIDA)' : ''}
                                           </div>
-                                        );
-                                      })}
+                                          {v.licencia_url ? (
+                                            <a href={resolverDocumento(v.licencia_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
+                                              🔗 Ver archivo
+                                            </a>
+                                          ) : (
+                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                          )}
+                                        </div>
+
+                                        {/* Seguro */}
+                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.seguro_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.seguro_vencido ? '#ffc9c9' : '#dee2e6'}` }}>
+                                          <div><strong>Seguro:</strong></div>
+                                          <div style={{ color: v.seguro_vencido ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_seguro || 'N/A'} {v.seguro_vencido ? '(VENCIDO)' : ''}
+                                          </div>
+                                          {v.seguro_url ? (
+                                            <a href={resolverDocumento(v.seguro_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
+                                              🔗 Ver archivo
+                                            </a>
+                                          ) : (
+                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                          )}
+                                        </div>
+
+                                        {/* Cédula */}
+                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.cedula_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.cedula_vencida ? '#ffc9c9' : '#dee2e6'}` }}>
+                                          <div><strong>Cédula:</strong></div>
+                                          <div style={{ color: v.cedula_vencida ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_cedula || 'N/A'} {v.cedula_vencida ? '(VENCIDA)' : ''}
+                                          </div>
+                                          {v.cedula_url ? (
+                                            <a href={resolverDocumento(v.cedula_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
+                                              🔗 Ver archivo
+                                            </a>
+                                          ) : (
+                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
-                                  </div>
+                                  )}
                                 </div>
                               );
                             })}

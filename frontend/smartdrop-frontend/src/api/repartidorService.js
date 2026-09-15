@@ -85,3 +85,12 @@ export const getResumenGananciasHoy = async () => {
   const { data } = await api.get('/repartidores/ganancias-hoy');
   return data;
 };
+
+export const actualizarVehiculoExistente = async (vehiculoId, formData) => {
+  const response = await api.put(`/repartidores/vehiculos/${vehiculoId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};

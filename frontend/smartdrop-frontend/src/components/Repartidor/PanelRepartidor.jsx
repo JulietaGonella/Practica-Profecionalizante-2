@@ -10,10 +10,11 @@ import {
   solicitarVehiculo,
   seleccionarVehiculoActivo,
   getMiPerfilRepartidor,
-  getResumenGananciasHoy
+  getResumenGananciasHoy,
+  actualizarVehiculoExistente
 } from '../../api/repartidorService';
 import { LogoutButton } from '../LogoutButton';
-import { CambiarPasswordModal } from '../CambiarPasswordModal'; // 👈 Importamos el modal
+import { CambiarPasswordModal } from '../CambiarPasswordModal';
 
 export const PanelRepartidor = () => {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export const PanelRepartidor = () => {
   const [mostrarVehiculos, setMostrarVehiculos] = useState(false);
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
-  const [mostrarCambioPass, setMostrarCambioPass] = useState(false); // 👈 Estado para alternar el formulario de contraseña
+  const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
   const [perfil, setPerfil] = useState(null);
   const [resumenGanancias, setResumenGanancias] = useState({
     totalPedidosHoy: 0,
@@ -40,6 +41,18 @@ export const PanelRepartidor = () => {
     efectivoARendirHoy: 0
   });
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
+
+  // 🟢 Estado para editar/actualizar un vehículo con documentación vencida
+  const [vehiculoEditando, setVehiculoEditando] = useState(null);
+  const [formRenovacion, setFormRenovacion] = useState({
+    cedula: null,
+    seguro: null,
+    licencia: null,
+    fecha_vencimiento_licencia: '',
+    fecha_vencimiento_seguro: '',
+    fecha_vencimiento_cedula: ''
+  });
+
   const [formVehiculo, setFormVehiculo] = useState({
     IDtipo_vehiculo: '',
     marca: '',
@@ -53,6 +66,7 @@ export const PanelRepartidor = () => {
     fecha_vencimiento_seguro: '',
     fecha_vencimiento_cedula: ''
   });
+
   const cargarTodo = async () => {
     try {
       setLoading(true);
@@ -81,17 +95,13 @@ export const PanelRepartidor = () => {
 
       const pedidos = Array.isArray(asignados) ? asignados : [];
 
-      setPedidosDisponibles(
-        Array.isArray(disponibles) ? disponibles : []
-      );
-
+      setPedidosDisponibles(Array.isArray(disponibles) ? disponibles : []);
       setMisPedidos(
         pedidos.filter((pedido) => {
           const estado = Number(pedido.IDestado ?? pedido.id_estado ?? 0);
           return estado === 4 || estado === 5 || estado === 7 || estado === 8;
         })
       );
-
       setHistorialPedidos(
         pedidos.filter((pedido) => {
           const estado = Number(pedido.IDestado ?? pedido.id_estado);
@@ -160,6 +170,55 @@ export const PanelRepartidor = () => {
     setFormVehiculo((prev) => ({ ...prev, [e.target.name]: e.target.files[0] || null }));
   };
 
+  const handleArchivoRenovacion = (e) => {
+    setFormRenovacion((prev) => ({ ...prev, [e.target.name]: e.target.files[0] || null }));
+  };
+
+  const handleActualizarDocumentos = async (e) => {
+    e.preventDefault();
+
+    const vehiculoId = vehiculoEditando?.IDvehiculo || vehiculoEditando?.id;
+    if (!vehiculoId) {
+      alert('Error: No se pudo identificar el vehículo a actualizar.');
+      return;
+    }
+
+    setEnviandoSolicitud(true);
+    try {
+      const formData = new FormData();
+
+      if (formRenovacion.cedula instanceof File) {
+        formData.append('cedula', formRenovacion.cedula);
+      }
+      if (formRenovacion.seguro instanceof File) {
+        formData.append('seguro', formRenovacion.seguro);
+      }
+      if (formRenovacion.licencia instanceof File) {
+        formData.append('licencia', formRenovacion.licencia);
+      }
+
+      if (formRenovacion.fecha_vencimiento_cedula) {
+        formData.append('fecha_vencimiento_cedula', formRenovacion.fecha_vencimiento_cedula);
+      }
+      if (formRenovacion.fecha_vencimiento_seguro) {
+        formData.append('fecha_vencimiento_seguro', formRenovacion.fecha_vencimiento_seguro);
+      }
+      if (formRenovacion.fecha_vencimiento_licencia) {
+        formData.append('fecha_vencimiento_licencia', formRenovacion.fecha_vencimiento_licencia);
+      }
+
+      await actualizarVehiculoExistente(vehiculoId, formData);
+      alert('Solicitud enviada. El vehículo pasó a estado PENDIENTE a la espera de aprobación del administrador.');
+
+      setVehiculoEditando(null);
+      await cargarTodo();
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo enviar la actualización.');
+    } finally {
+      setEnviandoSolicitud(false);
+    }
+  };
+
   const handleAbrirPerfil = async () => {
     try {
       setCargandoPerfil(true);
@@ -181,9 +240,7 @@ export const PanelRepartidor = () => {
 
     try {
       const datos = new FormData();
-
       Object.entries(formVehiculo).forEach(([campo, valor]) => {
-        // Si es bici, omitir datos de motor y licencias
         if (
           esBicicleta &&
           [
@@ -239,7 +296,6 @@ export const PanelRepartidor = () => {
     RECHAZADO: { color: '#c92a2a', backgroundColor: '#fff5f5' }
   };
 
-  // 🟢 Función actualizada con parámetro urlDoc
   const evaluarDocumento = (fechaStr, urlDoc) => {
     if (!fechaStr) {
       return {
@@ -257,6 +313,12 @@ export const PanelRepartidor = () => {
       texto: fecha.toLocaleDateString('es-AR')
     };
   };
+
+  const docActivaVencida = vehiculoActivo && Number(vehiculoActivo.IDtipo_vehiculo) !== 2 && (
+    evaluarDocumento(vehiculoActivo.fecha_vencimiento_licencia, vehiculoActivo.licencia).vencido ||
+    evaluarDocumento(vehiculoActivo.fecha_vencimiento_seguro, vehiculoActivo.seguro).vencido ||
+    evaluarDocumento(vehiculoActivo.fecha_vencimiento_cedula, vehiculoActivo.cedula).vencido
+  );
 
   const renderCardPedido = (pedido, tipo, mostrarDetalle = false) => {
     const ordenId = pedido.IDorden || pedido.id;
@@ -385,19 +447,19 @@ export const PanelRepartidor = () => {
         {tipo === 'disponible' && (
           <button
             onClick={() => handleAceptarPedido(ordenId)}
-            disabled={aceptandoId === ordenId}
+            disabled={aceptandoId === ordenId || docActivaVencida}
             style={{
               width: '100%',
               padding: '0.8rem 1rem',
               border: 'none',
               borderRadius: '8px',
-              backgroundColor: aceptandoId === ordenId ? '#868e96' : '#2b8a3e',
+              backgroundColor: (aceptandoId === ordenId || docActivaVencida) ? '#868e96' : '#2b8a3e',
               color: '#fff',
               fontWeight: 'bold',
-              cursor: aceptandoId === ordenId ? 'not-allowed' : 'pointer'
+              cursor: (aceptandoId === ordenId || docActivaVencida) ? 'not-allowed' : 'pointer'
             }}
           >
-            {aceptandoId === ordenId ? '⏳ Aceptando...' : 'Aceptar pedido'}
+            {docActivaVencida ? '🚫 Doc. Vencida' : aceptandoId === ordenId ? '⏳ Aceptando...' : 'Aceptar pedido'}
           </button>
         )}
 
@@ -429,6 +491,13 @@ export const PanelRepartidor = () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
+
+      {docActivaVencida && (
+        <div style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', color: '#c92a2a', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>
+          ⚠️ Posees documentación vencida en tu vehículo activo. No podrás ponerte en línea ni aceptar pedidos hasta actualizar tus documentos en <strong>"Mi Vehículo"</strong>.
+        </div>
+      )}
+
       <header
         style={{
           display: 'flex',
@@ -458,14 +527,14 @@ export const PanelRepartidor = () => {
               color: disponible ? '#087f5b' : '#495057',
               border: `1px solid ${disponible ? '#96f2d7' : '#ced4da'}`,
               fontWeight: 'bold',
-              cursor: actualizandoDisponibilidad ? 'wait' : 'pointer'
+              cursor: (actualizandoDisponibilidad || docActivaVencida) ? 'not-allowed' : 'pointer'
             }}
           >
             <input
               type="checkbox"
               checked={disponible}
               onChange={handleCambiarDisponibilidad}
-              disabled={actualizandoDisponibilidad}
+              disabled={actualizandoDisponibilidad || docActivaVencida}
               style={{ width: '18px', height: '18px', accentColor: '#2b8a3e' }}
             />
             {disponible ? 'En línea' : 'Offline'}
@@ -475,15 +544,15 @@ export const PanelRepartidor = () => {
             onClick={() => setMostrarVehiculos(true)}
             style={{
               padding: '0.6rem 1rem',
-              backgroundColor: '#fff3bf',
-              border: '1px solid #ffe066',
+              backgroundColor: docActivaVencida ? '#ffe3e3' : '#fff3bf',
+              border: `1px solid ${docActivaVencida ? '#ffa8a8' : '#ffe066'}`,
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 'bold',
-              color: '#795000'
+              color: docActivaVencida ? '#c92a2a' : '#795000'
             }}
           >
-            🚘 Mi Vehículo
+            🚘 Mi Vehículo {docActivaVencida && '❌'}
           </button>
 
           <button
@@ -520,7 +589,6 @@ export const PanelRepartidor = () => {
         </div>
       </header>
 
-      {/* 💰 RESUMEN FINANCIERO DEL DÍA */}
       <div
         style={{
           display: 'grid',
@@ -665,6 +733,7 @@ export const PanelRepartidor = () => {
         </section>
       )}
 
+      {/* MODAL VEHÍCULOS */}
       {mostrarVehiculos && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
           <div style={{ width: '100%', maxWidth: '760px', maxHeight: '92vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem' }}>
@@ -679,7 +748,9 @@ export const PanelRepartidor = () => {
                 <p>
                   <strong>{vehiculoActivo.tipo_vehiculo}</strong>{' '}
                   {vehiculoActivo.marca} {vehiculoActivo.modelo} {vehiculoActivo.patente ? `(${vehiculoActivo.patente})` : ''}{' '}
-                  <span style={{ color: '#087f5b', fontWeight: 'bold' }}>✓ Verificado</span>
+                  <span style={{ color: docActivaVencida ? '#e03131' : '#087f5b', fontWeight: 'bold' }}>
+                    {docActivaVencida ? '❌ Documentación Vencida' : '✓ Verificado'}
+                  </span>
                 </p>
               ) : (
                 <p style={{ color: '#666' }}>No tenés un vehículo activo seleccionado.</p>
@@ -722,13 +793,42 @@ export const PanelRepartidor = () => {
                           border: `1px solid ${tieneVencidos ? '#e03131' : estilo.color}`
                         }}
                       >
-                        <strong>{vehiculo.tipo_vehiculo} - {vehiculo.marca || 'Sin marca'} {vehiculo.modelo || ''}</strong>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong>{vehiculo.tipo_vehiculo} - {vehiculo.marca || 'Sin marca'} {vehiculo.modelo || ''}</strong>
+                          {tieneVencidos && (
+                            <button
+                              // Al presionar "Renovar Documentación" en PanelRepartidor_3.jsx:
+                              onClick={() => {
+                                setVehiculoEditando({
+                                  ...vehiculo,
+                                  vencidos: {
+                                    licencia: lic.vencido,
+                                    seguro: seg.vencido,
+                                    cedula: ced.vencido
+                                  }
+                                });
+                                setFormRenovacion({
+                                  cedula: null,
+                                  seguro: null,
+                                  licencia: null,
+                                  // Conserva la fecha previa para aquellos que NO estén vencidos, vacía los que Sí para obligar a ingresar la nueva
+                                  fecha_vencimiento_licencia: lic.vencido ? '' : (vehiculo.fecha_vencimiento_licencia ? vehiculo.fecha_vencimiento_licencia.split('T')[0] : ''),
+                                  fecha_vencimiento_seguro: seg.vencido ? '' : (vehiculo.fecha_vencimiento_seguro ? vehiculo.fecha_vencimiento_seguro.split('T')[0] : ''),
+                                  fecha_vencimiento_cedula: ced.vencido ? '' : (vehiculo.fecha_vencimiento_cedula ? vehiculo.fecha_vencimiento_cedula.split('T')[0] : '')
+                                });
+                              }}
+                            >
+                              🔄 Renovar Documentación
+                            </button>
+                          )}
+                        </div>
+
                         <div style={{ color: estilo.color, fontWeight: 'bold', fontSize: '0.85rem' }}>
                           {vehiculo.estado}
                         </div>
                         {vehiculo.patente && <div>Patente: {vehiculo.patente}</div>}
 
-                        {/* ⚠️ Alertas de vencimientos de documentación */}
+                        {/* Alertador de fechas */}
                         {Number(vehiculo.IDtipo_vehiculo) !== 2 && (
                           <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', display: 'grid', gap: '0.2rem' }}>
                             <span style={{ color: lic.vencido ? '#e03131' : '#2b8a3e', fontWeight: lic.vencido ? 'bold' : 'normal' }}>
@@ -754,6 +854,85 @@ export const PanelRepartidor = () => {
                 )}
               </div>
             </section>
+
+            {/* 🟢 FORMULARIO DE RENOVACIÓN DE DOCUMENTOS VENCIDOS */}
+            {vehiculoEditando && (
+              <section style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '8px', marginBottom: '1.2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0, color: '#c92a2a' }}>
+                    Renovar Documentación Vencida: {vehiculoEditando.tipo_vehiculo} ({vehiculoEditando.patente})
+                  </h4>
+                  <button type="button" onClick={() => setVehiculoEditando(null)}>✕</button>
+                </div>
+
+                <form onSubmit={handleActualizarDocumentos} style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
+
+                  {/* Muestra ÚNICAMENTE la cédula si está vencida */}
+                  {vehiculoEditando.vencidos?.cedula && (
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      📄 Cédula verde / azul (Vencida - Subir Nuevo Archivo y Fecha)
+                      <input name="cedula" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_cedula"
+                        value={formRenovacion.fecha_vencimiento_cedula}
+                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_cedula: e.target.value })}
+                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        required
+                      />
+                    </label>
+                  )}
+
+                  {/* Muestra ÚNICAMENTE el seguro si está vencido */}
+                  {vehiculoEditando.vencidos?.seguro && (
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      🛡️ Póliza de Seguro (Vencido - Subir Nuevo Archivo y Fecha)
+                      <input name="seguro" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_seguro"
+                        value={formRenovacion.fecha_vencimiento_seguro}
+                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_seguro: e.target.value })}
+                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        required
+                      />
+                    </label>
+                  )}
+
+                  {/* Muestra ÚNICAMENTE la licencia si está vencida */}
+                  {vehiculoEditando.vencidos?.licencia && (
+                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      🪪 Licencia de Conducir (Vencida - Subir Nuevo Archivo y Fecha)
+                      <input name="licencia" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
+                      <input
+                        type="date"
+                        name="fecha_vencimiento_licencia"
+                        value={formRenovacion.fecha_vencimiento_licencia}
+                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_licencia: e.target.value })}
+                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
+                        required
+                      />
+                    </label>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={enviandoSolicitud}
+                    style={{
+                      backgroundColor: '#e03131',
+                      color: '#fff',
+                      padding: '0.6rem',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {enviandoSolicitud ? 'Guardando...' : 'Enviar Renovación a Revisión'}
+                  </button>
+                </form>
+              </section>
+            )}
 
             <section>
               <h3>Solicitar alta de vehículo</h3>
@@ -851,6 +1030,7 @@ export const PanelRepartidor = () => {
         </div>
       )}
 
+      {/* MODAL PERFIL */}
       {mostrarPerfil && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
           <div style={{ width: '100%', maxWidth: '500px', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -871,8 +1051,6 @@ export const PanelRepartidor = () => {
               </div>
             ) : perfil ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-                {/* Identificación personal (DNI Bloqueado / Readonly) */}
                 <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', border: '1px solid #e9ecef' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: '#6c757d', marginBottom: '0.3rem', fontWeight: 'bold' }}>
                     DNI (Documento Nacional de Identidad)
@@ -899,7 +1077,6 @@ export const PanelRepartidor = () => {
                   </small>
                 </div>
 
-                {/* Datos básicos de usuario */}
                 <div style={{ display: 'grid', gap: '0.8rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', color: '#495057', marginBottom: '0.2rem', fontWeight: '600' }}>
@@ -955,7 +1132,6 @@ export const PanelRepartidor = () => {
                   )}
                 </div>
 
-                {/* 🟢 Botón para desplegar/ocultar el formulario de cambio de clave */}
                 <div style={{ marginTop: '0.5rem' }}>
                   <button
                     type="button"
@@ -975,7 +1151,6 @@ export const PanelRepartidor = () => {
                   </button>
                 </div>
 
-                {/* Formulario/Modal de cambio de contraseña integrado */}
                 {mostrarCambioPass && (
                   <div style={{ marginTop: '0.5rem' }}>
                     <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
@@ -1001,7 +1176,6 @@ export const PanelRepartidor = () => {
                     Cerrar
                   </button>
                 </div>
-
               </div>
             ) : (
               <p style={{ color: '#c92a2a' }}>No se pudo cargar la información del perfil.</p>
