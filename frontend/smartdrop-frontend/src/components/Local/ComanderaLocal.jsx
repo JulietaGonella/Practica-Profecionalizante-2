@@ -447,7 +447,7 @@ export const ComanderaLocal = () => {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ textDecoration: esItemCancelado ? 'line-through' : 'none' }}>
-                              <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre} — ${Number(prod.precio_unitario || prod.precio || 0).toFixed(2)} c/u
+                              <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre} — ${ (Number(prod.cantidad || 1) * Number(prod.precio_unitario || prod.precio || 0)).toFixed(2) }
                             </div>
                           </div>
 

@@ -4,7 +4,10 @@ import {
   crearRepartidorCompletoService,
   getLocalesAdminService,
   actualizarVencimientosVehiculoService,
-  getAlertasDocumentacionVencidaService
+  getAlertasDocumentacionVencidaService,
+  getVehiculosPendientesBajaService, // 👈 Nuevo
+  aprobarBajaVehiculoService,
+  rechazarBajaVehiculoService
 } from '../services/admin.service.js';
 import {
   getVehiculosPendientesService,
@@ -90,5 +93,36 @@ export const getAlertasDocumentacion = async (req, res) => {
     res.json(alertas);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+export const getVehiculosPendientesBaja = async (req, res) => {
+  try {
+    const vehiculos = await getVehiculosPendientesBajaService();
+    res.json(vehiculos);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const aprobarBajaVehiculoAdmin = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del vehículo
+    const resultado = await aprobarBajaVehiculoService(id);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const rechazarBajaVehiculoAdmin = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del vehículo
+    const { motivo_rechazo } = req.body;
+    
+    const resultado = await rechazarBajaVehiculoService(id, motivo_rechazo);
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 };

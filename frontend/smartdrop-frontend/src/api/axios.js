@@ -25,14 +25,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// 1️⃣ Interceptor de Petición: Adjunta el Access Token activo
+// 1️⃣ Interceptor de Petición: Adjunta el Access Token activo (compatible con 'accessToken' o 'token')
 api.interceptors.request.use(
   (config) => {
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
 
-    const token = localStorage.getItem('accessToken');
+    // Buscamos con cualquiera de las dos keys para evitar errores de nombres
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

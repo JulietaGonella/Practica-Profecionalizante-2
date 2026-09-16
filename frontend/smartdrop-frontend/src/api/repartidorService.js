@@ -94,3 +94,9 @@ export const actualizarVehiculoExistente = async (vehiculoId, formData) => {
   });
   return response.data;
 };
+
+// En tu archivo de servicios del repartidor (ej: repartidorService.js)
+export const solicitarBajaVehiculo = async (vehiculoId) => {
+  const { data } = await api.put(`/repartidores/vehiculos/${vehiculoId}/solicitar-baja`);
+  return data;
+};

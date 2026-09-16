@@ -575,3 +575,11 @@ ALTER TABLE vehiculos_repartidor
   ADD COLUMN fecha_vencimiento_licencia DATE NULL AFTER licencia_url,
   ADD COLUMN fecha_vencimiento_seguro DATE NULL AFTER fecha_vencimiento_licencia,
   ADD COLUMN fecha_vencimiento_cedula DATE NULL AFTER fecha_vencimiento_seguro;
+  
+  ALTER TABLE vehiculos_repartidor 
+MODIFY COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'PENDIENTE_BAJA') NOT NULL DEFAULT 'APROBADO';
+
+USE BD_SmartDrop;
+
+ALTER TABLE vehiculos_repartidor 
+MODIFY COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA') NOT NULL DEFAULT 'APROBADO';

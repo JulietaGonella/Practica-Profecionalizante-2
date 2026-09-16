@@ -773,21 +773,38 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       throw new Error('Acción denegada: Actualmente no estás marcado como disponible para tomar pedidos.');
     }
 
-    // En assignRepartidorService (orders.service.js)
+    // ⛔ VALIDACIÓN: Vehículo activo y documentos (Si NO es bicicleta, verificar vencimientos)
     const [[vehiculoActivo]] = await conn.query(
       `SELECT v.* 
-   FROM vehiculos_repartidor v
-   JOIN repartidores r ON r.IDvehiculo_activo = v.id
-   WHERE r.IDusuario = ?`,
+       FROM vehiculos_repartidor v
+       JOIN repartidores r ON r.IDvehiculo_activo = v.id
+       WHERE r.IDusuario = ?`,
       [IDusuario]
     );
 
-    if (vehiculoActivo) {
-      const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
-      if (!evalDoc.documentacionValida) {
-        throw new Error('Acción denegada: Tu vehículo activo tiene documentación vencida.');
+    if (!vehiculoActivo) {
+      throw new Error('Debes seleccionar un vehículo activo para tomar pedidos.');
+    }
+
+    const esBicicleta = Number(vehiculoActivo.IDtipo_vehiculo) === 2;
+
+    if (!esBicicleta) {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+
+      const fLicencia = vehiculoActivo.fecha_vencimiento_licencia ? new Date(vehiculoActivo.fecha_vencimiento_licencia) : null;
+      const fSeguro = vehiculoActivo.fecha_vencimiento_seguro ? new Date(vehiculoActivo.fecha_vencimiento_seguro) : null;
+      const fCedula = vehiculoActivo.fecha_vencimiento_cedula ? new Date(vehiculoActivo.fecha_vencimiento_cedula) : null;
+
+      if (
+        (fLicencia && fLicencia < hoy) ||
+        (fSeguro && fSeguro < hoy) ||
+        (fCedula && fCedula < hoy)
+      ) {
+        throw new Error('No puedes aceptar pedidos porque el vehículo activo posee documentación vencida.');
       }
     }
+
     const IDrepartidor = repartidor.id;
 
     // ⛔ NUEVA VALIDACIÓN: Límite de 1 pedido activo por repartidor

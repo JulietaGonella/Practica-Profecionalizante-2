@@ -448,20 +448,21 @@ export const updateDisponibilidadService = async (IDusuario, disponible) => {
   const estado = disponible === true || disponible === 1 || disponible === '1' ? 1 : 0;
 
   if (estado === 1) {
-    // Buscar el vehículo activo del repartidor
     const [[vehiculoActivo]] = await pool.query(
       `SELECT v.* 
        FROM vehiculos_repartidor v
        JOIN repartidores r ON r.IDvehiculo_activo = v.id
-       WHERE r.IDusuario = ?`,
+       WHERE r.IDusuario = ? AND v.activo = 1`,
       [IDusuario]
     );
 
-    if (vehiculoActivo) {
-      const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
-      if (!evalDoc.documentacionValida) {
-        throw new Error('No puedes ponerte disponible. Tienes documentación vencida en tu vehículo activo.');
-      }
+    if (!vehiculoActivo) {
+      throw new Error('No puedes ponerte en línea sin un vehículo activo válido y habilitado.');
+    }
+
+    const evalDoc = evaluarEstadoDocumentación(vehiculoActivo);
+    if (!evalDoc.documentacionValida) {
+      throw new Error('No puedes ponerte disponible. Tienes documentación vencida en tu vehículo activo.');
     }
   }
 
@@ -514,12 +515,14 @@ export const getRepartidoresAdminService = async () => {
               'fecha_vencimiento_licencia', v.fecha_vencimiento_licencia,
               'fecha_vencimiento_seguro', v.fecha_vencimiento_seguro,
               'fecha_vencimiento_cedula', v.fecha_vencimiento_cedula,
-              'estado', v.estado
+              'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
+              'estado', v.estado,
+              'activo', v.activo
             )
           )
           FROM vehiculos_repartidor v
           JOIN tipos_vehiculo tv ON tv.id = v.IDtipo_vehiculo
-          WHERE v.IDrepartidor = r.id AND v.activo = 1
+          WHERE v.IDrepartidor = r.id
         ),
         JSON_ARRAY()
       ) AS vehiculos
@@ -536,7 +539,6 @@ export const getRepartidoresAdminService = async () => {
         : (r.vehiculos || [])
     ).filter(Boolean);
 
-    // Mapeo y evaluación formal de la documentación del vehículo
     const vehiculosEvaluados = listaVehiculos.map((v) => {
       const evaluacion = evaluarEstadoDocumentación(v);
       return {
@@ -555,7 +557,15 @@ export const getRepartidoresAdminService = async () => {
         seguro_vencido: evaluacion.seguroVencido,
         cedula_vencida: evaluacion.cedulaVencida,
         documentacion_valida: evaluacion.documentacionValida,
-        estado: v.estado
+        estado: v.estado,               // 'APROBADO', 'PENDIENTE', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA'
+        motivo_rechazo: v.motivo_rechazo, 
+        activo: Number(v.activo),
+        
+        // 🛠️ Banderas explícitas para evitar confusiones en el Front
+        es_rechazado: v.estado === 'RECHAZADO',
+        es_baja: v.estado === 'BAJA' || v.estado === 'PENDIENTE_BAJA',
+        es_pendiente: v.estado === 'PENDIENTE',
+        es_aprobado: v.estado === 'APROBADO'
       };
     });
 
@@ -577,7 +587,7 @@ export const getRepartidoresAdminService = async () => {
       ultima_ubicacion: r.ultima_ubicacion,
       creado_en: r.creado_en,
       IDvehiculo_activo: r.IDvehiculo_activo,
-      
+
       // Mantenemos el array completo procesado
       vehiculos: vehiculosEvaluados,
 
@@ -608,9 +618,9 @@ export const getMisVehiculosService = async (IDusuario) => {
       v.cedula_url,
       v.seguro_url,
       v.licencia_url,
-      v.fecha_vencimiento_licencia, -- 👈 AGREGAR
-      v.fecha_vencimiento_seguro,   -- 👈 AGREGAR
-      v.fecha_vencimiento_cedula,   -- 👈 AGREGAR
+      v.fecha_vencimiento_licencia,
+      v.fecha_vencimiento_seguro,
+      v.fecha_vencimiento_cedula,
       v.estado,
       v.motivo_rechazo,
       v.activo,
@@ -619,12 +629,19 @@ export const getMisVehiculosService = async (IDusuario) => {
     JOIN repartidores r ON r.id = v.IDrepartidor
     JOIN tipos_vehiculo tv ON tv.id = v.IDtipo_vehiculo
     WHERE r.IDusuario = ?
-    ORDER BY v.id DESC
+    ORDER BY v.activo DESC, v.id DESC
     `,
     [IDusuario]
   );
 
-  return rows;
+  // Mapeamos para inyectar las banderas explícitas
+  return rows.map((v) => ({
+    ...v,
+    es_rechazado: v.estado === 'RECHAZADO',
+    es_baja: v.estado === 'BAJA' || v.estado === 'PENDIENTE_BAJA',
+    es_pendiente: v.estado === 'PENDIENTE',
+    es_aprobado: v.estado === 'APROBADO'
+  }));
 };
 
 export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) => {
@@ -660,6 +677,7 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
 
   const esBicicleta = Number(IDtipo_vehiculo) === 2 || tipo.nombre.toLowerCase().includes('bici');
 
+  // Al ser un NUEVO vehículo, se registra como una solicitud completamente nueva
   const [result] = await pool.query(
     `
     INSERT INTO vehiculos_repartidor
@@ -683,7 +701,6 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
       esBicicleta ? null : (archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null),
       esBicicleta ? null : (archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null),
       esBicicleta ? null : (archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null),
-      // Si vienen vacíos o es bici, se inserta NULL (comportamiento sin fecha)
       esBicicleta ? null : (fecha_vencimiento_licencia || null),
       esBicicleta ? null : (fecha_vencimiento_seguro || null),
       esBicicleta ? null : (fecha_vencimiento_cedula || null)
@@ -691,7 +708,7 @@ export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) =
   );
 
   return {
-    message: 'Solicitud de vehículo enviada. Está pendiente de revisión.',
+    message: 'Solicitud de nuevo vehículo enviada correctamente. Queda pendiente de revisión.',
     IDvehiculo: result.insertId,
     estado: 'PENDIENTE'
   };
@@ -709,7 +726,7 @@ export const seleccionarVehiculoActivoService = async (IDusuario, IDvehiculo) =>
   );
 
   if (!vehiculo) {
-    throw new Error('El vehículo no existe, no está aprobado o no te pertenece');
+    throw new Error('El vehículo no existe, está dado de baja, no está aprobado o no te pertenece');
   }
 
   await pool.query(
@@ -720,24 +737,41 @@ export const seleccionarVehiculoActivoService = async (IDusuario, IDvehiculo) =>
   return { message: 'Vehículo activo actualizado correctamente', IDvehiculo_activo: Number(IDvehiculo) };
 };
 
+// En repartidores.service.js
 export const getVehiculosPendientesService = async (estado = 'PENDIENTE') => {
   const estadoNormalizado = String(estado).toUpperCase();
-  if (!['PENDIENTE', 'APROBADO', 'RECHAZADO'].includes(estadoNormalizado)) {
-    throw new Error('El estado debe ser PENDIENTE, APROBADO o RECHAZADO');
-  }
 
   const [rows] = await pool.query(
     `
-    SELECT v.*, r.IDusuario, u.username, u.nombre, u.apellido, tv.nombre AS tipo_vehiculo
+    SELECT 
+        v.*,
+        r.id AS IDrepartidor,
+        u.username,
+        u.nombre,
+        u.apellido,
+        u.email,
+        tv.nombre AS tipo_vehiculo,
+        -- CORRECCIÓN: Es nuevo vehículo si el repartidor YA tenía otro vehículo aprobado anteriormente
+        CASE 
+            WHEN (
+                SELECT COUNT(*) 
+                FROM vehiculos_repartidor v_ant 
+                WHERE v_ant.IDrepartidor = r.id 
+                  AND v_ant.id <> v.id 
+                  AND v_ant.estado = 'APROBADO'
+            ) > 0 THEN 1 
+            ELSE 0 
+        END AS es_nuevo_vehiculo
     FROM vehiculos_repartidor v
-    JOIN repartidores r ON r.id = v.IDrepartidor
-    JOIN usuarios u ON u.id = r.IDusuario
-    JOIN tipos_vehiculo tv ON tv.id = v.IDtipo_vehiculo
+    JOIN repartidores r ON v.IDrepartidor = r.id
+    JOIN usuarios u ON r.IDusuario = u.id
+    JOIN tipos_vehiculo tv ON v.IDtipo_vehiculo = tv.id
     WHERE v.estado = ?
     ORDER BY v.id DESC
     `,
     [estadoNormalizado]
   );
+
   return rows;
 };
 
@@ -751,13 +785,76 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
     throw new Error('El motivo de rechazo es obligatorio');
   }
 
-  const [result] = await pool.query(
-    `UPDATE vehiculos_repartidor SET estado = ?, motivo_rechazo = ? WHERE id = ?`,
-    [estadoNormalizado, estadoNormalizado === 'RECHAZADO' ? String(motivoRechazo).trim() : null, IDvehiculo]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  if (result.affectedRows === 0) throw new Error('Vehículo no encontrado');
-  return { message: `Vehículo ${estadoNormalizado.toLowerCase()} correctamente` };
+    // 1. Verificar que el vehículo exista y traer su estado actual
+    const [[vehiculo]] = await conn.query(
+      `SELECT id, IDrepartidor, estado FROM vehiculos_repartidor WHERE id = ?`,
+      [IDvehiculo]
+    );
+
+    if (!vehiculo) {
+      throw new Error('Vehículo no encontrado');
+    }
+
+    let nuevoEstadoVehiculo;
+    let activoValor;
+    let mensajeRespuesta;
+
+    if (estadoNormalizado === 'APROBADO') {
+      // Si se aprueba: si era PENDIENTE_BAJA pasa a BAJA, si era PENDIENTE pasa a APROBADO
+      nuevoEstadoVehiculo = vehiculo.estado === 'PENDIENTE_BAJA' ? 'BAJA' : 'APROBADO';
+      activoValor = vehiculo.estado === 'PENDIENTE_BAJA' ? 0 : 1;
+      mensajeRespuesta = 'Vehículo aprobado correctamente.';
+
+      await conn.query(
+        `UPDATE vehiculos_repartidor 
+         SET estado = ?, activo = ?, motivo_rechazo = NULL 
+         WHERE id = ?`,
+        [nuevoEstadoVehiculo, activoValor, IDvehiculo]
+      );
+
+    } else {
+      // Si se RECHAZA:
+      if (vehiculo.estado === 'PENDIENTE_BAJA') {
+        // Si rechazamos la baja de un vehículo, este debe volver a su estado normal (APROBADO y activo)
+        nuevoEstadoVehiculo = 'APROBADO';
+        activoValor = 1;
+        mensajeRespuesta = 'Solicitud de baja rechazada. El vehículo sigue activo.';
+      } else {
+        // Si es un vehículo NUEVO en PENDIENTE, al rechazarlo pasa a RECHAZADO y activo = 0
+        nuevoEstadoVehiculo = 'RECHAZADO';
+        activoValor = 0;
+        mensajeRespuesta = 'Solicitud rechazada. El vehículo ha sido marcado como rechazado.';
+      }
+
+      await conn.query(
+        `UPDATE vehiculos_repartidor 
+         SET estado = ?, activo = ?, motivo_rechazo = ? 
+         WHERE id = ?`,
+        [nuevoEstadoVehiculo, activoValor, String(motivoRechazo).trim(), IDvehiculo]
+      );
+
+      // Si el vehículo quedó rechazado, nos aseguramos de desvincularlo si figuraba como activo
+      if (nuevoEstadoVehiculo === 'RECHAZADO') {
+        await conn.query(
+          `UPDATE repartidores SET IDvehiculo_activo = NULL WHERE id = ? AND IDvehiculo_activo = ?`,
+          [vehiculo.IDrepartidor, IDvehiculo]
+        );
+      }
+    }
+
+    await conn.commit();
+    return { message: mensajeRespuesta };
+
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 
 // repartidores.service.js
@@ -857,7 +954,7 @@ export const actualizarDocumentosVehiculoService = async (IDusuario, vehiculoId,
 
 // repartidores.service.js (o admin.service.js según tu estructura backend)
 export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, datos, archivos = {}) => {
-  // 1. Obtener el vehículo actual para consultar sus fechas registradas
+  // 1. Verificar que el vehículo exista y pertenezca al repartidor
   const [[vehiculo]] = await pool.query(
     `
     SELECT v.* 
@@ -875,7 +972,6 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
-  // Helper para verificar si un documento está vencido en la BD
   const estaVencido = (fechaStr) => {
     if (!fechaStr) return false;
     return new Date(fechaStr) < hoy;
@@ -885,12 +981,10 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
   const seguroVencido = estaVencido(vehiculo.fecha_vencimiento_seguro);
   const cedulaVencida = estaVencido(vehiculo.fecha_vencimiento_cedula);
 
-  // 2. Definir valores manteniendo los originales salvo que estén vencidos y se hayan enviado nuevos datos
-  
-  // Cédula
+  // 2. Comparación y actualización inteligente basada en fechas de vencimiento y nuevos archivos
   let cedulaUrl = vehiculo.cedula_url;
   let fechaCedula = vehiculo.fecha_vencimiento_cedula;
-  if (cedulaVencida && (archivos.cedula?.[0] || datos.fecha_vencimiento_cedula)) {
+  if (cedulaVencida || archivos.cedula?.[0] || datos.fecha_vencimiento_cedula) {
     if (archivos.cedula?.[0]) {
       cedulaUrl = `/uploads/${archivos.cedula[0].filename}`;
     }
@@ -899,10 +993,9 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
     }
   }
 
-  // Seguro
   let seguroUrl = vehiculo.seguro_url;
   let fechaSeguro = vehiculo.fecha_vencimiento_seguro;
-  if (seguroVencido && (archivos.seguro?.[0] || datos.fecha_vencimiento_seguro)) {
+  if (seguroVencido || archivos.seguro?.[0] || datos.fecha_vencimiento_seguro) {
     if (archivos.seguro?.[0]) {
       seguroUrl = `/uploads/${archivos.seguro[0].filename}`;
     }
@@ -911,10 +1004,9 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
     }
   }
 
-  // Licencia
   let licenciaUrl = vehiculo.licencia_url;
   let fechaLicencia = vehiculo.fecha_vencimiento_licencia;
-  if (licenciaVencida && (archivos.licencia?.[0] || datos.fecha_vencimiento_licencia)) {
+  if (licenciaVencida || archivos.licencia?.[0] || datos.fecha_vencimiento_licencia) {
     if (archivos.licencia?.[0]) {
       licenciaUrl = `/uploads/${archivos.licencia[0].filename}`;
     }
@@ -923,7 +1015,7 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
     }
   }
 
-  // 3. Actualizar en Base de Datos y pasar el vehículo a estado PENDIENTE para revisión del Admin
+  // 3. Guardar cambios y colocar el estado en PENDIENTE para que el admin valide la renovación
   await pool.query(
     `
     UPDATE vehiculos_repartidor
@@ -950,8 +1042,76 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
   );
 
   return {
-    message: 'Renovación de documentación enviada correctamente. Queda pendiente de aprobación administrativa.',
+    message: 'Actualización de documentación por vencimiento procesada correctamente. Pendiente de aprobación.',
     IDvehiculo,
     estado: 'PENDIENTE'
   };
+};
+
+// En repartidores.service.js
+export const solicitarBajaVehiculoService = async (IDusuario, IDvehiculo) => {
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // 1. Obtener el repartidor y su vehículo activo actual
+    const [[repartidor]] = await conn.query(
+      `SELECT id, IDvehiculo_activo FROM repartidores WHERE IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (!repartidor) {
+      throw new Error('El usuario no está registrado como repartidor.');
+    }
+
+    // 2. Verificar que el vehículo a dar de baja exista, le pertenezca y esté activo
+    const [[vehiculo]] = await conn.query(
+      `SELECT id, activo FROM vehiculos_repartidor WHERE id = ? AND IDrepartidor = ?`,
+      [IDvehiculo, repartidor.id]
+    );
+
+    if (!vehiculo) {
+      throw new Error('El vehículo no existe o no te pertenece.');
+    }
+
+    if (Number(vehiculo.activo) === 0) {
+      throw new Error('El vehículo ya se encuentra inactivo o dado de baja.');
+    }
+
+    // 3. Validar que NO sea el vehículo que está usando actualmente
+    if (repartidor.IDvehiculo_activo && Number(repartidor.IDvehiculo_activo) === Number(IDvehiculo)) {
+      throw new Error('No puedes solicitar la baja del vehículo que estás usando actualmente.');
+    }
+
+    // 4. Validar que le queden más vehículos activos (debe quedarle al menos uno sí o sí)
+    const [[{ totalActivos }]] = await conn.query(
+      `SELECT COUNT(*) AS totalActivos FROM vehiculos_repartidor WHERE IDrepartidor = ? AND activo = 1`,
+      [repartidor.id]
+    );
+
+    if (Number(totalActivos) <= 1) {
+      throw new Error('No puedes dar de baja este vehículo porque debes tener al menos un vehículo activo en tu cuenta.');
+    }
+
+    // 5. Cambiar el estado del vehículo a pendiente de baja o inhabilitarlo según tu flujo
+    // Nota: Según tus definiciones previas, puedes usar 'PENDIENTE_BAJA' o marcarlo directamente.
+    await conn.query(
+      `UPDATE vehiculos_repartidor SET estado = 'PENDIENTE_BAJA' WHERE id = ?`,
+      [IDvehiculo]
+    );
+
+    await conn.commit();
+
+    return {
+      message: 'Solicitud de baja de vehículo enviada correctamente. Queda pendiente de aprobación administrativa.',
+      IDvehiculo
+    };
+
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };

@@ -17,7 +17,8 @@ import {
   getMiPerfilRepartidor,
   getGananciasHoy,
   actualizarDocumentosVehiculo,
-  solicitarActualizacionVehiculo
+  solicitarActualizacionVehiculo,
+  solicitarBajaVehiculo
 } from '../controllers/repartidores.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole } from '../auth/roles.middleware.js';
@@ -95,6 +96,8 @@ router.get('/me/perfil', authMiddleware, requireRole('repartidor'), getMiPerfilR
 
 // 🚴 Consulta de ganancias y desglose de cobros del día
 router.get('/ganancias-hoy', authMiddleware, requireRole('repartidor'), getGananciasHoy);
+
+router.put('/vehiculos/:id/solicitar-baja', authMiddleware, solicitarBajaVehiculo);
 
 router.get('/', authMiddleware, requireRole('administrador'), getRepartidoresAdmin);
 

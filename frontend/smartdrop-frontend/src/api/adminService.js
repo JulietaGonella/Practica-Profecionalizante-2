@@ -96,3 +96,21 @@ export const getAlertasDocumentacionAdmin = async () => {
   const { data } = await api.get('/admin/alertas-documentacion');
   return data;
 };
+
+// Obtener vehículos con solicitud de baja pendiente
+export const getVehiculosPendientesBajaAdmin = async () => {
+  const { data } = await api.get('/admin/vehiculos-pendientes-baja');
+  return data;
+};
+
+// Aprobar la baja definitiva del vehículo
+export const aprobarBajaVehiculoAdmin = async (idVehiculo) => {
+  const { data } = await api.patch(`/admin/vehiculos/${idVehiculo}/aprobar-baja`);
+  return data;
+};
+
+// Rechazar la baja definitiva del vehículo
+export const rechazarBajaVehiculoAdmin = async (idVehiculo, motivo) => {
+  const { data } = await api.patch(`/admin/vehiculos/${idVehiculo}/rechazar-baja`, { motivo });
+  return data;
+};

@@ -15,7 +15,10 @@ import {
   getHorariosLocalAdmin,
   eliminarUsuarioAdmin,
   getHistorialClienteAdmin,
-  getAlertasDocumentacionAdmin
+  getAlertasDocumentacionAdmin,
+  getVehiculosPendientesBajaAdmin,
+  aprobarBajaVehiculoAdmin,
+  rechazarBajaVehiculoAdmin
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
 import { CambiarPasswordModal } from '../CambiarPasswordModal'
@@ -115,6 +118,11 @@ export const PanelAdministrador = () => {
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
   const [errorHistorial, setErrorHistorial] = useState('');
+  const [vehiculosBaja, setVehiculosBaja] = useState([]);
+  const [vehiculoARechazarBaja, setVehiculoARechazarBaja] = useState(null);
+  const [motivoRechazoBaja, setMotivoRechazoBaja] = useState('');
+  const [solicitudARechazar, setSolicitudARechazar] = useState(null);
+  const [motivoRechazoSolicitud, setMotivoRechazoSolicitud] = useState('');
 
   // --- BÚSQUEDA Y FILTRADO DE DATOS ---
   const term = busqueda.trim().toLowerCase();
@@ -209,14 +217,16 @@ export const PanelAdministrador = () => {
         repartidoresData,
         clientesData,
         solicitudesData,
-        alertasData // 👈 Petición agregada a la desestructuración
+        alertasData,
+        bajasData // 👈 Agregado
       ] = await Promise.all([
         getUsuariosAdmin(),
         getLocalesAdmin(),
         getRepartidoresAdmin(),
         getClientesAdmin(),
         getSolicitudesVehiculosAdmin(),
-        getAlertasDocumentacionAdmin() // 👈 Petición ejecutada en paralelo
+        getAlertasDocumentacionAdmin(),
+        getVehiculosPendientesBajaAdmin() // 👈 Petición al endpoint de bajas
       ]);
 
       setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
@@ -224,17 +234,15 @@ export const PanelAdministrador = () => {
       setRepartidores(Array.isArray(repartidoresData) ? repartidoresData : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
       setSolicitudesVehiculos(Array.isArray(solicitudesData) ? solicitudesData : []);
-      setAlertasDoc(Array.isArray(alertasData) ? alertasData : []); // 👈 Guardar alertas en el estado
+      setAlertasDoc(Array.isArray(alertasData) ? alertasData : []);
+      setVehiculosBaja(Array.isArray(bajasData) ? bajasData : []); // 👈 Guardar en estado
 
       setPaginaUsuarios(1);
       setPaginaRepartidores(1);
       setPaginaClientes(1);
     } catch (err) {
       console.error('Error cargando datos administrativos:', err);
-      setError(
-        err.response?.data?.error ||
-        'No se pudieron cargar los datos administrativos.'
-      );
+      setError(err.response?.data?.error || 'No se pudieron cargar los datos administrativos.');
     } finally {
       setLoading(false);
     }
@@ -330,6 +338,48 @@ export const PanelAdministrador = () => {
     }
   };
 
+  const handleAprobarBaja = async (idVehiculo) => {
+    const confirmar = window.confirm('¿Estás seguro de aprobar la baja definitiva de este vehículo? Se desvinculará del repartidor.');
+    if (!confirmar) return;
+
+    try {
+      setProcesandoId(`baja-${idVehiculo}`);
+      await aprobarBajaVehiculoAdmin(idVehiculo);
+      await cargarDatos();
+      alert('✅ Baja de vehículo aprobada correctamente.');
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo procesar la baja del vehículo.');
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
+  const iniciarRechazoBaja = (idVehiculo) => {
+    setVehiculoARechazarBaja(idVehiculo);
+    setMotivoRechazoBaja('');
+  };
+
+  const confirmarRechazoBaja = async (e) => {
+    e.preventDefault();
+    if (!motivoRechazoBaja.trim()) {
+      alert('El motivo del rechazo es obligatorio.');
+      return;
+    }
+
+    try {
+      setProcesandoId(`baja-rechazar-${vehiculoARechazarBaja}`);
+      await rechazarBajaVehiculoAdmin(vehiculoARechazarBaja, motivoRechazoBaja.trim());
+      await cargarDatos();
+      setVehiculoARechazarBaja(null);
+      setMotivoRechazoBaja('');
+      alert('❌ La solicitud de baja del vehículo fue rechazada correctamente.');
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo rechazar la baja del vehículo.');
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
   const abrirDetalleRepartidor = (repartidor) => {
     setRepartidorSeleccionado(repartidor);
   };
@@ -343,17 +393,19 @@ export const PanelAdministrador = () => {
   );
 
   const evaluarSolicitudVehiculo = async (solicitud, estado) => {
-    let motivo = '';
     if (estado === 'RECHAZADO') {
-      motivo = window.prompt('Ingresá el motivo del rechazo:')?.trim() || '';
-      if (!motivo) return;
+      // En lugar de prompt, abrimos nuestro propio modal de motivo
+      setSolicitudARechazar(solicitud);
+      setMotivoRechazoSolicitud('');
+      return;
     }
 
     try {
       setProcesandoId(`vehiculo-${solicitud.id}`);
-      await evaluarSolicitudVehiculoAdmin(solicitud.id, estado, motivo);
+      await evaluarSolicitudVehiculoAdmin(solicitud.id, estado, '');
       await cargarDatos();
       if (documentacionVehiculo?.id === solicitud.id) setDocumentacionVehiculo(null);
+      alert('✅ Solicitud procesada correctamente.');
     } catch (err) {
       alert(err.response?.data?.error || 'No se pudo evaluar la solicitud.');
     } finally {
@@ -361,6 +413,27 @@ export const PanelAdministrador = () => {
     }
   };
 
+  const confirmarRechazoSolicitud = async (e) => {
+    e.preventDefault();
+    if (!motivoRechazoSolicitud.trim()) {
+      alert('El motivo del rechazo es obligatorio.');
+      return;
+    }
+
+    try {
+      setProcesandoId(`vehiculo-${solicitudARechazar.id}`);
+      await evaluarSolicitudVehiculoAdmin(solicitudARechazar.id, 'RECHAZADO', motivoRechazoSolicitud.trim());
+      await cargarDatos();
+      if (documentacionVehiculo?.id === solicitudARechazar.id) setDocumentacionVehiculo(null);
+      setSolicitudARechazar(null);
+      setMotivoRechazoSolicitud('');
+      alert('❌ La solicitud fue rechazada correctamente.');
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo rechazar la solicitud.');
+    } finally {
+      setProcesandoId(null);
+    }
+  };
   const iniciarEdicionLocal = (local) => {
     setLocalEditando(local.id);
     setFormLocal({
@@ -1511,22 +1584,66 @@ export const PanelAdministrador = () => {
                     {solicitudesVehiculos.map((solicitud) => (
                       <div key={solicitud.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.8rem', backgroundColor: '#fff', border: '1px solid #ffe066', borderRadius: '8px' }}>
                         <div>
-                          <strong>
-                            {[solicitud.nombre, solicitud.apellido].filter(Boolean).join(' ') || solicitud.username}
-                          </strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                            <strong>
+                              {[solicitud.nombre, solicitud.apellido].filter(Boolean).join(' ') || solicitud.username}
+                            </strong>
+
+                            {/* 🏷️ Badge distintivo según el tipo de solicitud */}
+                            {solicitud.estado === 'PENDIENTE_BAJA' ? (
+                              <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                ❌ Solicitud de Baja
+                              </span>
+                            ) : Number(solicitud.es_nuevo_vehiculo) === 1 ? (
+                              <span style={{ backgroundColor: '#e7f5ff', color: '#1c7ed6', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                🆕 Solicitud de Nuevo Vehículo
+                              </span>
+                            ) : (
+                              <span style={{ backgroundColor: '#fff9db', color: '#f59f00', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                📄 Solicitud de Nueva Documentación
+                              </span>
+                            )}
+                          </div>
+
                           <div style={{ color: '#666', fontSize: '0.9rem' }}>
                             {solicitud.tipo_vehiculo} · {solicitud.marca || 'Sin marca'} {solicitud.modelo || ''} {solicitud.patente ? `· ${solicitud.patente}` : ''}
                           </div>
                         </div>
+
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button type="button" onClick={() => setDocumentacionVehiculo(solicitud)}>
-                            👁️ Ver documentación
+                            👁️ Ver detalle
                           </button>
-                          <button type="button" onClick={() => evaluarSolicitudVehiculo(solicitud, 'APROBADO')} disabled={procesandoId === `vehiculo-${solicitud.id}`} style={{ backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.7rem' }}>
-                            ✅ Aprobar vehículo
+
+                          <button
+                            type="button"
+                            onClick={() => evaluarSolicitudVehiculo(solicitud, 'APROBADO')}
+                            disabled={procesandoId === `vehiculo-${solicitud.id}`}
+                            style={{ backgroundColor: solicitud.estado === 'PENDIENTE_BAJA' ? '#e03131' : '#2b8a3e', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                          >
+                            {solicitud.estado === 'PENDIENTE_BAJA' ? '✅ Confirmar Baja' : '✅ Aprobar'}
                           </button>
-                          <button type="button" onClick={() => evaluarSolicitudVehiculo(solicitud, 'RECHAZADO')} disabled={procesandoId === `vehiculo-${solicitud.id}`} style={{ backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.7rem' }}>
-                            ❌ Rechazar
+
+                          {/* Botón de Rechazo Dinámico según el tipo de solicitud */}
+                          <button
+                            type="button"
+                            onClick={() => evaluarSolicitudVehiculo(solicitud, 'RECHAZADO')}
+                            disabled={procesandoId === `vehiculo-${solicitud.id}`}
+                            style={{
+                              backgroundColor: solicitud.estado === 'PENDIENTE_BAJA' ? '#d9480f' : '#e03131',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '5px',
+                              padding: '0.5rem 0.7rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {solicitud.estado === 'PENDIENTE_BAJA'
+                              ? '❌ Rechazar Baja'
+                              : Number(solicitud.es_nuevo_vehiculo) === 1
+                                ? '❌ Rechazar Vehículo Nuevo'
+                                : '❌ Rechazar Solicitud'}
                           </button>
                         </div>
                       </div>
@@ -1534,6 +1651,269 @@ export const PanelAdministrador = () => {
                   </div>
                 )}
               </div>
+
+              {/* ❌ SECCIÓN DE SOLICITUDES DE BAJA DE VEHÍCULOS */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #ffc9c9', borderRadius: '10px', backgroundColor: '#fff5f5' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#c92a2a' }}>❌ Solicitudes de Baja de Vehículos</h3>
+                    <p style={{ margin: '0.35rem 0 0', color: '#666' }}>
+                      Vehículos que los repartidores solicitaron dar de baja.
+                    </p>
+                  </div>
+                  <strong style={{ color: '#c92a2a' }}>{vehiculosBaja.length} pendiente(s)</strong>
+                </div>
+
+                {vehiculosBaja.length > 0 && (
+                  <div style={{ display: 'grid', gap: '0.7rem', marginTop: '1rem' }}>
+                    {vehiculosBaja.map((baja) => {
+                      const idVehiculoBaja = baja.id || baja.IDvehiculo;
+
+                      return (
+                        <div
+                          key={idVehiculoBaja}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.8rem', backgroundColor: '#fff', border: '1px solid #ffc9c9', borderRadius: '8px' }}
+                        >
+                          <div>
+                            <strong>{[baja.nombre, baja.apellido].filter(Boolean).join(' ') || baja.username}</strong>
+                            <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                              {baja.tipo_vehiculo} · {baja.marca || ''} {baja.modelo || ''} {baja.patente ? `(${baja.patente})` : ''} · Email: {baja.email}
+                            </div>
+                          </div>
+
+                          {/* Contenedor de Botones de Acción */}
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleAprobarBaja(idVehiculoBaja)}
+                              disabled={procesandoId === `baja-${idVehiculoBaja}` || procesandoId === `baja-rechazar-${idVehiculoBaja}`}
+                              style={{ backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.9rem', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              {procesandoId === `baja-${idVehiculoBaja}` ? '⏳ Procesando...' : '✅ Aprobar Baja'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => iniciarRechazoBaja(idVehiculoBaja)}
+                              disabled={procesandoId === `baja-${idVehiculoBaja}` || procesandoId === `baja-rechazar-${idVehiculoBaja}`}
+                              style={{ backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.9rem', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                              ❌ Rechazar Baja
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {vehiculoARechazarBaja !== null && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                    display: 'flex',
+                    justify: 'center',
+                    alignItems: 'center',
+                    padding: '1rem',
+                    zIndex: 3500
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '500px',
+                      backgroundColor: '#fff',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
+                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h3 style={{ margin: 0, color: '#c92a2a' }}>
+                        {solicitudARechazar?.es_nuevo_vehiculo
+                          ? '❌ Rechazar Alta de Vehículo Nuevo'
+                          : '❌ Motivo del rechazo de la solicitud'}
+                      </h3>
+
+                      <button
+                        type="button"
+                        onClick={() => setSolicitudARechazar(null)}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#f1f3f5',
+                          borderRadius: '50%',
+                          width: '32px',
+                          height: '32px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={confirmarRechazoBaja}>
+                      <label style={{ display: 'block', marginBottom: '1rem' }}>
+                        <span style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                          Ingresá el motivo por el cual se rechaza la baja del vehículo:
+                        </span>
+                        <textarea
+                          value={motivoRechazoBaja}
+                          onChange={(e) => setMotivoRechazoBaja(e.target.value)}
+                          rows={4}
+                          required
+                          placeholder="Ej: La documentación presentada sigue vigente..."
+                          style={{
+                            width: '100%',
+                            padding: '0.7rem',
+                            boxSizing: 'border-box',
+                            border: '1px solid #ced4da',
+                            borderRadius: '6px',
+                            fontFamily: 'inherit'
+                          }}
+                        />
+                      </label>
+
+                      <div style={{ display: 'flex', gap: '0.8rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setVehiculoARechazarBaja(null)}
+                          style={{
+                            flex: 1,
+                            padding: '0.7rem',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#6c757d',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Cancelar
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={procesandoId === `baja-rechazar-${vehiculoARechazarBaja}`}
+                          style={{
+                            flex: 1,
+                            padding: '0.7rem',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#e03131',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {procesandoId === `baja-rechazar-${vehiculoARechazarBaja}` ? '⏳ Procesando...' : 'Confirmar Rechazo'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {solicitudARechazar !== null && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                    display: 'flex',
+                    justify: 'center',
+                    alignItems: 'center',
+                    padding: '1rem',
+                    zIndex: 3500
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '500px',
+                      backgroundColor: '#fff',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
+                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h3 style={{ margin: 0, color: '#c92a2a' }}>❌ Motivo del rechazo de la solicitud</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSolicitudARechazar(null)}
+                        style={{ border: 'none', backgroundColor: '#f1f3f5', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={confirmarRechazoSolicitud}>
+                      <label style={{ display: 'block', marginBottom: '1rem' }}>
+                        <span style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                          Ingresá el motivo por el cual se rechaza esta solicitud:
+                        </span>
+                        <textarea
+                          value={motivoRechazoSolicitud}
+                          onChange={(e) => setMotivoRechazoSolicitud(e.target.value)}
+                          rows={4}
+                          required
+                          placeholder="Ej: La documentación adjunta no es legible..."
+                          style={{
+                            width: '100%',
+                            padding: '0.7rem',
+                            boxSizing: 'border-box',
+                            border: '1px solid #ced4da',
+                            borderRadius: '6px',
+                            fontFamily: 'inherit'
+                          }}
+                        />
+                      </label>
+
+                      <div style={{ display: 'flex', gap: '0.8rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSolicitudARechazar(null)}
+                          style={{
+                            flex: 1,
+                            padding: '0.7rem',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#6c757d',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Cancelar
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={procesandoId === `vehiculo-${solicitudARechazar.id}`}
+                          style={{
+                            flex: 1,
+                            padding: '0.7rem',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#e03131',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {procesandoId === `vehiculo-${solicitudARechazar.id}` ? '⏳ Procesando...' : 'Confirmar Rechazo'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
 
               {repartidores.length === 0 ? (
                 <p>No hay repartidores registrados.</p>
@@ -1757,13 +2137,19 @@ export const PanelAdministrador = () => {
                     </div>
 
                     {/* Indicador de Tipo de Solicitud */}
-                    <div style={{ padding: '0.8rem', borderRadius: '8px', marginBottom: '1rem', backgroundColor: documentacionVehiculo.es_nuevo_vehiculo ? '#e7f5ff' : '#fff9db', border: documentacionVehiculo.es_nuevo_vehiculo ? '1px solid #74c0fc' : '1px solid #ffe066' }}>
+                    <div style={{
+                      padding: '0.8rem',
+                      borderRadius: '8px',
+                      marginBottom: '1rem',
+                      backgroundColor: Number(documentacionVehiculo.es_nuevo_vehiculo) === 1 ? '#e7f5ff' : '#fff9db',
+                      border: Number(documentacionVehiculo.es_nuevo_vehiculo) === 1 ? '1px solid #74c0fc' : '1px solid #ffe066'
+                    }}>
                       <strong>Tipo de Solicitud: </strong>
-                      {documentacionVehiculo.es_nuevo_vehiculo ? (
-                        <span style={{ color: '#1c7ed6', fontWeight: 'bold' }}>🆕 Alta de Nuevo Vehículo</span>
-                      ) : (
-                        <span style={{ color: '#f59f00', fontWeight: 'bold' }}>🔄 Renovación / Actualización Documental</span>
-                      )}
+                      <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
+                        {Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
+                          ? 'Documentación Completa Presentada para el Alta'
+                          : 'Archivos y Fechas de Vencimiento Actualizados'}
+                      </h4>
                     </div>
 
                     <p>
@@ -1865,22 +2251,50 @@ export const PanelAdministrador = () => {
                       });
                     })()}
 
-                    {/* Botones de Evaluación */}
+                    {/* Botones de Evaluación en el Modal */}
                     <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
                       <button
                         type="button"
                         onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')}
                         disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
-                        style={{ flex: 1, backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                        style={{
+                          flex: 1,
+                          backgroundColor:
+                            documentacionVehiculo.estado === 'PENDIENTE_BAJA'
+                              ? '#e03131'
+                              : '#2b8a3e',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '0.7rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
                       >
-                        ✅ Aprobar {documentacionVehiculo.es_nuevo_vehiculo ? 'Vehículo' : 'Renovación'}
+                        {documentacionVehiculo.estado === 'PENDIENTE_BAJA'
+                          ? '✅ Aprobar Baja (Eliminar/Desactivar vehículo)'
+                          : `✅ Aprobar ${documentacionVehiculo.es_nuevo_vehiculo
+                            ? 'Vehículo'
+                            : 'Renovación'
+                          }`}
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')}
+                        onClick={() =>
+                          evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')
+                        }
                         disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
-                        style={{ flex: 1, backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#6c757d',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '0.7rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
                       >
                         ❌ Rechazar Solicitud
                       </button>
@@ -2088,8 +2502,11 @@ export const PanelAdministrador = () => {
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {repartidorSeleccionado.vehiculos.map((v) => {
-                              const esActivo = Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
-                              const esBici = v.tipo_vehiculo?.toLowerCase().includes('bici');
+                              const esActivo =
+                                Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
+
+                              const esBici =
+                                v.tipo_vehiculo?.toLowerCase().includes('bici');
 
                               return (
                                 <div
@@ -2097,37 +2514,63 @@ export const PanelAdministrador = () => {
                                   style={{
                                     padding: '1rem',
                                     borderRadius: '8px',
-                                    border: esActivo ? '2px solid #1c7ed6' : '1px solid #dee2e6',
-                                    backgroundColor: esActivo ? '#f8f9fa' : '#ffffff'
+                                    border: esActivo
+                                      ? '2px solid #1c7ed6'
+                                      : '1px solid #dee2e6',
+                                    backgroundColor: esActivo
+                                      ? '#f8f9fa'
+                                      : '#ffffff'
                                   }}
                                 >
-                                  {/* Cabecera del Vehículo */}
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+
+                                  {/* CABECERA DEL VEHÍCULO */}
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
+                                      gap: '0.5rem'
+                                    }}
+                                  >
                                     <strong style={{ fontSize: '1rem' }}>
-                                      {v.tipo_vehiculo} · {v.marca} {v.modelo} {v.patente ? `(${v.patente})` : ''}
+                                      {v.tipo_vehiculo} · {v.marca} {v.modelo}{' '}
+                                      {v.patente ? `(${v.patente})` : ''}
                                     </strong>
 
-                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                      {esActivo && (
-                                        <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          ACTIVO ACTUAL
-                                        </span>
-                                      )}
+                                    {/* Badges de Estado */}
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        gap: '0.5rem',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap'
+                                      }}
+                                    >
+                                      {/* Vehículo activo actual */}
+                                      {/* Badges de Estado diferenciados */}
+                                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        {esActivo && (
+                                          <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            ACTIVO ACTUAL
+                                          </span>
+                                        )}
 
-                                      <span
-                                        style={{
-                                          padding: '0.2rem 0.5rem',
-                                          borderRadius: '4px',
-                                          fontSize: '0.8rem',
-                                          fontWeight: 'bold',
-                                          backgroundColor:
-                                            v.estado === 'APROBADO' ? '#d3f9d8' : v.estado === 'RECHAZADO' ? '#ffe3e3' : '#fff3bf',
-                                          color:
-                                            v.estado === 'APROBADO' ? '#2b8a3e' : v.estado === 'RECHAZADO' ? '#e03131' : '#f59f00'
-                                        }}
-                                      >
-                                        {v.estado || 'PENDIENTE'}
-                                      </span>
+                                        {/* Diferenciación entre Baja y Rechazado */}
+                                        {v.estado === 'BAJA' || (Number(v.activo) === 0 && !v.motivo_rechazo) ? (
+                                          <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            ❌ Vehículo dado de baja
+                                          </span>
+                                        ) : v.estado === 'RECHAZADO' || v.motivo_rechazo ? (
+                                          <span style={{ backgroundColor: '#fff5f5', color: '#c92a2a', border: '1px solid #ffc9c9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            🚫 Vehículo Rechazado
+                                          </span>
+                                        ) : (
+                                          <span style={{ backgroundColor: '#d3f9d8', color: '#2b8a3e', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            Activo ({v.estado || 'PENDIENTE'})
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
 

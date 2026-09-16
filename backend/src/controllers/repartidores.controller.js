@@ -16,7 +16,8 @@ import {
   getMiPerfilRepartidorService,
   getGananciasHoyService,
   actualizarDocumentosVehiculoService,
-  actualizarVehiculoExistenteService
+  actualizarVehiculoExistenteService,
+  solicitarBajaVehiculoService
 } from '../services/repartidores.service.js';
 
 export const createRepartidor = async (req, res) => {
@@ -210,15 +211,30 @@ export const actualizarDocumentosVehiculo = async (req, res) => {
 export const solicitarActualizacionVehiculo = async (req, res) => {
   try {
     const IDusuario = req.user.id;
-    const { id } = req.params; // ID del vehículo desde la URL (/repartidores/vehiculos/:id)
+    const { id } = req.params; // ID del vehículo (:id)
 
     const resultado = await actualizarVehiculoExistenteService(
-      id,
-      IDusuario,
+      IDusuario, // 👈 Primero el usuario
+      id,        // 👈 Segundo el ID del vehículo
       req.body,
       req.files || {}
     );
 
+    res.json(resultado);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const solicitarBajaVehiculo = async (req, res) => {
+  try {
+    const IDvehiculo = req.params.id || req.body.IDvehiculo;
+
+    if (!IDvehiculo) {
+      return res.status(400).json({ error: 'El ID del vehículo es obligatorio.' });
+    }
+
+    const resultado = await solicitarBajaVehiculoService(req.user.id, IDvehiculo);
     res.json(resultado);
   } catch (error) {
     res.status(400).json({ error: error.message });
