@@ -30,6 +30,7 @@ import { ClienteLayout } from './components/Cliente/ClienteLayout';
 import { ActualizarPasswordInicialPage } from './pages/ActualizarPasswordInicialPage';
 import { SolicitarRecuperacionPage } from './pages/SolicitarRecuperacionPage';
 import { RestablecerPasswordPage } from './pages/RestablecerPasswordPage';
+import { ClienteGuard } from './components/Cliente/ClienteGuard';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -694,41 +695,54 @@ export default function App() {
 
           {/* 🛒 RUTAS DEL CLIENTE */}
           <Route element={<ProtectedRoute allowedRoles={['cliente']} />}>
-            <Route element={<ClienteLayout />}>
-              <Route path="/cliente/inicio" element={<ClienteInicio />} />
-              <Route path="/cliente/pedidos" element={<MisPedidos />} />
-              <Route path="/cliente/perfil" element={<MiPerfil />} />
-              <Route path="/cliente/direcciones" element={<MisDireccionesManager />} />
-              <Route path="/cliente/carrito" element={<CarritoPage />} />
-              <Route path="/cliente/locales/*" element={<CatalogoCliente onAgregarAlCarrito={agregarAlCarrito} />} />
-              <Route path="/cliente/tablero" element={<TableroEstadisticas rol="Cliente" />} />
-              <Route path="/cliente/seguimiento/:ordenId" element={<SeguimientoPedido />} /> 
+
+            {/* 1. Guardia de inicio: Intercepta el login y valida coordenadas antes de mostrar nada */}
+            <Route element={<ClienteGuard />}>
+
+              {/* Rutas con panel y barra de navegación */}
+              <Route element={<ClienteLayout />}>
+                <Route path="/cliente/inicio" element={<ClienteInicio />} />
+                <Route path="/cliente/pedidos" element={<MisPedidos />} />
+                <Route path="/cliente/perfil" element={<MiPerfil />} />
+                <Route path="/cliente/carrito" element={<CarritoPage />} />
+                <Route path="/cliente/locales/*" element={<CatalogoCliente onAgregarAlCarrito={agregarAlCarrito} />} />
+                <Route path="/cliente/tablero" element={<TableroEstadisticas rol="Cliente" />} />
+                <Route path="/cliente/seguimiento/:ordenId" element={<SeguimientoPedido />} />
+              </Route>
+
             </Route>
+
+            {/* 2. Pantalla de direcciones AISLADA (Sin Navbar ni panel de la tienda) */}
+            <Route
+              path="/cliente/direcciones"
+              element={<MisDireccionesManager onSuccessRedirect="/cliente/inicio" />}
+            />
+
           </Route>
 
 
           {/* 🏪 RUTAS DEL LOCAL */}
-          <Route element={ <ProtectedRoute allowedRoles={[ 'local', 'administrador local' ]} /> } >
+          <Route element={<ProtectedRoute allowedRoles={['local', 'administrador local']} />} >
             <Route path="/local/inicio" element={<LocalInicio />} />
           </Route>
 
           {/* 🚴 RUTAS DEL REPARTIDOR */}
-          <Route element={ <ProtectedRoute allowedRoles={['repartidor']} /> }>
-            <Route path="/repartidor/inicio" element={<PanelRepartidor />}/>
+          <Route element={<ProtectedRoute allowedRoles={['repartidor']} />}>
+            <Route path="/repartidor/inicio" element={<PanelRepartidor />} />
             <Route path="/repartidor/orden/:ordenId" element={<DetallePedidoRepartidor />} />
-            <Route path="/repartidor/tablero" element={ <TableroEstadisticas rol="Repartidor" /> }/>
+            <Route path="/repartidor/tablero" element={<TableroEstadisticas rol="Repartidor" />} />
           </Route>
 
           {/* 🛡️ RUTAS DEL ADMINISTRADOR */}
-          <Route element={ <ProtectedRoute allowedRoles={['administrador']} /> }>
-            <Route path="/admin/inicio" element={<PanelAdministrador />}/>
-            <Route path="/admin/crear-cuenta" element={<CrearCuentaPerfilAdmin />}/>
-            <Route path="/admin/crear-admin" element={<CrearAdminForm />}/>
-            <Route path="/admin/tablero" element={ <TableroEstadisticas rol="Administrador" /> }/>
+          <Route element={<ProtectedRoute allowedRoles={['administrador']} />}>
+            <Route path="/admin/inicio" element={<PanelAdministrador />} />
+            <Route path="/admin/crear-cuenta" element={<CrearCuentaPerfilAdmin />} />
+            <Route path="/admin/crear-admin" element={<CrearAdminForm />} />
+            <Route path="/admin/tablero" element={<TableroEstadisticas rol="Administrador" />} />
           </Route>
 
           {/* 🔄 REDIRECCIÓN POR DEFECTO */}
-          <Route path="*" element={ <Navigate to="/login" replace /> }/>
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
 
       </BrowserRouter>

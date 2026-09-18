@@ -19,12 +19,8 @@ export const MiPerfil = () => {
     longitud: ''
   });
 
-  // 🟢 Estado para guardar una copia de respaldo del perfil y restaurar si cancela
   const [perfilOriginal, setPerfilOriginal] = useState(null);
-
-  // 🟢 Estado para controlar la edición/deshabilitación del formulario
   const [editando, setEditando] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingGps, setLoadingGps] = useState(false);
@@ -55,7 +51,7 @@ export const MiPerfil = () => {
         longitud: data.longitud ?? ''
       };
       setForm(perfilCargado);
-      setPerfilOriginal(perfilCargado); // Guardamos la copia original
+      setPerfilOriginal(perfilCargado);
     } catch (err) {
       setMensaje({ tipo: 'error', texto: 'No se pudieron obtener los datos de tu perfil.' });
     } finally {
@@ -67,7 +63,6 @@ export const MiPerfil = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Capturar coordenadas por GPS del navegador
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       alert('La geolocalización no es soportada por tu navegador.');
@@ -91,7 +86,6 @@ export const MiPerfil = () => {
     );
   };
 
-  // 🟢 Cancelar la edición y restaurar datos
   const handleCancelarEdicion = () => {
     if (perfilOriginal) {
       setForm(perfilOriginal);
@@ -114,14 +108,12 @@ export const MiPerfil = () => {
         piso: form.piso,
         departamento: form.departamento,
         referencia: form.referencia,
-        latitud: Number(form.latitud),
-        longitud: Number(form.longitud)
+        latitud: form.latitud ? Number(form.latitud) : null,
+        longitud: form.longitud ? Number(form.longitud) : null
       };
 
       const res = await updateMiPerfil(payload);
       setMensaje({ tipo: 'exito', texto: res.message || 'Perfil actualizado exitosamente.' });
-
-      // 🟢 Actualizamos la copia original con los nuevos datos y volvemos a bloquear los inputs
       setPerfilOriginal(form);
       setEditando(false);
     } catch (err) {
@@ -139,7 +131,7 @@ export const MiPerfil = () => {
   return (
     <div style={{ maxWidth: '600px', margin: '1rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px', backgroundColor: '#fff' }}>
 
-      {/* 🟢 Navegación entre Pestañas */}
+      {/* Navegación entre Pestañas */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', borderBottom: '2px solid #eee', paddingBottom: '0.8rem' }}>
         <button
           type="button"
@@ -182,7 +174,6 @@ export const MiPerfil = () => {
             <h2>👤 Mi Cuenta / Perfil</h2>
 
             <div style={{ display: 'flex', gap: '8px' }}>
-              {/* 🟢 Botón para abrir el formulario de cambio de clave */}
               <button
                 type="button"
                 onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
@@ -206,7 +197,6 @@ export const MiPerfil = () => {
             </div>
           </div>
 
-          {/* Renderizar componente de cambio de clave si está desplegado */}
           {mostrarCambioPass && (
             <div style={{ marginBottom: '1.5rem' }}>
               <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
@@ -269,75 +259,103 @@ export const MiPerfil = () => {
               />
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Dirección Principal *:</label>
-              <input
-                type="text"
-                name="direccion"
-                value={form.direccion}
-                onChange={handleChange}
-                disabled={!editando}
-                required
-                style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontWeight: 'bold' }}>Piso:</label>
+            {/* DIRECCIÓN PRINCIPAL (Se oculta si no tiene valor y no se edita) */}
+            {(editando || form.direccion) && (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold' }}>Dirección Principal *:</label>
                 <input
                   type="text"
-                  name="piso"
-                  value={form.piso}
+                  name="direccion"
+                  value={form.direccion}
                   onChange={handleChange}
                   disabled={!editando}
-                  placeholder="Ej: 4"
+                  required={editando}
+                  placeholder="Calle y altura"
                   style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
                 />
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontWeight: 'bold' }}>Depto:</label>
+            )}
+
+            {/* PISO Y DEPTO */}
+            {(editando || form.piso || form.departamento) && (
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
+                {(editando || form.piso) && (
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontWeight: 'bold' }}>Piso:</label>
+                    <input
+                      type="text"
+                      name="piso"
+                      value={form.piso}
+                      onChange={handleChange}
+                      disabled={!editando}
+                      placeholder="Ej: 4"
+                      style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
+                    />
+                  </div>
+                )}
+                {(editando || form.departamento) && (
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontWeight: 'bold' }}>Depto:</label>
+                    <input
+                      type="text"
+                      name="departamento"
+                      value={form.departamento}
+                      onChange={handleChange}
+                      disabled={!editando}
+                      placeholder="Ej: B"
+                      style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* REFERENCIA */}
+            {(editando || form.referencia) && (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold' }}>Referencia de entrega:</label>
                 <input
                   type="text"
-                  name="departamento"
-                  value={form.departamento}
+                  name="referencia"
+                  value={form.referencia}
                   onChange={handleChange}
                   disabled={!editando}
-                  placeholder="Ej: B"
+                  placeholder="Ej: Portón blanco, entre calle X e Y"
                   style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
                 />
               </div>
-            </div>
+            )}
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Referencia de entrega:</label>
-              <input
-                type="text"
-                name="referencia"
-                value={form.referencia}
-                onChange={handleChange}
-                disabled={!editando}
-                placeholder="Ej: Portón blanco, entre calle X e Y"
-                style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-              />
-            </div>
+            {/* INDICADOR DE GPS LIMPIO (Sin coordenadas crudas en números largos) */}
+            {(editando || form.latitud) && (
+              <div style={{ backgroundColor: '#f8f9fa', padding: '0.8rem 1rem', marginBottom: '1.5rem', borderRadius: '6px', border: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontWeight: 'bold', display: 'block', fontSize: '0.9rem' }}>📍 Geolocalización GPS</span>
+                  <small style={{ color: form.latitud ? '#2b8a3e' : '#6c757d' }}>
+                    {form.latitud ? '✓ Ubicación sincronizada correctamente' : '⚠️ Sin coordenadas GPS registradas'}
+                  </small>
+                </div>
 
-            <div style={{ border: '1px dashed #aaa', padding: '1rem', marginBottom: '1.5rem', borderRadius: '6px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>Coordenadas asignadas (GPS):</label>
-              <p style={{ margin: '0.3rem 0' }}><small>Latitud: {form.latitud || 'No asignada'}</small></p>
-              <p style={{ margin: '0.3rem 0' }}><small>Longitud: {form.longitud || 'No asignada'}</small></p>
+                {editando && (
+                  <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    disabled={loadingGps}
+                    style={{ padding: '0.4rem 0.8rem', cursor: loadingGps ? 'not-allowed' : 'pointer', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                  >
+                    {loadingGps ? 'Obteniendo...' : '🎯 Actualizar GPS'}
+                  </button>
+                )}
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={handleGetLocation}
-                disabled={!editando || loadingGps}
-                style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', cursor: !editando || loadingGps ? 'not-allowed' : 'pointer' }}
-              >
-                {loadingGps ? 'Obteniendo GPS...' : '🎯 Actualizar con GPS actual'}
-              </button>
-            </div>
+            {!form.direccion && !editando && (
+              <div style={{ marginBottom: '1rem', padding: '0.8rem', backgroundColor: '#fff3cd', color: '#856404', borderRadius: '4px' }}>
+                ⚠️ No tienes una dirección principal configurada. Haz clic en <strong>"✏️ Editar Perfil"</strong> para agregar una o búscala en la pestaña <em>Mis Ubicaciones Guardadas</em>.
+              </div>
+            )}
 
-            {/* 🟢 Acciones solo visibles en modo edición */}
+            {/* ACCIONES DE EDICIÓN */}
             {editando && (
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button

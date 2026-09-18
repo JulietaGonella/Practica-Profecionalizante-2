@@ -558,11 +558,18 @@ export const getRepartidoresAdminService = async () => {
         seguro_vencido: evaluacion.seguroVencido,
         cedula_vencida: evaluacion.cedulaVencida,
         documentacion_valida: evaluacion.documentacionValida,
-        estado: v.estado,               // Puede ser: APROBADO, PENDIENTE, RECHAZADO, PENDIENTE_BAJA, BAJA
-        motivo_rechazo: v.motivo_rechazo, // 👈 Ahora viaja al front para mostrarse en el detalle
-        activo: Number(v.activo)
+        estado: v.estado,               // 'APROBADO', 'PENDIENTE', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA'
+        motivo_rechazo: v.motivo_rechazo, 
+        activo: Number(v.activo),
+        
+        // 🛠️ Banderas explícitas para evitar confusiones en el Front
+        es_rechazado: v.estado === 'RECHAZADO',
+        es_baja: v.estado === 'BAJA' || v.estado === 'PENDIENTE_BAJA',
+        es_pendiente: v.estado === 'PENDIENTE',
+        es_aprobado: v.estado === 'APROBADO'
       };
     });
+
     // Identificar el vehículo activo para facilitar el acceso plano en el frontend si es necesario
     const vehiculoActivo = vehiculosEvaluados.find(v => v.id === r.IDvehiculo_activo) || vehiculosEvaluados[0] || null;
 
@@ -628,7 +635,14 @@ export const getMisVehiculosService = async (IDusuario) => {
     [IDusuario]
   );
 
-  return rows;
+  // Mapeamos para inyectar las banderas explícitas
+  return rows.map((v) => ({
+    ...v,
+    es_rechazado: v.estado === 'RECHAZADO',
+    es_baja: v.estado === 'BAJA' || v.estado === 'PENDIENTE_BAJA',
+    es_pendiente: v.estado === 'PENDIENTE',
+    es_aprobado: v.estado === 'APROBADO'
+  }));
 };
 
 export const solicitarVehiculoService = async (IDusuario, data, archivos = {}) => {
@@ -725,8 +739,11 @@ export const seleccionarVehiculoActivoService = async (IDusuario, IDvehiculo) =>
 };
 
 // En repartidores.service.js
-export const getVehiculosPendientesService = async (estado = 'PENDIENTE') => {
-  const estadoNormalizado = String(estado).toUpperCase();
+export const getVehiculosPendientesService = async (estado = null) => {
+  // Si no se pasa un estado específico, traemos ambos estados pendientes por defecto
+  const estadosAFiltrar = estado 
+    ? [String(estado).toUpperCase()] 
+    : ['PENDIENTE', 'PENDIENTE_DOCUMENTACION'];
 
   const [rows] = await pool.query(
     `
@@ -753,13 +770,48 @@ export const getVehiculosPendientesService = async (estado = 'PENDIENTE') => {
     JOIN repartidores r ON v.IDrepartidor = r.id
     JOIN usuarios u ON r.IDusuario = u.id
     JOIN tipos_vehiculo tv ON v.IDtipo_vehiculo = tv.id
-    WHERE v.estado = ?
+    WHERE v.estado IN (?)
     ORDER BY v.id DESC
     `,
-    [estadoNormalizado]
+    [estadosAFiltrar]
   );
 
-  return rows;
+  // Mapear para entregar la estructura clara con bloques separando actual/nuevo y la bandera de es_nuevo_vehiculo
+  return rows.map(v => ({
+    id: v.id,
+    es_nuevo_vehiculo: Boolean(v.es_nuevo_vehiculo),
+    repartidor: {
+      id: v.IDrepartidor,
+      nombre_completo: `${v.nombre || ''} ${v.apellido || ''}`.trim() || v.username,
+      email: v.email,
+      dni: v.dni
+    },
+    vehiculo: {
+      tipo: v.tipo_vehiculo,
+      marca: v.marca,
+      modelo: v.modelo,
+      patente: v.patente
+    },
+    // 📂 Documentación Actual / Anterior (Lo que ya tiene aprobado)
+    documentacion_actual: {
+      cedula_url: v.cedula_url,
+      fecha_vencimiento_cedula: v.fecha_vencimiento_cedula,
+      seguro_url: v.seguro_url,
+      fecha_vencimiento_seguro: v.fecha_vencimiento_seguro,
+      licencia_url: v.licencia_url,
+      fecha_vencimiento_licencia: v.fecha_vencimiento_licencia
+    },
+    // 📂 Documentación Nueva / Renovada (Lo que subió para actualizar)
+    documentacion_nueva: {
+      cedula_url: v.nueva_cedula_url,
+      fecha_vencimiento_cedula: v.nueva_fecha_vencimiento_cedula,
+      seguro_url: v.nuevo_seguro_url,
+      fecha_vencimiento_seguro: v.nueva_fecha_vencimiento_seguro,
+      licencia_url: v.nueva_licencia_url,
+      fecha_vencimiento_licencia: v.nueva_fecha_vencimiento_licencia
+    },
+    estado: v.estado
+  }));
 };
 
 export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo = null) => {
@@ -776,9 +828,9 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
   try {
     await conn.beginTransaction();
 
-    // 1. Verificar que el vehículo exista y traer su estado actual
+    // 1. Verificar que el vehículo exista y traer todos los campos necesarios
     const [[vehiculo]] = await conn.query(
-      `SELECT id, IDrepartidor, estado FROM vehiculos_repartidor WHERE id = ?`,
+      `SELECT * FROM vehiculos_repartidor WHERE id = ?`,
       [IDvehiculo]
     );
 
@@ -786,50 +838,94 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
       throw new Error('Vehículo no encontrado');
     }
 
-    let nuevoEstadoVehiculo;
-    let activoValor;
     let mensajeRespuesta;
 
-    if (estadoNormalizado === 'APROBADO') {
-      // Si se aprueba: si era PENDIENTE_BAJA pasa a BAJA, si era PENDIENTE pasa a APROBADO
-      nuevoEstadoVehiculo = vehiculo.estado === 'PENDIENTE_BAJA' ? 'BAJA' : 'APROBADO';
-      activoValor = vehiculo.estado === 'PENDIENTE_BAJA' ? 0 : 1;
-      mensajeRespuesta = 'Vehículo aprobado correctamente.';
-
-      await conn.query(
-        `UPDATE vehiculos_repartidor 
-         SET estado = ?, activo = ?, motivo_rechazo = NULL 
-         WHERE id = ?`,
-        [nuevoEstadoVehiculo, activoValor, IDvehiculo]
-      );
-
-    } else {
-      // Si se RECHAZA:
-      if (vehiculo.estado === 'PENDIENTE_BAJA') {
-        // Si rechazamos la baja de un vehículo, este debe volver a su estado normal (APROBADO y activo)
-        nuevoEstadoVehiculo = 'APROBADO';
-        activoValor = 1;
-        mensajeRespuesta = 'Solicitud de baja rechazada. El vehículo sigue activo.';
+    // 2. Manejo específico si la revisión corresponde a una actualización por vencimiento de documentación
+    if (vehiculo.estado === 'PENDIENTE_DOCUMENTACION') {
+      if (estadoNormalizado === 'APROBADO') {
+        // Reemplazar los datos viejos con los nuevos si existen, limpiar temporales y dejar el vehículo APROBADO y activo
+        await conn.query(
+          `
+          UPDATE vehiculos_repartidor
+          SET 
+            cedula_url = COALESCE(nueva_cedula_url, cedula_url),
+            fecha_vencimiento_cedula = COALESCE(nueva_fecha_vencimiento_cedula, fecha_vencimiento_cedula),
+            seguro_url = COALESCE(nuevo_seguro_url, seguro_url),
+            fecha_vencimiento_seguro = COALESCE(nueva_fecha_vencimiento_seguro, fecha_vencimiento_seguro),
+            licencia_url = COALESCE(nueva_licencia_url, licencia_url),
+            fecha_vencimiento_licencia = COALESCE(nueva_fecha_vencimiento_licencia, fecha_vencimiento_licencia),
+            nueva_cedula_url = NULL, nueva_fecha_vencimiento_cedula = NULL,
+            nuevo_seguro_url = NULL, nueva_fecha_vencimiento_seguro = NULL,
+            nueva_licencia_url = NULL, nueva_fecha_vencimiento_licencia = NULL,
+            estado = 'APROBADO',
+            activo = 1,
+            motivo_rechazo = NULL,
+            motivo_rechazo_documentacion = NULL
+          WHERE id = ?
+          `,
+          [IDvehiculo]
+        );
+        mensajeRespuesta = 'Actualización de documentación aprobada correctamente.';
       } else {
-        // Si es un vehículo NUEVO en PENDIENTE, al rechazarlo pasa a RECHAZADO y activo = 0
-        nuevoEstadoVehiculo = 'RECHAZADO';
-        activoValor = 0;
-        mensajeRespuesta = 'Solicitud rechazada. El vehículo ha sido marcado como rechazado.';
+        // Rechazar actualización: descartar cambios nuevos, limpiar temporales, volver a APROBADO y guardar el motivo
+        await conn.query(
+          `
+          UPDATE vehiculos_repartidor
+          SET 
+            nueva_cedula_url = NULL, nueva_fecha_vencimiento_cedula = NULL,
+            nuevo_seguro_url = NULL, nueva_fecha_vencimiento_seguro = NULL,
+            nueva_licencia_url = NULL, nueva_fecha_vencimiento_licencia = NULL,
+            estado = 'APROBADO',
+            activo = 1,
+            motivo_rechazo_documentacion = ?
+          WHERE id = ?
+          `,
+          [String(motivoRechazo).trim(), IDvehiculo]
+        );
+        mensajeRespuesta = 'Actualización de documentación rechazada. El vehículo conserva su documentación anterior.';
       }
 
-      await conn.query(
-        `UPDATE vehiculos_repartidor 
-         SET estado = ?, activo = ?, motivo_rechazo = ? 
-         WHERE id = ?`,
-        [nuevoEstadoVehiculo, activoValor, String(motivoRechazo).trim(), IDvehiculo]
-      );
+    } else {
+      // 3. Lógica existente para vehículos nuevos ('PENDIENTE') o solicitudes de baja ('PENDIENTE_BAJA')
+      let nuevoEstadoVehiculo;
+      let activoValor;
 
-      // Si el vehículo quedó rechazado, nos aseguramos de desvincularlo si figuraba como activo
-      if (nuevoEstadoVehiculo === 'RECHAZADO') {
+      if (estadoNormalizado === 'APROBADO') {
+        nuevoEstadoVehiculo = vehiculo.estado === 'PENDIENTE_BAJA' ? 'BAJA' : 'APROBADO';
+        activoValor = vehiculo.estado === 'PENDIENTE_BAJA' ? 0 : 1;
+        mensajeRespuesta = 'Vehículo aprobado correctamente.';
+
         await conn.query(
-          `UPDATE repartidores SET IDvehiculo_activo = NULL WHERE id = ? AND IDvehiculo_activo = ?`,
-          [vehiculo.IDrepartidor, IDvehiculo]
+          `UPDATE vehiculos_repartidor 
+           SET estado = ?, activo = ?, motivo_rechazo = NULL 
+           WHERE id = ?`,
+          [nuevoEstadoVehiculo, activoValor, IDvehiculo]
         );
+
+      } else {
+        if (vehiculo.estado === 'PENDIENTE_BAJA') {
+          nuevoEstadoVehiculo = 'APROBADO';
+          activoValor = 1;
+          mensajeRespuesta = 'Solicitud de baja rechazada. El vehículo sigue activo.';
+        } else {
+          nuevoEstadoVehiculo = 'RECHAZADO';
+          activoValor = 0;
+          mensajeRespuesta = 'Solicitud rechazada. El vehículo ha sido marcado como rechazado.';
+        }
+
+        await conn.query(
+          `UPDATE vehiculos_repartidor 
+           SET estado = ?, activo = ?, motivo_rechazo = ? 
+           WHERE id = ?`,
+          [nuevoEstadoVehiculo, activoValor, String(motivoRechazo).trim(), IDvehiculo]
+        );
+
+        if (nuevoEstadoVehiculo === 'RECHAZADO') {
+          await conn.query(
+            `UPDATE repartidores SET IDvehiculo_activo = NULL WHERE id = ? AND IDvehiculo_activo = ?`,
+            [vehiculo.IDrepartidor, IDvehiculo]
+          );
+        }
       }
     }
 
@@ -956,82 +1052,51 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
     throw new Error('El vehículo no existe o no te pertenece.');
   }
 
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+  // 2. Extraer archivos y fechas nuevas solo si fueron provistos
+  const nuevaCedulaUrl = archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null;
+  const nuevaFechaCedula = datos.fecha_vencimiento_cedula || null;
 
-  const estaVencido = (fechaStr) => {
-    if (!fechaStr) return false;
-    return new Date(fechaStr) < hoy;
-  };
+  const nuevoSeguroUrl = archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null;
+  const nuevaFechaSeguro = datos.fecha_vencimiento_seguro || null;
 
-  const licenciaVencida = estaVencido(vehiculo.fecha_vencimiento_licencia);
-  const seguroVencido = estaVencido(vehiculo.fecha_vencimiento_seguro);
-  const cedulaVencida = estaVencido(vehiculo.fecha_vencimiento_cedula);
+  const nuevaLicenciaUrl = archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null;
+  const nuevaFechaLicencia = datos.fecha_vencimiento_licencia || null;
 
-  // 2. Comparación y actualización inteligente basada en fechas de vencimiento y nuevos archivos
-  let cedulaUrl = vehiculo.cedula_url;
-  let fechaCedula = vehiculo.fecha_vencimiento_cedula;
-  if (cedulaVencida || archivos.cedula?.[0] || datos.fecha_vencimiento_cedula) {
-    if (archivos.cedula?.[0]) {
-      cedulaUrl = `/uploads/${archivos.cedula[0].filename}`;
-    }
-    if (datos.fecha_vencimiento_cedula) {
-      fechaCedula = datos.fecha_vencimiento_cedula;
-    }
+  // Validar que al menos se haya enviado un documento a actualizar
+  if (!nuevaCedulaUrl && !nuevaFechaCedula && !nuevoSeguroUrl && !nuevaFechaSeguro && !nuevaLicenciaUrl && !nuevaFechaLicencia) {
+    throw new Error('Debe adjuntar al menos un documento o fecha para actualizar.');
   }
 
-  let seguroUrl = vehiculo.seguro_url;
-  let fechaSeguro = vehiculo.fecha_vencimiento_seguro;
-  if (seguroVencido || archivos.seguro?.[0] || datos.fecha_vencimiento_seguro) {
-    if (archivos.seguro?.[0]) {
-      seguroUrl = `/uploads/${archivos.seguro[0].filename}`;
-    }
-    if (datos.fecha_vencimiento_seguro) {
-      fechaSeguro = datos.fecha_vencimiento_seguro;
-    }
-  }
-
-  let licenciaUrl = vehiculo.licencia_url;
-  let fechaLicencia = vehiculo.fecha_vencimiento_licencia;
-  if (licenciaVencida || archivos.licencia?.[0] || datos.fecha_vencimiento_licencia) {
-    if (archivos.licencia?.[0]) {
-      licenciaUrl = `/uploads/${archivos.licencia[0].filename}`;
-    }
-    if (datos.fecha_vencimiento_licencia) {
-      fechaLicencia = datos.fecha_vencimiento_licencia;
-    }
-  }
-
-  // 3. Guardar cambios y colocar el estado en PENDIENTE para que el admin valide la renovación
+  // 3. Guardar en los campos "nuevos" y poner el estado en PENDIENTE_DOCUMENTACION
   await pool.query(
     `
     UPDATE vehiculos_repartidor
     SET 
-      cedula_url = ?,
-      fecha_vencimiento_cedula = ?,
-      seguro_url = ?,
-      fecha_vencimiento_seguro = ?,
-      licencia_url = ?,
-      fecha_vencimiento_licencia = ?,
-      estado = 'PENDIENTE',
-      motivo_rechazo = NULL
+      nueva_cedula_url = COALESCE(?, nueva_cedula_url),
+      nueva_fecha_vencimiento_cedula = COALESCE(?, nueva_fecha_vencimiento_cedula),
+      nuevo_seguro_url = COALESCE(?, nuevo_seguro_url),
+      nueva_fecha_vencimiento_seguro = COALESCE(?, nueva_fecha_vencimiento_seguro),
+      nueva_licencia_url = COALESCE(?, nueva_licencia_url),
+      nueva_fecha_vencimiento_licencia = COALESCE(?, nueva_fecha_vencimiento_licencia),
+      estado = 'PENDIENTE_DOCUMENTACION',
+      motivo_rechazo_documentacion = NULL
     WHERE id = ?
     `,
     [
-      cedulaUrl,
-      fechaCedula,
-      seguroUrl,
-      fechaSeguro,
-      licenciaUrl,
-      fechaLicencia,
+      nuevaCedulaUrl,
+      nuevaFechaCedula,
+      nuevoSeguroUrl,
+      nuevaFechaSeguro,
+      nuevaLicenciaUrl,
+      nuevaFechaLicencia,
       IDvehiculo
     ]
   );
 
   return {
-    message: 'Actualización de documentación por vencimiento procesada correctamente. Pendiente de aprobación.',
+    message: 'Actualización de documentación enviada correctamente. Pendiente de aprobación administrativa.',
     IDvehiculo,
-    estado: 'PENDIENTE'
+    estado: 'PENDIENTE_DOCUMENTACION'
   };
 };
 

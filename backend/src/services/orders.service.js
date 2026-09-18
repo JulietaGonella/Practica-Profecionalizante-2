@@ -528,16 +528,16 @@ export const getAvailableOrdersService = async (IDusuario) => {
   const [orders] = await pool.query(
     `
     SELECT 
-      o.id AS IDorden,
-      o.precio AS subtotal,
-      o.costo_envio,
-      o.total,
-      o.tiempo_estimado_min,
-      c.direccion AS direccion_cliente
+    o.id AS IDorden,
+    o.precio AS subtotal,
+    o.costo_envio,
+    o.total,
+    o.tiempo_estimado_min,
+    c.direccion AS direccion_cliente
     FROM ordenes o
     JOIN clientes c ON o.IDcliente = c.IDusuario
-    WHERE o.IDestado = 2 AND o.IDrepartidor IS NULL
-    ORDER BY o.id DESC
+    WHERE o.IDestado IN (2, 7) AND o.IDrepartidor IS NULL
+    ORDER BY o.id DESC;
     `
   );
 

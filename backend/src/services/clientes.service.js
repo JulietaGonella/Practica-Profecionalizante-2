@@ -100,21 +100,33 @@ export const getClientesService = async () => {
   return rows;
 };
 
-// 2. Renombrar esta función a getPerfilClienteService
+// 2. Obtener el perfil del cliente incluyendo su dirección principal desde direcciones_cliente
 export const getPerfilClienteService = async (userId) => {
   const [rows] = await pool.query(
-    `SELECT c.id, c.telefono, c.direccion, c.piso, c.departamento, c.referencia, c.latitud, c.longitud,
-            u.nombre, u.apellido, u.username, u.email
-     FROM clientes c
-     JOIN usuarios u ON c.IDusuario = u.id
-     WHERE c.IDusuario = ?`,
+    `SELECT 
+            u.nombre, 
+            u.apellido, 
+            u.username, 
+            u.email, 
+            c.telefono,
+            d.direccion, 
+            d.piso, 
+            d.departamento, 
+            d.referencia, 
+            d.latitud, 
+            d.longitud
+     FROM usuarios u
+     LEFT JOIN clientes c ON u.id = c.IDusuario
+     LEFT JOIN direcciones_cliente d ON u.id = d.IDusuario AND d.es_principal = 1
+     WHERE u.id = ?`,
     [userId]
   );
 
   if (rows.length === 0) {
-    throw new Error('Perfil de cliente no encontrado');
+    throw new Error('Perfil de usuario no encontrado');
   }
 
+  // Devolvemos el objeto aplanado. Si no hay dirección principal, los campos irán como null o vacíos.
   return rows[0];
 };
 
@@ -131,44 +143,90 @@ export const updatePerfilClienteService = async (userId, data) => {
     longitud
   } = data;
 
-  if (!nombre || !apellido || !direccion || !telefono || latitud === undefined || longitud === undefined) {
-    throw new Error('Nombre, apellido, dirección, teléfono, latitud y longitud son requeridos');
+  if (!nombre || !apellido || !telefono) {
+    throw new Error('Nombre, apellido y teléfono son requeridos');
   }
 
-  const lat = Number(latitud);
-  const lng = Number(longitud);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  if (isNaN(lat) || lat < -90 || lat > 90) {
-    throw new Error('La latitud debe estar entre -90 y 90');
+    // 1. Actualizar datos básicos de usuario
+    await conn.query(
+      `UPDATE usuarios
+       SET nombre = ?, apellido = ?
+       WHERE id = ?`,
+      [String(nombre).trim(), String(apellido).trim(), userId]
+    );
+
+    // 2. Actualizar teléfono en la tabla clientes
+    await conn.query(
+      `UPDATE clientes
+       SET telefono = ?
+       WHERE IDusuario = ?`,
+      [telefono ? String(telefono).trim() : null, userId]
+    );
+
+    // 3. Manejar la dirección principal en direcciones_cliente solo si se envía información de dirección
+    if (direccion && latitud !== undefined && longitud !== undefined) {
+      const lat = Number(latitud);
+      const lng = Number(longitud);
+
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        throw new Error('La latitud debe estar entre -90 y 90');
+      }
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        throw new Error('La longitud debe estar entre -180 y 180');
+      }
+
+      // Verificamos si ya existe una dirección principal
+      const [dirPrincipal] = await conn.query(
+        `SELECT id FROM direcciones_cliente WHERE IDusuario = ? AND es_principal = 1`,
+        [userId]
+      );
+
+      if (dirPrincipal.length > 0) {
+        // Actualizar la dirección principal existente
+        await conn.query(
+          `UPDATE direcciones_cliente 
+           SET direccion = ?, piso = ?, departamento = ?, referencia = ?, latitud = ?, longitud = ?
+           WHERE id = ?`,
+          [
+            String(direccion).trim(),
+            piso ? String(piso).trim() : null,
+            departamento ? String(departamento).trim() : null,
+            referencia ? String(referencia).trim() : null,
+            lat,
+            lng,
+            dirPrincipal[0].id
+          ]
+        );
+      } else {
+        // Si no hay ninguna principal, creamos una nueva como principal
+        await conn.query(
+          `INSERT INTO direcciones_cliente (IDusuario, alias, direccion, piso, departamento, referencia, latitud, longitud, es_principal)
+           VALUES (?, 'Principal', ?, ?, ?, ?, ?, ?, 1)`,
+          [
+            userId,
+            String(direccion).trim(),
+            piso ? String(piso).trim() : null,
+            departamento ? String(departamento).trim() : null,
+            referencia ? String(referencia).trim() : null,
+            lat,
+            lng
+          ]
+        );
+      }
+    }
+
+    await conn.commit();
+    return getPerfilClienteService(userId);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
-  if (isNaN(lng) || lng < -180 || lng > 180) {
-    throw new Error('La longitud debe estar entre -180 y 180');
-  }
-
-  await pool.query(
-    `UPDATE usuarios
-     SET nombre = ?, apellido = ?
-     WHERE id = ?`,
-    [String(nombre).trim(), String(apellido).trim(), userId]
-  );
-
-  await pool.query(
-    `UPDATE clientes
-     SET telefono = ?, direccion = ?, piso = ?, departamento = ?, referencia = ?, latitud = ?, longitud = ?
-     WHERE IDusuario = ?`,
-    [
-      String(telefono).trim(),
-      String(direccion).trim(),
-      piso ? String(piso).trim() : null,
-      departamento ? String(departamento).trim() : null,
-      referencia ? String(referencia).trim() : null,
-      lat,
-      lng,
-      userId
-    ]
-  );
-
-  return getPerfilClienteService(userId); // 👈 Asegúrate de usar el nuevo nombre aquí también
 };
 
 // Obtener el historial completo de pedidos de un cliente específico para el panel de administración

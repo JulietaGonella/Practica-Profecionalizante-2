@@ -581,5 +581,20 @@ MODIFY COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'PENDIENTE_BAJA'
 
 USE BD_SmartDrop;
 
+-- 1. Ampliar el ENUM del campo 'estado' en 'vehiculos_repartidor' para incluir los nuevos estados solicitados
 ALTER TABLE vehiculos_repartidor 
-MODIFY COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA') NOT NULL DEFAULT 'APROBADO';
+MODIFY COLUMN estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA', 'PENDIENTE_DOCUMENTACION', 'RECHAZADO_DOCUMENTACION') NOT NULL DEFAULT 'APROBADO';
+
+-- 2. Agregar la nueva columna para el motivo de rechazo de la documentación
+ALTER TABLE vehiculos_repartidor
+ADD COLUMN motivo_rechazo_documentacion TEXT NULL AFTER motivo_rechazo;
+
+USE BD_SmartDrop;
+
+ALTER TABLE vehiculos_repartidor
+  ADD COLUMN nueva_cedula_url VARCHAR(255) NULL AFTER fecha_vencimiento_cedula,
+  ADD COLUMN nueva_fecha_vencimiento_cedula DATE NULL AFTER nueva_cedula_url,
+  ADD COLUMN nuevo_seguro_url VARCHAR(255) NULL AFTER nueva_fecha_vencimiento_cedula,
+  ADD COLUMN nueva_fecha_vencimiento_seguro DATE NULL AFTER nuevo_seguro_url,
+  ADD COLUMN nueva_licencia_url VARCHAR(255) NULL AFTER nueva_fecha_vencimiento_seguro,
+  ADD COLUMN nueva_fecha_vencimiento_licencia DATE NULL AFTER nueva_licencia_url;

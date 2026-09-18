@@ -216,26 +216,34 @@ export const PanelAdministrador = () => {
         localesData,
         repartidoresData,
         clientesData,
-        solicitudesData,
+        solicitudesPendientesData,
+        solicitudesDocData, // 👈 Solicitudes de nueva documentación
         alertasData,
-        bajasData // 👈 Agregado
+        bajasData
       ] = await Promise.all([
         getUsuariosAdmin(),
         getLocalesAdmin(),
         getRepartidoresAdmin(),
         getClientesAdmin(),
-        getSolicitudesVehiculosAdmin(),
+        getSolicitudesVehiculosAdmin('PENDIENTE'),
+        getSolicitudesVehiculosAdmin('PENDIENTE_DOCUMENTACION'), // 👈 Petición específica para este estado
         getAlertasDocumentacionAdmin(),
-        getVehiculosPendientesBajaAdmin() // 👈 Petición al endpoint de bajas
+        getVehiculosPendientesBajaAdmin()
       ]);
+
+      // 👈 Combinamos ambos arrays de solicitudes en uno solo
+      const solicitudesCombinadas = [
+        ...(Array.isArray(solicitudesPendientesData) ? solicitudesPendientesData : []),
+        ...(Array.isArray(solicitudesDocData) ? solicitudesDocData : [])
+      ];
 
       setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
       setLocales(Array.isArray(localesData) ? localesData : []);
       setRepartidores(Array.isArray(repartidoresData) ? repartidoresData : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
-      setSolicitudesVehiculos(Array.isArray(solicitudesData) ? solicitudesData : []);
+      setSolicitudesVehiculos(solicitudesCombinadas); // 👈 Guardamos el combinado
       setAlertasDoc(Array.isArray(alertasData) ? alertasData : []);
-      setVehiculosBaja(Array.isArray(bajasData) ? bajasData : []); // 👈 Guardar en estado
+      setVehiculosBaja(Array.isArray(bajasData) ? bajasData : []);
 
       setPaginaUsuarios(1);
       setPaginaRepartidores(1);
@@ -1590,17 +1598,18 @@ export const PanelAdministrador = () => {
                             </strong>
 
                             {/* 🏷️ Badge distintivo según el tipo de solicitud */}
+                            {/* 🏷️ Badge distintivo según el estado o tipo de solicitud */}
                             {solicitud.estado === 'PENDIENTE_BAJA' ? (
                               <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 ❌ Solicitud de Baja
                               </span>
-                            ) : Number(solicitud.es_nuevo_vehiculo) === 1 ? (
-                              <span style={{ backgroundColor: '#e7f5ff', color: '#1c7ed6', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                🆕 Solicitud de Nuevo Vehículo
-                              </span>
-                            ) : (
+                            ) : solicitud.estado === 'PENDIENTE_DOCUMENTACION' || Number(solicitud.es_nuevo_vehiculo) === 0 ? (
                               <span style={{ backgroundColor: '#fff9db', color: '#f59f00', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 📄 Solicitud de Nueva Documentación
+                              </span>
+                            ) : (
+                              <span style={{ backgroundColor: '#e7f5ff', color: '#1c7ed6', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                🆕 Solicitud de Nuevo Vehículo
                               </span>
                             )}
                           </div>
@@ -2161,95 +2170,171 @@ export const PanelAdministrador = () => {
                       <strong>Vehículo:</strong> {documentacionVehiculo.tipo_vehiculo} · {documentacionVehiculo.marca || 'Sin marca'} {documentacionVehiculo.modelo || ''} {documentacionVehiculo.patente ? `(${documentacionVehiculo.patente})` : ''}
                     </p>
 
-                    {/* Sección de Documentos y Fechas de Vencimiento */}
-                    {/* Sección de Documentos y Fechas de Vencimiento */}
-                    <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
-                      {documentacionVehiculo.es_nuevo_vehiculo
-                        ? 'Documentación Presentada'
-                        : 'Archivos y Vencimientos Actualizados'}
-                    </h4>
+                    {/* Sección de Documentos y Fechas de Vencimiento (Oculta si es bicicleta) */}
+                    {!(documentacionVehiculo.tipo_vehiculo?.toLowerCase().includes('bici')) ? (
+                      <>
+                        <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
+                          {Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
+                            ? 'Documentación Presentada'
+                            : 'Archivos y Vencimientos Actualizados'}
+                        </h4>
 
-                    {(() => {
-                      // 1. Mapeamos la lista completa de documentos disponibles
-                      const listaDocumentos = [
-                        {
-                          etiqueta: 'Cédula Verde',
-                          ruta: documentacionVehiculo.cedula_url,
-                          vencimiento: documentacionVehiculo.fecha_vencimiento_cedula
-                        },
-                        {
-                          etiqueta: 'Seguro Obligatorio',
-                          ruta: documentacionVehiculo.seguro_url,
-                          vencimiento: documentacionVehiculo.fecha_vencimiento_seguro
-                        },
-                        {
-                          etiqueta: 'Licencia de Conducir',
-                          ruta: documentacionVehiculo.licencia_url,
-                          vencimiento: documentacionVehiculo.fecha_vencimiento_licencia
-                        }
-                      ];
+                        {(() => {
+                          // 1. Mapeamos la lista completa de documentos disponibles
+                          const listaDocumentos = [
+                            {
+                              etiqueta: 'Cédula Verde',
+                              ruta: documentacionVehiculo.cedula_url,
+                              vencimiento: documentacionVehiculo.fecha_vencimiento_cedula
+                            },
+                            {
+                              etiqueta: 'Seguro Obligatorio',
+                              ruta: documentacionVehiculo.seguro_url,
+                              vencimiento: documentacionVehiculo.fecha_vencimiento_seguro
+                            },
+                            {
+                              etiqueta: 'Licencia de Conducir',
+                              ruta: documentacionVehiculo.licencia_url,
+                              vencimiento: documentacionVehiculo.fecha_vencimiento_licencia
+                            }
+                          ];
 
-                      // 2. Si no es un vehículo nuevo, filtramos para mostrar SOLO aquellos campos que incluyan un nuevo archivo o fecha
-                      const documentosAMostrar = documentacionVehiculo.es_nuevo_vehiculo
-                        ? listaDocumentos
-                        : listaDocumentos.filter(doc => Boolean(doc.ruta) || Boolean(doc.vencimiento));
+                          // 2. Si es moto/auto y NO es vehículo nuevo, filtramos para mostrar 
+                          // SOLO los registros que tengan un nuevo archivo o una nueva fecha.
+                          const documentosAMostrar =
+                            Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
+                              ? listaDocumentos
+                              : listaDocumentos.filter(
+                                (doc) => Boolean(doc.ruta) || Boolean(doc.vencimiento)
+                              );
 
-                      if (documentosAMostrar.length === 0) {
-                        return (
-                          <div style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666', fontStyle: 'italic' }}>
-                            No se adjuntaron nuevos archivos ni fechas de vencimiento en esta solicitud.
-                          </div>
-                        );
-                      }
+                          if (documentosAMostrar.length === 0) {
+                            return (
+                              <div
+                                style={{
+                                  padding: '1rem',
+                                  backgroundColor: '#f8f9fa',
+                                  borderRadius: '8px',
+                                  color: '#666',
+                                  fontStyle: 'italic'
+                                }}
+                              >
+                                No se adjuntaron nuevos archivos ni fechas de vencimiento en esta solicitud.
+                              </div>
+                            );
+                          }
 
-                      return documentosAMostrar.map(({ etiqueta, ruta, vencimiento }) => {
-                        const url = resolverDocumento(ruta);
-                        const fechaFormateada = vencimiento ? new Date(vencimiento).toLocaleDateString('es-AR') : null;
-                        const estaVencido = vencimiento ? new Date(vencimiento) < new Date() : false;
+                          return documentosAMostrar.map(
+                            ({ etiqueta, ruta, vencimiento }) => {
+                              const url = resolverDocumento(ruta);
 
-                        return (
-                          <div
-                            key={etiqueta}
-                            style={{
-                              marginBottom: '1rem',
-                              padding: '0.8rem',
-                              border: '1px solid #dee2e6',
-                              borderRadius: '8px',
-                              backgroundColor: !documentacionVehiculo.es_nuevo_vehiculo ? '#fffde7' : '#fff' // Resaltado especial si es actualización
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong>{etiqueta}</strong>
+                              const fechaFormateada = vencimiento
+                                ? new Date(vencimiento).toLocaleDateString('es-AR')
+                                : null;
 
-                              {/* Fecha de vencimiento si fue enviada */}
-                              {vencimiento && (
-                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: estaVencido ? '#e03131' : '#2b8a3e' }}>
-                                  Vence: {fechaFormateada} {estaVencido ? '(⚠️ VENCIDO)' : ''}
-                                </span>
-                              )}
-                            </div>
+                              const estaVencido = vencimiento
+                                ? new Date(vencimiento) < new Date()
+                                : false;
 
-                            {url ? (
-                              <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: '0.35rem', color: '#1c7ed6', fontWeight: '500' }}>
-                                🔗 Abrir nuevo archivo enviado
-                              </a>
-                            ) : (
-                              <p style={{ color: '#868e96', margin: '0.35rem 0 0', fontSize: '0.9rem' }}>
-                                {documentacionVehiculo.es_nuevo_vehiculo ? 'No presentado' : 'Sin nuevo archivo adjunto (Mantiene anterior)'}
-                              </p>
-                            )}
+                              return (
+                                <div
+                                  key={etiqueta}
+                                  style={{
+                                    marginBottom: '1rem',
+                                    padding: '0.8rem',
+                                    border: '1px solid #dee2e6',
+                                    borderRadius: '8px',
+                                    backgroundColor:
+                                      Number(documentacionVehiculo.es_nuevo_vehiculo) !== 1
+                                        ? '#fffde7' // Fondo sutilmente distinguible para actualizaciones
+                                        : '#fff'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <strong>{etiqueta}</strong>
 
-                            {url && /\.(jpg|jpeg|png|gif|webp)$/i.test(url) && (
-                              <img
-                                src={url}
-                                alt={etiqueta}
-                                style={{ maxWidth: '100%', maxHeight: '180px', display: 'block', marginTop: '0.5rem', objectFit: 'contain', borderRadius: '4px' }}
-                              />
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
+                                    {vencimiento && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.85rem',
+                                          fontWeight: 'bold',
+                                          color: estaVencido ? '#e03131' : '#2b8a3e'
+                                        }}
+                                      >
+                                        Nueva Fecha Vencimiento: {fechaFormateada}{' '}
+                                        {estaVencido ? '(⚠️ VENCIDO)' : ''}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {url ? (
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        display: 'inline-block',
+                                        marginTop: '0.35rem',
+                                        color: '#1c7ed6',
+                                        fontWeight: '500'
+                                      }}
+                                    >
+                                      🔗 Abrir nuevo archivo enviado
+                                    </a>
+                                  ) : (
+                                    <p
+                                      style={{
+                                        color: '#868e96',
+                                        margin: '0.35rem 0 0',
+                                        fontSize: '0.9rem'
+                                      }}
+                                    >
+                                      Mantiene archivo anterior (Sin modificaciones en este documento)
+                                    </p>
+                                  )}
+
+                                  {url &&
+                                    /\.(jpg|jpeg|png|gif|webp)$/i.test(url) && (
+                                      <img
+                                        src={url}
+                                        alt={etiqueta}
+                                        style={{
+                                          maxWidth: '100%',
+                                          maxHeight: '180px',
+                                          display: 'block',
+                                          marginTop: '0.5rem',
+                                          objectFit: 'contain',
+                                          borderRadius: '4px'
+                                        }}
+                                      />
+                                    )}
+                                </div>
+                              );
+                            }
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          padding: '1rem',
+                          backgroundColor: '#f8f9fa',
+                          borderRadius: '8px',
+                          color: '#666',
+                          fontStyle: 'italic',
+                          margin: '1rem 0'
+                        }}
+                      >
+                        🚲 Al tratarse de una bicicleta, este vehículo no requiere documentación obligatoria.
+                      </div>
+                    )}
+
 
                     {/* Botones de Evaluación en el Modal */}
                     <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
@@ -2488,7 +2573,6 @@ export const PanelAdministrador = () => {
                         )}
 
                       {/* Lista de todos los vehículos asociados */}
-                      {/* Lista de todos los vehículos asociados */}
                       <div style={{ marginTop: '1.2rem' }}>
                         <h3 style={{ margin: '0 0 0.8rem 0', fontSize: '1.1rem' }}>
                           🚗 Vehículos Asociados y Estado Documental
@@ -2508,6 +2592,13 @@ export const PanelAdministrador = () => {
                               const esBici =
                                 v.tipo_vehiculo?.toLowerCase().includes('bici');
 
+                              // Detectamos si el vehículo está dado de baja o rechazado
+                              const esDeshabilitado =
+                                v.estado === 'BAJA' ||
+                                Number(v.activo) === 0 ||
+                                v.estado === 'RECHAZADO' ||
+                                Boolean(v.motivo_rechazo);
+
                               return (
                                 <div
                                   key={v.id}
@@ -2516,10 +2607,16 @@ export const PanelAdministrador = () => {
                                     borderRadius: '8px',
                                     border: esActivo
                                       ? '2px solid #1c7ed6'
-                                      : '1px solid #dee2e6',
-                                    backgroundColor: esActivo
-                                      ? '#f8f9fa'
-                                      : '#ffffff'
+                                      : esDeshabilitado
+                                        ? '1px solid #adb5bd'
+                                        : '1px solid #dee2e6',
+                                    backgroundColor: esDeshabilitado
+                                      ? '#e9ecef' // 👈 Color grisáceo para tarjetas deshabilitadas/rechazadas/baja
+                                      : esActivo
+                                        ? '#f8f9fa'
+                                        : '#ffffff',
+                                    color: esDeshabilitado ? '#495057' : 'inherit',
+                                    opacity: esDeshabilitado ? 0.9 : 1
                                   }}
                                 >
 
@@ -2547,8 +2644,6 @@ export const PanelAdministrador = () => {
                                         flexWrap: 'wrap'
                                       }}
                                     >
-                                      {/* Vehículo activo actual */}
-                                      {/* Badges de Estado diferenciados */}
                                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                         {esActivo && (
                                           <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
@@ -2556,7 +2651,7 @@ export const PanelAdministrador = () => {
                                           </span>
                                         )}
 
-                                        {/* Diferenciación entre Baja y Rechazado */}
+                                        {/* Diferenciación entre Baja y Rechazado manteniendo sus colores originales */}
                                         {v.estado === 'BAJA' || (Number(v.activo) === 0 && !v.motivo_rechazo) ? (
                                           <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                             ❌ Vehículo dado de baja
@@ -2581,10 +2676,11 @@ export const PanelAdministrador = () => {
                                   )}
 
                                   {/* Estado de Documentación y Fechas de Vencimiento */}
+                                  {/* Estado de Documentación y Fechas de Vencimiento */}
                                   {!esBici && (
-                                    <div style={{ marginTop: '0.8rem', borderTop: '1px solid #e9ecef', paddingTop: '0.8rem' }}>
+                                    <div style={{ marginTop: '0.8rem', borderTop: '1px solid #dee2e6', paddingTop: '0.8rem' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <small style={{ fontWeight: 'bold', color: '#495057', fontSize: '0.9rem' }}>
+                                        <small style={{ fontWeight: 'bold', color: esDeshabilitado ? '#6c757d' : '#495057', fontSize: '0.9rem' }}>
                                           Estado de Documentación:
                                         </small>
 
@@ -2594,21 +2690,26 @@ export const PanelAdministrador = () => {
                                             fontWeight: 'bold',
                                             padding: '0.15rem 0.5rem',
                                             borderRadius: '4px',
-                                            backgroundColor: v.documentacion_valida ? '#e6fcf5' : '#fff5f5',
-                                            color: v.documentacion_valida ? '#0ca678' : '#e03131',
-                                            border: `1px solid ${v.documentacion_valida ? '#96f2d7' : '#ffc9c9'}`
+                                            backgroundColor: esDeshabilitado ? '#e2e6ea' : (v.documentacion_valida ? '#e6fcf5' : '#fff5f5'),
+                                            color: esDeshabilitado ? '#495057' : (v.documentacion_valida ? '#0ca678' : '#e03131'),
+                                            border: `1px solid ${esDeshabilitado ? '#ced4da' : (v.documentacion_valida ? '#96f2d7' : '#ffc9c9')}`
                                           }}
                                         >
-                                          {v.documentacion_valida ? '✅ VÁLIDA / VIGENTE' : '⚠️ INVÁLIDA O CON VENCIMIENTOS'}
+                                          {esDeshabilitado ? '⚪ VEHÍCULO DESHABILITADO' : (v.documentacion_valida ? '✅ VÁLIDA / VIGENTE' : '⚠️ INVÁLIDA O CON VENCIMIENTOS')}
                                         </span>
                                       </div>
 
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', fontSize: '0.85rem' }}>
                                         {/* Licencia */}
-                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.licencia_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.licencia_vencida ? '#ffc9c9' : '#dee2e6'}` }}>
+                                        <div style={{
+                                          padding: '0.5rem',
+                                          borderRadius: '6px',
+                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.licencia_vencida ? '#fff5f5' : '#ffffff'),
+                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.licencia_vencida ? '#ffc9c9' : '#dee2e6')}`
+                                        }}>
                                           <div><strong>Licencia:</strong></div>
-                                          <div style={{ color: v.licencia_vencida ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
-                                            Vence: {v.fecha_vencimiento_licencia || 'N/A'} {v.licencia_vencida ? '(VENCIDA)' : ''}
+                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.licencia_vencida ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_licencia || 'N/A'} {v.licencia_vencida && !esDeshabilitado ? '(VENCIDA)' : ''}
                                           </div>
                                           {v.licencia_url ? (
                                             <a href={resolverDocumento(v.licencia_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
@@ -2620,10 +2721,15 @@ export const PanelAdministrador = () => {
                                         </div>
 
                                         {/* Seguro */}
-                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.seguro_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.seguro_vencido ? '#ffc9c9' : '#dee2e6'}` }}>
+                                        <div style={{
+                                          padding: '0.5rem',
+                                          borderRadius: '6px',
+                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.seguro_vencido ? '#fff5f5' : '#ffffff'),
+                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.seguro_vencido ? '#ffc9c9' : '#dee2e6')}`
+                                        }}>
                                           <div><strong>Seguro:</strong></div>
-                                          <div style={{ color: v.seguro_vencido ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
-                                            Vence: {v.fecha_vencimiento_seguro || 'N/A'} {v.seguro_vencido ? '(VENCIDO)' : ''}
+                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.seguro_vencido ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_seguro || 'N/A'} {v.seguro_vencido && !esDeshabilitado ? '(VENCIDO)' : ''}
                                           </div>
                                           {v.seguro_url ? (
                                             <a href={resolverDocumento(v.seguro_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
@@ -2635,10 +2741,15 @@ export const PanelAdministrador = () => {
                                         </div>
 
                                         {/* Cédula */}
-                                        <div style={{ padding: '0.5rem', borderRadius: '6px', backgroundColor: v.cedula_vencida ? '#fff5f5' : '#f8f9fa', border: `1px solid ${v.cedula_vencida ? '#ffc9c9' : '#dee2e6'}` }}>
+                                        <div style={{
+                                          padding: '0.5rem',
+                                          borderRadius: '6px',
+                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.cedula_vencida ? '#fff5f5' : '#ffffff'),
+                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.cedula_vencida ? '#ffc9c9' : '#dee2e6')}`
+                                        }}>
                                           <div><strong>Cédula:</strong></div>
-                                          <div style={{ color: v.cedula_vencida ? '#e03131' : '#2b8a3e', fontWeight: 'bold' }}>
-                                            Vence: {v.fecha_vencimiento_cedula || 'N/A'} {v.cedula_vencida ? '(VENCIDA)' : ''}
+                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.cedula_vencida ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                            Vence: {v.fecha_vencimiento_cedula || 'N/A'} {v.cedula_vencida && !esDeshabilitado ? '(VENCIDA)' : ''}
                                           </div>
                                           {v.cedula_url ? (
                                             <a href={resolverDocumento(v.cedula_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
@@ -2657,7 +2768,6 @@ export const PanelAdministrador = () => {
                           </div>
                         )}
                       </div>
-
                       <button
                         type="button"
                         onClick={cerrarDetalleRepartidor}

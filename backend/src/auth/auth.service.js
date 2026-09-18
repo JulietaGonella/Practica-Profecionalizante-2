@@ -68,25 +68,31 @@ export const registerClientService = async (data) => {
     email,
     password,
     direccion,
+    piso,           // 👈 Campo opcional
+    departamento,   // 👈 Campo opcional
+    referencia,     // 👈 Campo opcional
     telefono,
     latitud,
     longitud
   } = data;
 
-  // 1️⃣ Validar presencia de campos requeridos[cite: 42]
+  // 1️⃣ Validar presencia de campos requeridos
   if (!nombre || !apellido || !username || !email || !password || !direccion || !telefono || latitud === undefined || longitud === undefined) {
     throw new Error('Nombre, apellido, username, email, password, dirección, teléfono, latitud y longitud son obligatorios');
   }
 
-  // 2️⃣ Clean up / Trim de cadenas[cite: 42]
+  // 2️⃣ Clean up / Trim de cadenas
   const cleanNombre = String(nombre).trim();
   const cleanApellido = String(apellido).trim();
   const cleanUsername = String(username).trim();
   const cleanEmail = String(email).trim().toLowerCase();
   const cleanDireccion = String(direccion).trim();
+  const cleanPiso = piso ? String(piso).trim() : null;
+  const cleanDepartamento = departamento ? String(departamento).trim() : null;
+  const cleanReferencia = referencia ? String(referencia).trim() : null;
   const cleanTelefono = String(telefono).trim();
 
-  // 3️⃣ Validar formato de email y contraseña[cite: 42]
+  // 3️⃣ Validar formato de email y contraseña
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(cleanEmail)) {
     throw new Error('El formato del correo electrónico no es válido');
@@ -95,7 +101,7 @@ export const registerClientService = async (data) => {
     throw new Error('La contraseña debe tener al menos 8 caracteres');
   }
 
-  // 4️⃣ Validar rango numérico de Latitud y Longitud GPS[cite: 42]
+  // 4️⃣ Validar rango numérico de Latitud y Longitud GPS
   const lat = Number(latitud);
   const lng = Number(longitud);
 
@@ -122,7 +128,7 @@ export const registerClientService = async (data) => {
     const ROL_CLIENTE_ID = rolCliente.id;
     const ROL_CLIENTE_NOMBRE = rolCliente.nombre;
 
-    // 5️⃣ Verificar duplicados de manera específica (Username o Email)[cite: 42]
+    // 5️⃣ Verificar duplicados de manera específica (Username o Email)
     const [existingUsers] = await conn.query(
       `SELECT username, email FROM usuarios WHERE LOWER(username) = LOWER(?) OR LOWER(email) = ?`,
       [cleanUsername, cleanEmail]
@@ -140,6 +146,7 @@ export const registerClientService = async (data) => {
 
     const password_hash = await bcrypt.hash(password, 10);
 
+    // 6️⃣ Insertar en la tabla usuarios
     const [userResult] = await conn.query(
       `INSERT INTO usuarios (nombre, apellido, username, email, password_hash, rol_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -148,10 +155,18 @@ export const registerClientService = async (data) => {
 
     const IDusuario = userResult.insertId;
 
+    // 7️⃣ Insertar perfil básico en la tabla clientes (solo teléfono)
     await conn.query(
-      `INSERT INTO clientes (IDusuario, telefono, direccion, latitud, longitud)
-       VALUES (?, ?, ?, ?, ?)`,
-      [IDusuario, cleanTelefono, cleanDireccion, lat, lng]
+      `INSERT INTO clientes (IDusuario, telefono)
+       VALUES (?, ?)`,
+      [IDusuario, cleanTelefono]
+    );
+
+    // 8️⃣ Insertar la dirección inicial en la tabla direcciones_cliente
+    await conn.query(
+      `INSERT INTO direcciones_cliente (IDusuario, alias, direccion, piso, departamento, referencia, latitud, longitud, es_principal)
+       VALUES (?, 'Principal', ?, ?, ?, ?, ?, ?, 1)`,
+      [IDusuario, cleanDireccion, cleanPiso, cleanDepartamento, cleanReferencia, lat, lng]
     );
 
     await conn.commit();

@@ -1002,6 +1002,35 @@ export const PanelRepartidor = () => {
                               Motivo: {vehiculo.motivo_rechazo}
                             </div>
                           )}
+
+                        {estaActivo && tieneVencidos && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVehiculoEditando({
+                                ...vehiculo,
+                                vencidos: {
+                                  licencia: lic.vencido,
+                                  seguro: seg.vencido,
+                                  cedula: ced.vencido
+                                }
+                              })
+                            }
+                            style={{
+                              marginTop: '0.6rem',
+                              padding: '0.4rem 0.8rem',
+                              backgroundColor: '#fff5f5',
+                              color: '#c92a2a',
+                              border: '1px solid #ffc9c9',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🔄 Actualizar documentación vencida
+                          </button>
+                        )}
                       </div>
                     );
                   })
