@@ -178,18 +178,21 @@ export const MisPedidos = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3>Pedido #{orden.IDorden}</h3>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {(orden.repartidor_asignado || orden.IDrepartidor) && (
-                      <span style={{
-                        fontWeight: 'bold',
-                        padding: '0.3rem 0.6rem',
-                        borderRadius: '4px',
-                        backgroundColor: '#d0ebff',
-                        color: '#1864ab',
-                        fontSize: '0.85rem'
-                      }}>
-                        🚴 Repartidor Asignado
-                      </span>
-                    )}
+                    {/* 🚴 Repartidor Asignado (Solo se muestra si está asignado y el pedido NO está entregado ni cancelado) */}
+                    {(orden.repartidor_asignado || orden.IDrepartidor) &&
+                      estadoId !== ESTADOS_ORDEN.ENTREGADO &&
+                      estadoId !== ESTADOS_ORDEN.CANCELADO && (
+                        <span style={{
+                          fontWeight: 'bold',
+                          padding: '0.3rem 0.6rem',
+                          borderRadius: '4px',
+                          backgroundColor: '#d0ebff',
+                          color: '#1864ab',
+                          fontSize: '0.85rem'
+                        }}>
+                          🚴 Repartidor Asignado
+                        </span>
+                      )}
                     <span style={{
                       fontWeight: 'bold',
                       padding: '0.3rem 0.6rem',

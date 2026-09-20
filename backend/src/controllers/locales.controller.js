@@ -135,3 +135,27 @@ export const updateMiPerfilLocal = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+export const geocodificarDireccion = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 3) {
+      return res.json([]);
+    }
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`,
+      {
+        headers: {
+          'User-Agent': 'SmartDrop-App (contacto@tudominio.com)', // Requerido por OSM
+          'Accept-Language': 'es'
+        }
+      }
+    );
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al consultar el servicio de geocodificación' });
+  }
+};

@@ -8,6 +8,95 @@ import {
   confirmarRetiroLocal
 } from '../../api/repartidorService';
 
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import L from 'leaflet';
+
+/* ============================================================
+   🗺️ ICONOS ILUSTRADOS PERSONALIZADOS PARA EL MAPA
+   ============================================================ */
+
+// 🚴 REPARTIDOR
+const iconoRepartidor = L.divIcon({
+  className: 'custom-marker-repartidor',
+  html: `
+    <div style="
+      background-color: #1c7ed6;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+      border: 2px solid white;
+    ">
+      🚴
+    </div>
+  `,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18]
+});
+
+// 🏠 CLIENTE
+const iconoCliente = L.divIcon({
+  className: 'custom-marker-cliente',
+  html: `
+    <div style="
+      background-color: #2b8a3e;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+      border: 2px solid white;
+    ">
+      🏠
+    </div>
+  `,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18]
+});
+
+// 🏪 LOCAL
+const iconoLocal = (esSiguiente, retirado) => {
+  let bgColor = '#868e96'; // Gris = en espera
+
+  if (retirado) {
+    bgColor = '#20c997'; // Verde = retirado
+  } else if (esSiguiente) {
+    bgColor = '#fd7e14'; // Naranja = siguiente parada
+  }
+
+  return L.divIcon({
+    className: 'custom-marker-local',
+    html: `
+      <div style="
+        background-color: ${bgColor};
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 18px;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+        border: 2px solid white;
+      ">
+        🏪
+      </div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+};
+
 /* Función auxiliar para limpiar números e integrar el código de país */
 const formatearTelefonoWA = (telefono) => {
   if (!telefono) return '';
@@ -372,6 +461,143 @@ export const DetallePedidoRepartidor = () => {
           </span>
         </div>
 
+        {/* 🗺️ SECCIÓN: MAPA INTERACTIVO DE NAVEGACIÓN */}
+        <section
+          style={{
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #dee2e6',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '1.5rem'
+          }}
+        >
+          <h3>🗺️ Mapa de Navegación en Tiempo Real</h3>
+
+          {repLat != null && repLng != null ? (
+            <div
+              style={{
+                height: '400px',
+                width: '100%',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                marginTop: '1rem'
+              }}
+            >
+              <MapContainer
+                center={[repLat, repLng]}
+                zoom={14}
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                {/* ============================================================
+      🚴 MARCADOR ILUSTRADO DEL REPARTIDOR
+      ============================================================ */}
+                <Marker
+                  position={[repLat, repLng]}
+                  icon={iconoRepartidor}
+                >
+                  <Popup>
+                    <strong>🚴 Tu ubicación actual (Repartidor)</strong>
+                    <br />
+                    Lat: {repLat.toFixed(6)}, Lng: {repLng.toFixed(6)}
+                  </Popup>
+                </Marker>
+
+                {/* ============================================================
+      🏪 PINES ILUSTRADOS DE LOS LOCALES
+      ============================================================ */}
+                {localesInvolucrados.map((local, index) => {
+                  if (local.latitud == null || local.longitud == null) return null;
+
+                  const esSiguiente = primerLocalPendiente?.id === local.id;
+
+                  return (
+                    <div key={local.id}>
+                      <Marker
+                        position={[local.latitud, local.longitud]}
+                        icon={iconoLocal(esSiguiente, local.retirado)}
+                      >
+                        <Popup>
+                          <strong>
+                            Parada {index + 1}: {local.nombre} 🏪
+                          </strong>
+
+                          <br />
+
+                          Estado:{' '}
+                          {local.retirado
+                            ? '✅ Retirado'
+                            : esSiguiente
+                              ? '📍 Siguiente parada'
+                              : '⏳ En espera'}
+
+                          <br />
+
+                          Distancia:{' '}
+                          {local.distanciaMetros != null
+                            ? `${local.distanciaMetros}m`
+                            : 'Calculando...'}
+                        </Popup>
+                      </Marker>
+
+                      {/* ========================================================
+            🟢🟠 CÍRCULO DE PROXIMIDAD DEL SIGUIENTE LOCAL
+            ======================================================== */}
+                      {esSiguiente && !local.retirado && (
+                        <Circle
+                          center={[local.latitud, local.longitud]}
+                          radius={UMBRAL_DISTANCIA_METROS}
+                          pathOptions={{
+                            color: local.estaCerca ? '#20c997' : '#fd7e14',
+                            fillColor: local.estaCerca ? '#20c997' : '#fd7e14',
+                            fillOpacity: 0.2
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* ============================================================
+      🏠 MARCADOR ILUSTRADO DEL DESTINO DEL CLIENTE
+      ============================================================ */}
+                {pedido.latitud_entrega != null &&
+                  pedido.longitud_entrega != null && (
+                    <Marker
+                      position={[
+                        Number(pedido.latitud_entrega),
+                        Number(pedido.longitud_entrega)
+                      ]}
+                      icon={iconoCliente}
+                    >
+                      <Popup>
+                        <strong>🏠 Destino del Cliente</strong>
+                        <br />
+                        {pedido.direccion_entrega || pedido.direccion_cliente}
+                      </Popup>
+                    </Marker>
+                  )}
+              </MapContainer>
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: '1rem',
+                backgroundColor: '#fff3cd',
+                borderRadius: '8px',
+                color: '#856404',
+                textAlign: 'center'
+              }}
+            >
+              ⏳ Esperando coordenadas GPS del repartidor para desplegar el mapa interactivo...
+            </div>
+          )}
+        </section>
+
         {/* 📍 SECCIÓN: DATOS DE ENTREGA Y LOCALES */}
         <section
           style={{
@@ -385,7 +611,7 @@ export const DetallePedidoRepartidor = () => {
 
           <p>
             <strong>Dirección del cliente:</strong>{' '}
-            {pedido.direccion_cliente || 'No informada'}
+            {pedido.direccion_entrega || pedido.direccion_cliente || 'No informada'}
           </p>
 
           {/* 📞 Accesos Directos Cliente */}

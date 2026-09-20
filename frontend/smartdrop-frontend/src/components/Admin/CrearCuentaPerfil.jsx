@@ -1,8 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 import {
   crearLocalCompletoAdmin,
   crearRepartidorCompletoAdmin
 } from '../../api/adminService';
+
+// Configuración de iconos por defecto para Leaflet en React
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Componente auxiliar para recentrar y asegurar el redimensionamiento del mapa
+const MapUpdater = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center.lat && center.lng) {
+      map.setView([center.lat, center.lng], 16);
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 150);
+    }
+  }, [center, map]);
+  return null;
+};
+
+// Componente auxiliar para capturar clics en el mapa
+const MapClickHandler = ({ setMarkerPosition, setUbicacionLocal }) => {
+  useMapEvents({
+    click(e) {
+      const { lat, lng } = e.latlng;
+      setMarkerPosition({ lat, lng });
+      setUbicacionLocal({
+        latitud: lat.toFixed(8),
+        longitud: lng.toFixed(8)
+      });
+    },
+  });
+  return null;
+};
 
 export const CrearCuentaPerfilAdmin = () => {
   const [tipo, setTipo] = useState('local');
@@ -42,6 +82,15 @@ export const CrearCuentaPerfilAdmin = () => {
     longitud: ''
   });
 
+  // Estados para el mapa y geocodificación
+  const [mapCenter, setMapCenter] = useState({ lat: -32.4080, lng: -63.2410 });
+  const [markerPosition, setMarkerPosition] = useState({ lat: null, lng: null });
+
+  // Estados para el autocompletado y estado de carga de la búsqueda
+  const [sugerencias, setSugerencias] = useState([]);
+  const [isSearchingSugerencias, setIsSearchingSugerencias] = useState(false);
+  const [buscandoDireccion, setBuscandoDireccion] = useState(false);
+
   const [banner, setBanner] = useState({
     tipo: '',
     texto: ''
@@ -62,6 +111,45 @@ export const CrearCuentaPerfilAdmin = () => {
   const handlePerfilChange = (e) => {
     const { name, value } = e.target;
     setPerfilForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Manejador específico para la dirección con autocompletado en tiempo real
+  const handleDireccionChange = async (e) => {
+    const value = e.target.value;
+    setPerfilForm((prev) => ({ ...prev, direccion: value }));
+
+    if (value.trim().length > 2) {
+      setIsSearchingSugerencias(true);
+      try {
+        // Llamada a tu backend en lugar de a Nominatim directamente
+        const response = await fetch(`/api/locales/geocodificar?q=${encodeURIComponent(value)}`);
+        const data = await response.json();
+        setSugerencias(data || []);
+      } catch (err) {
+        console.error('Error al buscar sugerencias:', err);
+        setSugerencias([]);
+      } finally {
+        setIsSearchingSugerencias(false);
+      }
+    } else {
+      setSugerencias([]);
+    }
+  };
+  
+  // Seleccionar una sugerencia del menú desplegable
+  const seleccionarSugerencia = (item) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    const newPos = { lat, lng: lon };
+
+    setPerfilForm((prev) => ({ ...prev, direccion: item.display_name }));
+    setMapCenter(newPos);
+    setMarkerPosition(newPos);
+    setUbicacionLocal({
+      latitud: lat.toFixed(8),
+      longitud: lon.toFixed(8)
+    });
+    setSugerencias([]);
   };
 
   const handleVehiculoChange = (e) => {
@@ -85,12 +173,53 @@ export const CrearCuentaPerfilAdmin = () => {
     }
   };
 
-  const handleUbicacionLocalChange = (e) => {
-    const { name, value } = e.target;
-    setUbicacionLocal((prev) => ({
-      ...prev,
-      [name]: value
-    }));
+  // Función de respaldo por si el usuario presiona el botón "Buscar" directamente
+  const handleBuscarDireccion = async () => {
+    if (!perfilForm.direccion.trim()) {
+      setBanner({ tipo: 'error', texto: 'Ingresa una dirección para buscar en el mapa.' });
+      return;
+    }
+
+    try {
+      setBuscandoDireccion(true);
+      setBanner({ tipo: '', texto: '' });
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(perfilForm.direccion)}&limit=1`,
+        { headers: { 'Accept-Language': 'es' } }
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        const newPos = { lat, lng: lon };
+
+        setMapCenter(newPos);
+        setMarkerPosition(newPos);
+        setUbicacionLocal({
+          latitud: lat.toFixed(8),
+          longitud: lon.toFixed(8)
+        });
+        setSugerencias([]);
+      } else {
+        setBanner({ tipo: 'error', texto: 'No se encontró la ubicación para la dirección ingresada.' });
+      }
+    } catch (err) {
+      setBanner({ tipo: 'error', texto: 'Error al consultar el servicio de geocodificación.' });
+    } finally {
+      setBuscandoDireccion(false);
+    }
+  };
+
+  // Función cuando el usuario arrastra el marcador en el mapa
+  const handleMarkerDragEnd = (e) => {
+    const marker = e.target;
+    const position = marker.getLatLng();
+    setMarkerPosition(position);
+    setUbicacionLocal({
+      latitud: position.lat.toFixed(8),
+      longitud: position.lng.toFixed(8)
+    });
   };
 
   const crearUsuarioYPerfil = async () => {
@@ -104,7 +233,7 @@ export const CrearCuentaPerfilAdmin = () => {
 
       if (tipo === 'local') {
         if (!ubicacionLocal.latitud || !ubicacionLocal.longitud) {
-          throw new Error('Debes ingresar la latitud y longitud del local.');
+          throw new Error('Debes seleccionar la ubicación del local en el mapa.');
         }
 
         await crearLocalCompletoAdmin({
@@ -181,6 +310,8 @@ export const CrearCuentaPerfilAdmin = () => {
       });
       setArchivosVehiculo({ cedula: null, seguro: null, licencia: null });
       setUbicacionLocal({ latitud: '', longitud: '' });
+      setMarkerPosition({ lat: null, lng: null });
+      setSugerencias([]);
 
     } catch (err) {
       setBanner({
@@ -194,7 +325,6 @@ export const CrearCuentaPerfilAdmin = () => {
 
   const tipoVehiculoActual = String(perfilForm.vehiculo.IDtipo_vehiculo);
 
-  // Estilos reutilizables para homogeneizar los controles
   const inputStyle = {
     padding: '0.75rem',
     borderRadius: '6px',
@@ -282,7 +412,7 @@ export const CrearCuentaPerfilAdmin = () => {
       </div>
 
       <div style={{ display: 'grid', gap: '1.25rem' }}>
-        
+
         {/* Sección: Datos de Cuenta */}
         <div style={cardStyle}>
           <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
@@ -315,11 +445,11 @@ export const CrearCuentaPerfilAdmin = () => {
           </div>
         </div>
 
-        {/* Sección: Datos del Local */}
+        {/* Sección: Datos del Local y Ubicación Híbrida */}
         {tipo === 'local' && (
           <div style={cardStyle}>
             <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-              🏪 Información del Local
+              🏪 Información del Local y Ubicación
             </strong>
             <div style={{ display: 'grid', gap: '1rem' }}>
               <input
@@ -329,27 +459,122 @@ export const CrearCuentaPerfilAdmin = () => {
                 placeholder="Nombre del local"
                 style={inputStyle}
               />
-              <input
-                name="direccion"
-                value={perfilForm.direccion}
-                onChange={handlePerfilChange}
-                placeholder="Dirección del local"
-                style={inputStyle}
-              />
+
+              {/* Input de Dirección con Autocompletado */}
+              <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    name="direccion"
+                    value={perfilForm.direccion}
+                    onChange={handleDireccionChange}
+                    placeholder="Dirección del local (ej. San Martín 123)"
+                    style={inputStyle}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBuscarDireccion}
+                    disabled={buscandoDireccion}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      backgroundColor: buscandoDireccion ? '#adb5bd' : '#2b8a3e',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: buscandoDireccion ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {buscandoDireccion ? '⏳ Buscando...' : '🔍 Buscar'}
+                  </button>
+                </div>
+
+                {/* Lista de sugerencias desplegables */}
+                {sugerencias.length > 0 && (
+                  <ul
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #ced4da',
+                      borderRadius: '0 0 6px 6px',
+                      listStyle: 'none',
+                      padding: 0,
+                      margin: 0,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {sugerencias.map((item, index) => (
+                      <li
+                        key={index}
+                        onClick={() => seleccionarSugerencia(item)}
+                        style={{
+                          padding: '0.6rem 0.75rem',
+                          fontSize: '0.9rem',
+                          borderBottom: index < sugerencias.length - 1 ? '1px solid #f1f3f5' : 'none',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8f9fa')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#ffffff')}
+                      >
+                        📍 {item.display_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Contenedor del Mapa Interactivo */}
+              <div style={{ height: '320px', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid #ced4da' }}>
+                <MapContainer
+                  center={[mapCenter.lat, mapCenter.lng]}
+                  zoom={14}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <MapUpdater center={mapCenter} />
+                  <MapClickHandler setMarkerPosition={setMarkerPosition} setUbicacionLocal={setUbicacionLocal} />
+                  {markerPosition.lat && markerPosition.lng && (
+                    <Marker
+                      position={[markerPosition.lat, markerPosition.lng]}
+                      draggable={true}
+                      eventHandlers={{
+                        dragend: handleMarkerDragEnd,
+                      }}
+                    />
+                  )}
+                </MapContainer>
+              </div>
+
+              <small style={{ color: '#6c757d' }}>
+                💡 Escribe la dirección para ver sugerencias y selecciona una, o haz clic / arrastra el marcador en el mapa.
+              </small>
+
+              {/* Coordenadas sincronizadas automáticamente */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <input
                   name="latitud"
                   value={ubicacionLocal.latitud}
-                  onChange={handleUbicacionLocalChange}
-                  placeholder="Latitud (ej. -31.41)"
-                  style={inputStyle}
+                  placeholder="Latitud"
+                  style={{ ...inputStyle, backgroundColor: '#f8f9fa' }}
+                  readOnly
                 />
                 <input
                   name="longitud"
                   value={ubicacionLocal.longitud}
-                  onChange={handleUbicacionLocalChange}
-                  placeholder="Longitud (ej. -64.18)"
-                  style={inputStyle}
+                  placeholder="Longitud"
+                  style={{ ...inputStyle, backgroundColor: '#f8f9fa' }}
+                  readOnly
                 />
               </div>
             </div>
@@ -383,11 +608,9 @@ export const CrearCuentaPerfilAdmin = () => {
               </select>
             </div>
 
-            {/* Campos condicionales para Moto (3) y Auto (4) */}
             {(tipoVehiculoActual === '3' || tipoVehiculoActual === '4') && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
-                
-                {/* Datos del Vehículo */}
+
                 <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
                     DETALLES DEL VEHÍCULO
@@ -447,7 +670,6 @@ export const CrearCuentaPerfilAdmin = () => {
                   </div>
                 </div>
 
-                {/* Fechas de Vencimiento */}
                 <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
                     FECHAS DE VENCIMIENTO
@@ -488,7 +710,6 @@ export const CrearCuentaPerfilAdmin = () => {
                   </div>
                 </div>
 
-                {/* Carga de Documentación */}
                 <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
                     DOCUMENTACIÓN EN ADJUNTO
@@ -514,7 +735,6 @@ export const CrearCuentaPerfilAdmin = () => {
               </div>
             )}
 
-            {/* Opción única para Bicicleta */}
             {tipoVehiculoActual === '2' && (
               <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', marginTop: '0.5rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>

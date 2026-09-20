@@ -10,7 +10,8 @@ import {
   updateMisHorarios,  // 👈 Importar
   getHorariosByLocalId,
   toggleOperativoLocal,
-  updateMiPerfilLocal
+  updateMiPerfilLocal,
+  geocodificarDireccion
 } from '../controllers/locales.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
 import { requireRole, requireAnyRole } from '../auth/roles.middleware.js';
@@ -47,6 +48,7 @@ router.patch('/:id/toggle-operativo', authMiddleware, requireAnyRole('administra
 
 // Ruta pública para clientes o el mapa principal
 router.get('/:id/horarios', getHorariosByLocalId);
+router.get('/geocodificar', geocodificarDireccion);
 
 // Obtener local por ID
 router.get('/:id', getLocalById);

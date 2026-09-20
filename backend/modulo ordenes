@@ -845,8 +845,8 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       throw new Error('Esta orden ya fue aceptada por otro repartidor y no está disponible');
     }
 
-    // ⛔ VALIDACIÓN: La orden debe estar en "En progreso" (ordenEstado = 2)
-    if (ordenActual.ordenEstado !== 2) {
+    // ⛔ VALIDACIÓN: La orden debe estar en "En progreso" (2) o "Listo para retiro" (3)
+    if (ordenActual.ordenEstado !== 2 && ordenActual.ordenEstado !== 7) {
       throw new Error('La orden no se encuentra en el estado adecuado para ser tomada');
     }
 
@@ -1433,17 +1433,28 @@ export const getMyOrdersService = async (IDcliente) => {
     delete orden.repartidor_apellido;
     delete orden.repartidor_telefono;
 
-    // Obtener los ítems con el estado individual de cada uno
+    // Dentro de getMyOrdersService en orders.service.js:
     const [productos] = await pool.query(
-      `SELECT do.id AS IDdetalle, do.IDproducto, p.nombre AS producto, do.cantidad, 
-              do.precio_unitario, do.comentario, do.motivo_cancelacion AS motivo_rechazo, do.IDlocal, l.nombre AS local, 
-              do.IDestado AS IDestado_item, e.nombre AS estado_item
-       FROM detalle_orden do
-       JOIN productos p ON do.IDproducto = p.id
-       JOIN locales l ON do.IDlocal = l.id
-       JOIN estados e ON do.IDestado = e.id
-       WHERE do.IDorden = ?`,
-      [orden.IDorden]
+      `SELECT 
+      do.id AS IDdetalle, 
+      do.IDproducto, 
+      p.nombre AS producto, 
+      do.cantidad, 
+      do.precio_unitario, 
+      do.comentario, 
+      do.motivo_cancelacion AS motivo_rechazo, 
+      do.IDlocal, 
+      l.nombre AS local, 
+      l.latitud AS latitud,  
+      l.longitud AS longitud, 
+      do.IDestado AS IDestado_item, 
+      e.nombre AS estado_item
+   FROM detalle_orden do
+   JOIN productos p ON do.IDproducto = p.id
+   JOIN locales l ON do.IDlocal = l.id
+   JOIN estados e ON do.IDestado = e.id
+   WHERE do.IDorden = ?`,
+      [orden.IDorden] // ✅ Corrección aplicada
     );
 
     for (const prod of productos) {
@@ -1686,16 +1697,28 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
   }
 
   // 2️⃣ Obtener los productos con el estado individual de cada uno
+  // Dentro de getMyOrdersService en orders.service.js:
   const [productos] = await pool.query(
-    `SELECT do.id AS IDdetalle, do.IDproducto, p.nombre AS producto, do.cantidad, 
-       do.precio_unitario, do.comentario, do.motivo_cancelacion AS motivo_rechazo, do.IDlocal, l.nombre AS local, 
-       do.IDestado AS IDestado_item, e.nombre AS estado_item
-     FROM detalle_orden do
-     JOIN productos p ON do.IDproducto = p.id
-     JOIN locales l ON do.IDlocal = l.id
-     JOIN estados e ON do.IDestado = e.id
-     WHERE do.IDorden = ?`,
-    [IDorden]
+    `SELECT 
+      do.id AS IDdetalle, 
+      do.IDproducto, 
+      p.nombre AS producto, 
+      do.cantidad, 
+      do.precio_unitario, 
+      do.comentario, 
+      do.motivo_cancelacion AS motivo_rechazo, 
+      do.IDlocal, 
+      l.nombre AS local, 
+      l.latitud AS latitud,  
+      l.longitud AS longitud, 
+      do.IDestado AS IDestado_item, 
+      e.nombre AS estado_item
+   FROM detalle_orden do
+   JOIN productos p ON do.IDproducto = p.id
+   JOIN locales l ON do.IDlocal = l.id
+   JOIN estados e ON do.IDestado = e.id
+   WHERE do.IDorden = ?`,
+    [orden.IDorden] // ✅ Corrección aplicada
   );
 
   for (const prod of productos) {
@@ -1725,6 +1748,7 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
   orden.productos = productos;
   return orden;
 };
+
 // src/services/orders.service.js
 export const getMisPedidosAsignadosService = async (IDusuario) => {
   const [[repartidor]] = await pool.query(
@@ -1740,20 +1764,35 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
     `
     SELECT
       o.id AS IDorden,
-      o.total,
+      o.IDcliente,
+      o.IDrepartidor,
+      o.IDestado,
+      e.nombre AS estado_orden,
       o.precio AS subtotal,
       o.costo_envio,
-      o.IDestado,
-      o.IDestado AS id_estado,
-      e.nombre AS estado_orden,
-      c.direccion AS direccion_cliente,
-      c.telefono AS telefono_cliente       -- 👈 Teléfono del Cliente agregado
+      o.total,
+      o.codigo_otp,
+      -- 🟢 Snapshot exacto de la orden con doble alias
+      o.direccion_entrega AS direccion_entrega,
+      o.direccion_entrega AS direccion_cliente,
+      c.telefono AS telefono_cliente,
+      o.latitud_entrega AS latitud_entrega,
+      o.latitud_entrega AS cliente_latitud,
+      o.longitud_entrega AS longitud_entrega,
+      o.longitud_entrega AS cliente_longitud,
+      d.alias AS alias_direccion,
+      d.piso,
+      d.departamento,
+      d.referencia,
+      r.latitud AS repartidor_latitud,
+      r.longitud AS repartidor_longitud,
+      r.ultima_ubicacion AS repartidor_ultima_ubicacion
     FROM ordenes o
     JOIN estados e ON e.id = o.IDestado
     JOIN clientes c ON c.IDusuario = o.IDcliente
+    LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
+    LEFT JOIN repartidores r ON r.id = o.IDrepartidor
     WHERE o.IDrepartidor = ?
-   AND o.IDestado IN (4, 5, 7, 8, 3)
-   ORDER BY o.id DESC
     `,
     [repartidor.id]
   );
@@ -1768,8 +1807,8 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
         do.IDestado AS IDestado_detalle,
         do.motivo_cancelacion AS motivo_rechazo,
         e2.nombre AS estado_detalle,
-        l.nombre AS local,                  -- 👈 Datos del Local agregados
-        l.telefono AS telefono_local        -- 👈 Teléfono del Local agregado
+        l.nombre AS local,
+        l.telefono AS telefono_local
       FROM detalle_orden do
       JOIN productos p ON p.id = do.IDproducto
       JOIN estados e2 ON e2.id = do.IDestado
@@ -1784,8 +1823,6 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
 
   return orders;
 };
-
-// src/services/orders.service.js
 
 export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
   const [[repartidor]] = await pool.query(
@@ -1809,16 +1846,24 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       o.costo_envio,
       o.total,
       o.codigo_otp,
-      c.direccion AS direccion_cliente,
+      o.direccion_entrega AS direccion_entrega,
+      o.direccion_entrega AS direccion_cliente,
       c.telefono AS telefono_cliente,
-      c.latitud AS cliente_latitud,
-      c.longitud AS cliente_longitud,
+      o.latitud_entrega AS latitud_entrega,
+      o.latitud_entrega AS cliente_latitud,
+      o.longitud_entrega AS longitud_entrega,
+      o.longitud_entrega AS cliente_longitud,
+      d.alias AS alias_direccion,
+      d.piso,
+      d.departamento,
+      d.referencia,
       r.latitud AS repartidor_latitud,
       r.longitud AS repartidor_longitud,
       r.ultima_ubicacion AS repartidor_ultima_ubicacion
     FROM ordenes o
     JOIN estados e ON e.id = o.IDestado
     JOIN clientes c ON c.IDusuario = o.IDcliente
+    LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
     LEFT JOIN repartidores r ON r.id = o.IDrepartidor
     WHERE o.id = ?
       AND o.IDrepartidor = ?
@@ -1830,88 +1875,71 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     throw new Error('El pedido no existe o no está asignado a este repartidor');
   }
 
-  // 1️⃣ Obtener locales ORDENADOS por Nivel de Sensibilidad del Producto (Ascendente)
-  // De menor sensibilidad (Ambiente/Normal) a mayor sensibilidad (Helado/Caliente/Frito)
-  const [localesConsolidados] = await pool.query(
-    `
-    SELECT 
-      l.id AS IDlocal,
-      l.nombre AS local_nombre,
-      l.direccion AS local_direccion,
-      l.latitud,
-      l.longitud,
-      MAX(COALESCE(cp.nivel_sensibilidad, 1)) AS max_sensibilidad,
-      IF(r.id IS NOT NULL, 1, 0) AS retirado,
-      r.fecha_retiro
-    FROM detalle_orden do
-    JOIN locales l ON do.IDlocal = l.id
-    JOIN productos p ON do.IDproducto = p.id
-    LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
-    LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
-    WHERE do.IDorden = ? AND do.IDestado != 6 -- Excluir productos cancelados
-    GROUP BY l.id, l.nombre, l.direccion, l.latitud, l.longitud, r.id, r.fecha_retiro
-    ORDER BY retirado ASC, max_sensibilidad ASC, l.id ASC
-    `,
-    [IDorden]
-  );
-
-  // 2️⃣ Determinar la secuencia óptima y cuál es el local habilitado actualmente
-  let proximoLocalHabilitadoEncontrado = false;
-
-  const localesRutaEstructurados = localesConsolidados.map((loc, index) => {
-    const esRetirado = Number(loc.retirado) === 1;
-    let esElSiguienteAHabilitar = false;
-
-    // El primer local no retirado en la lista ordenada por sensibilidad será el único habilitado
-    if (!esRetirado && !proximoLocalHabilitadoEncontrado) {
-      esElSiguienteAHabilitar = true;
-      proximoLocalHabilitadoEncontrado = true;
-    }
-
-    return {
-      ...loc,
-      orden_parada: index + 1,
-      retirado: esRetirado,
-      habilitado_para_retiro: esElSiguienteAHabilitar
-    };
-  });
-
-  orden.localesRuta = localesRutaEstructurados;
-
-  // 3️⃣ Obtener el detalle de los productos ordenados también por la secuencia
+  // 1️⃣ Obtener productos con datos completos del local y sensibilidad
   const [productos] = await pool.query(
     `
     SELECT
-  d.id AS IDdetalle,
-  d.IDproducto,
-  p.nombre AS producto,
-  d.cantidad,
-  d.precio_unitario,
-  d.comentario,
-  d.IDestado AS IDestado_detalle,
-  ed.nombre AS estado_detalle,
-  l.id AS IDlocal,
-  l.nombre AS local,
-  l.telefono AS telefono_local,
-  l.direccion AS direccion_local,
-  l.latitud AS local_latitud,
-  l.longitud AS local_longitud,
-  COALESCE(cp.nivel_sensibilidad, 1) AS nivel_sensibilidad -- 👈 🟢 AGREGAR ESTA LÍNEA
-  FROM detalle_orden d
-  JOIN productos p ON p.id = d.IDproducto
-  JOIN estados ed ON ed.id = d.IDestado
-  JOIN locales l ON l.id = d.IDlocal
-  LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id -- 👈 🟢 AGREGAR ESTA LÍNEA
-  WHERE d.IDorden = ?
+      do.id AS IDdetalle,
+      p.nombre AS producto,
+      do.cantidad,
+      do.IDestado AS IDestado_detalle,
+      do.motivo_cancelacion AS motivo_rechazo,
+      e2.nombre AS estado_detalle,
+      l.id AS IDlocal,
+      l.nombre AS local,
+      l.telefono AS telefono_local,
+      l.direccion AS direccion_local,
+      l.latitud AS latitud_local,
+      l.longitud AS longitud_local,
+      IFNULL(cp.nivel_sensibilidad, 1) AS nivel_sensibilidad
+    FROM detalle_orden do
+    JOIN productos p ON p.id = do.IDproducto
+    JOIN estados e2 ON e2.id = do.IDestado
+    LEFT JOIN locales l ON l.id = do.IDlocal
+    LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
+    WHERE do.IDorden = ?
     `,
-    [IDorden]
+    [orden.IDorden]
   );
 
   orden.productos = productos;
 
+  // 2️⃣ Obtener resumen de locales en ruta (coordenadas, sensibilidad máxima y estado de retiro)
+  const [localesRuta] = await pool.query(
+    `
+    SELECT 
+      l.id AS IDlocal,
+      l.nombre,
+      l.telefono,
+      l.direccion,
+      l.latitud,
+      l.longitud,
+      MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS max_sensibilidad,
+      CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END AS retirado
+    FROM detalle_orden do
+    JOIN productos p ON do.IDproducto = p.id
+    LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
+    JOIN locales l ON do.IDlocal = l.id
+    LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
+    WHERE do.IDorden = ?
+    GROUP BY l.id, l.nombre, l.telefono, l.direccion, l.latitud, l.longitud, r.id
+    `,
+    [orden.IDorden]
+  );
+
+  orden.localesRuta = localesRuta;
+
+  // 3️⃣ Obtener lista de IDs de retiros ya realizados
+  const [retirosRows] = await pool.query(
+    `SELECT IDlocal FROM retiros_locales_orden WHERE IDorden = ?`,
+    [orden.IDorden]
+  );
+  orden.retiros_realizados = retirosRows.map(row => row.IDlocal);
+
   return orden;
 };
 
+// Aplicar de forma equivalente en getMisPedidosAsignadosService si es requerido
 // 🧪 Simulación de Pago Exitoso (Modo Demo)
 export const simularPagoExitosoService = async (IDorden) => {
   const conn = await pool.getConnection();

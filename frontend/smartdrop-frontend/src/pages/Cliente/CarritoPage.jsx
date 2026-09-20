@@ -1,9 +1,11 @@
+// src/pages/Cliente/CarritoPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { crearOrden } from '../../api/ordersService';
 import { getMisDirecciones } from '../../api/clientesService';
 import api from '../../api/axios';
+import { calcularDistanciaKm } from '../../utils/geo'; // 👈 Importamos la utilidad de cálculo
 
 const API_URL = 'http://localhost:3000';
 
@@ -25,11 +27,6 @@ export const CarritoPage = () => {
   const [direccionSeleccionadaId, setDireccionSeleccionadaId] = useState('');
   const [loadingDirecciones, setLoadingDirecciones] = useState(true);
   const [errorDirecciones, setErrorDirecciones] = useState('');
-
-  // Modos de selección: 'guardada' | 'gps_puntual'
-  const [modoUbicacion, setModoUbicacion] = useState('guardada');
-  const [ubicacionGpsPuntual, setUbicacionGpsPuntual] = useState(null);
-  const [obteniendoGps, setObteniendoGps] = useState(false);
 
   // Estados de cotización y orden
   const [costoEnvio, setCostoEnvio] = useState(0);
@@ -66,67 +63,105 @@ export const CarritoPage = () => {
     return false;
   };
 
-  // 1️⃣ Cargar direcciones del cliente al montar
+  // 1️⃣ Cargar direcciones y verificar la ubicación GPS actual al montar el carrito
   useEffect(() => {
-    const cargarDirecciones = async () => {
+    const inicializarUbicacionCarrito = async () => {
       try {
         setLoadingDirecciones(true);
         setErrorDirecciones('');
-        const data = await getMisDirecciones();
-        setDirecciones(data);
 
-        // Seleccionar la principal por defecto
-        const principal = data.find((d) => d.es_principal === 1) || data[0];
-        if (principal) {
-          setDireccionSeleccionadaId(principal.id);
+        // 1. Obtenemos las direcciones guardadas del cliente
+        const dataDirs = await getMisDirecciones();
+        setDirecciones(dataDirs);
+
+        if (!navigator.geolocation) {
+          // Si el navegador no soporta GPS, caemos en la principal por defecto
+          const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
+          if (principal) setDireccionSeleccionadaId(principal.id);
+          setLoadingDirecciones(false);
+          return;
         }
-      } catch (err) {
-        console.error('Error al cargar direcciones:', err);
-        setErrorDirecciones(
-          err.response?.data?.error || 'No se pudieron cargar tus direcciones guardadas. Intenta recargar la página o usa la ubicación GPS.'
+
+        // 2. Solicitamos la ubicación GPS actual del dispositivo
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const latActual = pos.coords.latitude;
+            const lngActual = pos.coords.longitude;
+            const TOLERANCIA_KM = 0.15; // 150 metros a la redonda
+
+            // 3. Buscamos si estamos cerca de alguna dirección ya registrada
+            let direccionEncontrada = null;
+            if (dataDirs && dataDirs.length > 0) {
+              direccionEncontrada = dataDirs.find((dir) => {
+                if (!dir.latitud || !dir.longitud) return false;
+                const distancia = calcularDistanciaKm(
+                  latActual,
+                  lngActual,
+                  Number(dir.latitud),
+                  Number(dir.longitud)
+                );
+                return distancia <= TOLERANCIA_KM;
+              });
+            }
+
+            if (direccionEncontrada) {
+              // Si coincide con una existente, la seleccionamos automáticamente
+              setDireccionSeleccionadaId(direccionEncontrada.id);
+              setLoadingDirecciones(false);
+            } else {
+              // Si NO coincide con ninguna, la guardamos obligatoriamente de forma automática
+              try {
+                const nuevaDirPayload = {
+                  alias: 'Ubicación Actual GPS',
+                  direccion: `Lat: ${latActual.toFixed(4)}, Lon: ${lngActual.toFixed(4)}`,
+                  latitud: latActual,
+                  longitud: lngActual,
+                  es_principal: dataDirs.length === 0 ? 1 : 0
+                };
+
+                const resNueva = await api.post('/clientes/mis-direcciones', nuevaDirPayload);
+                
+                // Actualizamos la lista local con la nueva dirección incorporada
+                const [dataActualizada] = await Promise.all([getMisDirecciones()]);
+                setDirecciones(dataActualizada);
+                
+                // Seleccionamos la recién creada
+                setDireccionSeleccionadaId(resNueva.id || dataActualizada[dataActualizada.length - 1].id);
+              } catch (saveErr) {
+                console.error('Error al guardar automáticamente la nueva ubicación GPS:', saveErr);
+                // Fallback a la principal si falla el guardado automático
+                const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
+                if (principal) setDireccionSeleccionadaId(principal.id);
+              } finally {
+                setLoadingDirecciones(false);
+              }
+            }
+          },
+          (geoErr) => {
+            console.warn('No se pudo obtener el GPS en el carrito:', geoErr);
+            // Fallback si el usuario deniega o falla el GPS
+            const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
+            if (principal) setDireccionSeleccionadaId(principal.id);
+            setLoadingDirecciones(false);
+          },
+          { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
         );
-      } finally {
+
+      } catch (err) {
+        console.error('Error al inicializar direcciones en carrito:', err);
+        setErrorDirecciones(
+          err.response?.data?.error || 'No se pudieron cargar tus direcciones guardadas.'
+        );
         setLoadingDirecciones(false);
       }
     };
 
-    cargarDirecciones();
+    inicializarUbicacionCarrito();
   }, []);
 
-  // Manejador para obtener la ubicación GPS actual
-  const handleUsarGpsPuntual = () => {
-    if (!navigator.geolocation) {
-      alert('Tu navegador no soporta geolocalización.');
-      return;
-    }
-
-    setObteniendoGps(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = {
-          direccion: 'Ubicación actual vía GPS',
-          latitud: pos.coords.latitude,
-          longitud: pos.coords.longitude
-        };
-        setUbicacionGpsPuntual(coords);
-        setModoUbicacion('gps_puntual');
-        setObteniendoGps(false);
-      },
-      (error) => {
-        console.error('Error al obtener ubicación GPS:', error);
-        alert('No se pudo obtener la ubicación GPS. Verifica los permisos de tu navegador.');
-        setObteniendoGps(false);
-      }
-    );
-  };
-
-  // 2️⃣ Cotizar envío cuando cambien productos, modo de ubicación o dirección elegida
+  // 2️⃣ Cotizar envío cuando cambien productos o la dirección elegida
   useEffect(() => {
-    if (cartItems.length === 0) return;
-
-    // Validación según el modo activo
-    if (modoUbicacion === 'guardada' && !direccionSeleccionadaId && direcciones.length > 0) return;
-    if (modoUbicacion === 'gps_puntual' && !ubicacionGpsPuntual) return;
+    if (cartItems.length === 0 || !direccionSeleccionadaId) return;
 
     const cotizarEnvio = async () => {
       setLoadingCotizacion(true);
@@ -143,9 +178,7 @@ export const CarritoPage = () => {
 
         const payloadCotizar = {
           productos: productosPayload,
-          ...(modoUbicacion === 'guardada'
-            ? { IDdireccion: direccionSeleccionadaId ? Number(direccionSeleccionadaId) : undefined }
-            : { ubicacionPersonalizada: ubicacionGpsPuntual })
+          IDdireccion: Number(direccionSeleccionadaId)
         };
 
         const { data } = await api.post('/orders/cotizar', payloadCotizar);
@@ -164,13 +197,13 @@ export const CarritoPage = () => {
     };
 
     cotizarEnvio();
-  }, [cartItems, direccionSeleccionadaId, modoUbicacion, ubicacionGpsPuntual, direcciones.length]);
+  }, [cartItems, direccionSeleccionadaId]);
 
   const totalGeneral = subtotalConAdicionales + costoEnvio;
 
   // 3️⃣ Enviar la orden
   const handleCrearOrden = async () => {
-    if (cartItems.length === 0) return;
+    if (cartItems.length === 0 || !direccionSeleccionadaId) return;
     setIsSubmitting(true);
 
     try {
@@ -186,9 +219,7 @@ export const CarritoPage = () => {
       const payloadOrden = {
         productos: productosPayload,
         IDmetodo_pago: Number(metodoPago),
-        ...(modoUbicacion === 'guardada'
-          ? { IDdireccion: direccionSeleccionadaId ? Number(direccionSeleccionadaId) : undefined }
-          : { ubicacionPersonalizada: ubicacionGpsPuntual })
+        IDdireccion: Number(direccionSeleccionadaId)
       };
 
       const res = await crearOrden(payloadOrden);
@@ -197,7 +228,6 @@ export const CarritoPage = () => {
       if (ordenId) {
         vaciarCarrito();
 
-        // Si el método es Mercado Pago (2) o Tarjeta (3), ejecuta la simulación
         if (Number(metodoPago) === 2 || Number(metodoPago) === 3) {
           try {
             await api.post(`/orders/${ordenId}/simular-pago`);
@@ -206,7 +236,6 @@ export const CarritoPage = () => {
           }
         }
 
-        // Para Efectivo (1) u otros, redirige directamente al seguimiento sin simular pago
         navigate(`/cliente/seguimiento/${ordenId}`);
       } else {
         alert("El pedido se creó pero no se obtuvo un ID válido de respuesta.");
@@ -262,7 +291,6 @@ export const CarritoPage = () => {
                     gap: '15px'
                   }}
                 >
-                  {/* 🖼️ Miniatura de la Imagen */}
                   {imagenCompleta && (
                     <img
                       src={imagenCompleta}
@@ -378,80 +406,34 @@ export const CarritoPage = () => {
             })}
           </div>
 
-          {/* Selector de Dirección / Ubicación GPS */}
+          {/* Selector de Dirección de Entrega Actualizada */}
           <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '8px', backgroundColor: '#fcfcfc' }}>
             <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>
-              📍 Dirección de Entrega:
+              📍 Dirección de Entrega (Ubicación Actual Detectada):
             </label>
 
             {loadingDirecciones ? (
-              <small>Cargando tus direcciones...</small>
+              <small>⏳ Verificando ubicación GPS actual y sincronizando direcciones...</small>
             ) : errorDirecciones ? (
               <div style={{ padding: '0.6rem 0.8rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '6px', color: '#e03131', fontSize: '0.9rem' }}>
                 ⚠️ {errorDirecciones}
               </div>
             ) : (
               <div>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setModoUbicacion('guardada')}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      borderRadius: '4px',
-                      border: '1px solid #ccc',
-                      backgroundColor: modoUbicacion === 'guardada' ? '#1c7ed6' : '#f0f0f0',
-                      color: modoUbicacion === 'guardada' ? '#fff' : '#333',
-                      cursor: 'pointer',
-                      fontWeight: modoUbicacion === 'guardada' ? 'bold' : 'normal'
-                    }}
-                  >
-                    🏠 Mis Ubicaciones
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleUsarGpsPuntual}
-                    disabled={obteniendoGps}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      borderRadius: '4px',
-                      border: '1px solid #ccc',
-                      backgroundColor: modoUbicacion === 'gps_puntual' ? '#1c7ed6' : '#f0f0f0',
-                      color: modoUbicacion === 'gps_puntual' ? '#fff' : '#333',
-                      cursor: 'pointer',
-                      fontWeight: modoUbicacion === 'gps_puntual' ? 'bold' : 'normal'
-                    }}
-                  >
-                    {obteniendoGps ? '⏳ Obteniendo GPS...' : '🎯 Utilizar Ubicación GPS Actual'}
-                  </button>
-                </div>
-
-                {modoUbicacion === 'guardada' && (
-                  direcciones.length === 0 ? (
-                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#d9480f' }}>
-                      No tienes direcciones guardadas. Puedes usar la ubicación GPS puntual.
-                    </p>
-                  ) : (
-                    <select
-                      value={direccionSeleccionadaId}
-                      onChange={(e) => setDireccionSeleccionadaId(e.target.value)}
-                      style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
-                    >
-                      {direcciones.map((dir) => (
-                        <option key={dir.id} value={dir.id}>
-                          {dir.alias ? `[${dir.alias}] ` : ''}{dir.direccion} {dir.piso ? `(Piso ${dir.piso} ${dir.departamento || ''})` : ''} {dir.es_principal ? '★ Principal' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )
-                )}
-
-                {modoUbicacion === 'gps_puntual' && ubicacionGpsPuntual && (
-                  <div style={{ padding: '0.5rem', backgroundColor: '#e7f5ff', borderRadius: '4px', fontSize: '0.9rem', color: '#1864ab' }}>
-                    📍 <strong>Ubicación GPS detectada:</strong> Lat: {ubicacionGpsPuntual.latitud.toFixed(5)}, Long: {ubicacionGpsPuntual.longitud.toFixed(5)}
-                  </div>
-                )}
+                <select
+                  value={direccionSeleccionadaId}
+                  onChange={(e) => setDireccionSeleccionadaId(e.target.value)}
+                  style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '1rem' }}
+                >
+                  {direcciones.map((dir) => (
+                    <option key={dir.id} value={dir.id}>
+                      {dir.alias ? `[${dir.alias}] ` : ''}{dir.direccion} {dir.piso ? `(Piso ${dir.piso} ${dir.departamento || ''})` : ''} {dir.es_principal ? '★ Principal' : ''}
+                    </option>
+                  ))}
+                </select>
+                <small style={{ display: 'block', marginTop: '0.4rem', color: '#666' }}>
+                  ℹ️ El selector se actualiza automáticamente con tu ubicación GPS actual para evitar envíos a destinos erróneos.
+                </small>
               </div>
             )}
           </div>
@@ -523,18 +505,18 @@ export const CarritoPage = () => {
 
             <button
               onClick={handleCrearOrden}
-              disabled={isSubmitting || loadingCotizacion || Boolean(errorCotizacion)}
+              disabled={isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId}
               style={{
                 marginTop: '1.5rem',
                 width: '100%',
                 padding: '0.8rem',
-                backgroundColor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) ? '#ccc' : '#2b8a3e',
+                backgroundColor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId ? '#ccc' : '#2b8a3e',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '1rem',
                 fontWeight: 'bold',
-                cursor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) ? 'not-allowed' : 'pointer'
+                cursor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId ? 'not-allowed' : 'pointer'
               }}
             >
               {isSubmitting ? '⏳ Procesando Pedido...' : `Confirmar Orden ($${totalGeneral.toFixed(2)})`}
