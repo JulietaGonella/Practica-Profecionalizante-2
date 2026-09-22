@@ -46,9 +46,8 @@ export const crearRepartidorCompleto = async (req, res) => {
 
 export const getSolicitudesVehiculos = async (req, res) => {
   try {
-    const solicitudes = await getVehiculosPendientesService(
-      req.query.estado || 'PENDIENTE'
-    );
+    // Si no mandan estado por query, pasamos undefined para que traiga ambos ('PENDIENTE' y 'PENDIENTE_DOCUMENTACION')
+    const solicitudes = await getVehiculosPendientesService(req.query.estado);
     res.json(solicitudes);
   } catch (error) {
     res.status(400).json({ error: error.message });

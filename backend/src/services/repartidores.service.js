@@ -503,22 +503,23 @@ export const getRepartidoresAdminService = async () => {
       COALESCE(
         (
           SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'id', v.id,
-              'tipo_vehiculo', tv.nombre,
-              'marca', COALESCE(v.marca, ''),
-              'modelo', COALESCE(v.modelo, ''),
-              'patente', COALESCE(v.patente, ''),
-              'cedula_url', COALESCE(v.cedula_url, ''),
-              'seguro_url', COALESCE(v.seguro_url, ''),
-              'licencia_url', COALESCE(v.licencia_url, ''),
-              'fecha_vencimiento_licencia', v.fecha_vencimiento_licencia,
-              'fecha_vencimiento_seguro', v.fecha_vencimiento_seguro,
-              'fecha_vencimiento_cedula', v.fecha_vencimiento_cedula,
-              'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
-              'estado', v.estado,
-              'activo', v.activo
-            )
+           JSON_OBJECT(
+  'id', v.id,
+  'tipo_vehiculo', tv.nombre,
+  'marca', COALESCE(v.marca, ''),
+  'modelo', COALESCE(v.modelo, ''),
+  'patente', COALESCE(v.patente, ''),
+  'cedula_url', COALESCE(v.cedula_url, ''),
+  'seguro_url', COALESCE(v.seguro_url, ''),
+  'licencia_url', COALESCE(v.licencia_url, ''),
+  'fecha_vencimiento_licencia', v.fecha_vencimiento_licencia,
+  'fecha_vencimiento_seguro', v.fecha_vencimiento_seguro,
+  'fecha_vencimiento_cedula', v.fecha_vencimiento_cedula,
+  'motivo_rechazo', COALESCE(v.motivo_rechazo, ''),
+  'motivo_rechazo_documentacion', COALESCE(v.motivo_rechazo_documentacion, ''), -- 👈 Mapeo SQL agregado
+  'estado', v.estado,
+  'activo', v.activo
+ )
           )
           FROM vehiculos_repartidor v
           JOIN tipos_vehiculo tv ON tv.id = v.IDtipo_vehiculo
@@ -558,9 +559,10 @@ export const getRepartidoresAdminService = async () => {
         cedula_vencida: evaluacion.cedulaVencida,
         documentacion_valida: evaluacion.documentacionValida,
         estado: v.estado,               // 'APROBADO', 'PENDIENTE', 'RECHAZADO', 'PENDIENTE_BAJA', 'BAJA'
-        motivo_rechazo: v.motivo_rechazo, 
+        motivo_rechazo: v.motivo_rechazo,
+        motivo_rechazo_documentacion: v.motivo_rechazo_documentacion, // 👈 Agregar aquí
         activo: Number(v.activo),
-        
+
         // 🛠️ Banderas explícitas para evitar confusiones en el Front
         es_rechazado: v.estado === 'RECHAZADO',
         es_baja: v.estado === 'BAJA' || v.estado === 'PENDIENTE_BAJA',
@@ -623,6 +625,7 @@ export const getMisVehiculosService = async (IDusuario) => {
       v.fecha_vencimiento_cedula,
       v.estado,
       v.motivo_rechazo,
+      v.motivo_rechazo_documentacion,
       v.activo,
       r.IDvehiculo_activo
     FROM vehiculos_repartidor v
@@ -740,8 +743,8 @@ export const seleccionarVehiculoActivoService = async (IDusuario, IDvehiculo) =>
 // En repartidores.service.js
 export const getVehiculosPendientesService = async (estado = null) => {
   // Si no se pasa un estado específico, traemos ambos estados pendientes por defecto
-  const estadosAFiltrar = estado 
-    ? [String(estado).toUpperCase()] 
+  const estadosAFiltrar = estado
+    ? [String(estado).toUpperCase()]
     : ['PENDIENTE', 'PENDIENTE_DOCUMENTACION'];
 
   const [rows] = await pool.query(
@@ -789,9 +792,10 @@ export const getVehiculosPendientesService = async (estado = null) => {
       tipo: v.tipo_vehiculo,
       marca: v.marca,
       modelo: v.modelo,
-      patente: v.patente
+      patente: v.patente,
+      motivo_rechazo: v.motivo_rechazo || '',
+      motivo_rechazo_documentacion: v.motivo_rechazo_documentacion || '' // 👈 Agregado aquí
     },
-    // 📂 Documentación Actual / Anterior (Lo que ya tiene aprobado)
     documentacion_actual: {
       cedula_url: v.cedula_url,
       fecha_vencimiento_cedula: v.fecha_vencimiento_cedula,
@@ -800,7 +804,6 @@ export const getVehiculosPendientesService = async (estado = null) => {
       licencia_url: v.licencia_url,
       fecha_vencimiento_licencia: v.fecha_vencimiento_licencia
     },
-    // 📂 Documentación Nueva / Renovada (Lo que subió para actualizar)
     documentacion_nueva: {
       cedula_url: v.nueva_cedula_url,
       fecha_vencimiento_cedula: v.nueva_fecha_vencimiento_cedula,
@@ -809,17 +812,23 @@ export const getVehiculosPendientesService = async (estado = null) => {
       licencia_url: v.nueva_licencia_url,
       fecha_vencimiento_licencia: v.nueva_fecha_vencimiento_licencia
     },
-    estado: v.estado
+    estado: v.estado,
+    motivo_rechazo: v.motivo_rechazo || '',
+    motivo_rechazo_documentacion: v.motivo_rechazo_documentacion || '' // 👈 O en la raíz
   }));
 };
 
 export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo = null) => {
   const estadoNormalizado = String(estado).toUpperCase();
-  if (!['APROBADO', 'RECHAZADO'].includes(estadoNormalizado)) {
-    throw new Error('El estado debe ser APROBADO o RECHAZADO');
+
+  // 1. Permitir APROBADO, RECHAZADO y RECHAZADO_DOCUMENTACION
+  const estadosValidos = ['APROBADO', 'RECHAZADO', 'RECHAZADO_DOCUMENTACION'];
+  if (!estadosValidos.includes(estadoNormalizado)) {
+    throw new Error('El estado debe ser APROBADO, RECHAZADO o RECHAZADO_DOCUMENTACION');
   }
 
-  if (estadoNormalizado === 'RECHAZADO' && !String(motivoRechazo || '').trim()) {
+  // 2. Exigir motivo de rechazo si la decisión no es APROBADO
+  if (['RECHAZADO', 'RECHAZADO_DOCUMENTACION'].includes(estadoNormalizado) && !String(motivoRechazo || '').trim()) {
     throw new Error('El motivo de rechazo es obligatorio');
   }
 
@@ -827,7 +836,6 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
   try {
     await conn.beginTransaction();
 
-    // 1. Verificar que el vehículo exista y traer todos los campos necesarios
     const [[vehiculo]] = await conn.query(
       `SELECT * FROM vehiculos_repartidor WHERE id = ?`,
       [IDvehiculo]
@@ -839,10 +847,10 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
 
     let mensajeRespuesta;
 
-    // 2. Manejo específico si la revisión corresponde a una actualización por vencimiento de documentación
+    // 3. Evaluación cuando el vehículo tiene una actualización de documentación pendiente
     if (vehiculo.estado === 'PENDIENTE_DOCUMENTACION') {
       if (estadoNormalizado === 'APROBADO') {
-        // Reemplazar los datos viejos con los nuevos si existen, limpiar temporales y dejar el vehículo APROBADO y activo
+        // Aprobación: Reemplazar datos vigentes con los nuevos temporales y limpiar temporales
         await conn.query(
           `
           UPDATE vehiculos_repartidor
@@ -866,7 +874,10 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
         );
         mensajeRespuesta = 'Actualización de documentación aprobada correctamente.';
       } else {
-        // Rechazar actualización: descartar cambios nuevos, limpiar temporales, volver a APROBADO y guardar el motivo
+        // Rechazo de la documentación enviada:
+        // - Se descartan las URLs y fechas temporales (limpieza)
+        // - El estado pasa a RECHAZADO_DOCUMENTACION
+        // - Se almacena el motivo en la columna motivo_rechazo_documentacion
         await conn.query(
           `
           UPDATE vehiculos_repartidor
@@ -874,18 +885,17 @@ export const revisarVehiculoService = async (IDvehiculo, estado, motivoRechazo =
             nueva_cedula_url = NULL, nueva_fecha_vencimiento_cedula = NULL,
             nuevo_seguro_url = NULL, nueva_fecha_vencimiento_seguro = NULL,
             nueva_licencia_url = NULL, nueva_fecha_vencimiento_licencia = NULL,
-            estado = 'APROBADO',
-            activo = 1,
+            estado = 'RECHAZADO_DOCUMENTACION',
             motivo_rechazo_documentacion = ?
           WHERE id = ?
           `,
           [String(motivoRechazo).trim(), IDvehiculo]
         );
-        mensajeRespuesta = 'Actualización de documentación rechazada. El vehículo conserva su documentación anterior.';
+        mensajeRespuesta = 'Actualización de documentación rechazada correctamente.';
       }
 
     } else {
-      // 3. Lógica existente para vehículos nuevos ('PENDIENTE') o solicitudes de baja ('PENDIENTE_BAJA')
+      // 4. Lógica para vehículos nuevos ('PENDIENTE') o bajas ('PENDIENTE_BAJA')
       let nuevoEstadoVehiculo;
       let activoValor;
 
@@ -1066,17 +1076,17 @@ export const actualizarVehiculoExistenteService = async (IDusuario, IDvehiculo, 
     throw new Error('Debe adjuntar al menos un documento o fecha para actualizar.');
   }
 
-  // 3. Guardar en los campos "nuevos" y poner el estado en PENDIENTE_DOCUMENTACION
+  // 3. Guardar directamente asignando NULL a lo no enviado (sin COALESCE)
   await pool.query(
     `
     UPDATE vehiculos_repartidor
     SET 
-      nueva_cedula_url = COALESCE(?, nueva_cedula_url),
-      nueva_fecha_vencimiento_cedula = COALESCE(?, nueva_fecha_vencimiento_cedula),
-      nuevo_seguro_url = COALESCE(?, nuevo_seguro_url),
-      nueva_fecha_vencimiento_seguro = COALESCE(?, nueva_fecha_vencimiento_seguro),
-      nueva_licencia_url = COALESCE(?, nueva_licencia_url),
-      nueva_fecha_vencimiento_licencia = COALESCE(?, nueva_fecha_vencimiento_licencia),
+      nueva_cedula_url = ?,
+      nueva_fecha_vencimiento_cedula = ?,
+      nuevo_seguro_url = ?,
+      nueva_fecha_vencimiento_seguro = ?,
+      nueva_licencia_url = ?,
+      nueva_fecha_vencimiento_licencia = ?,
       estado = 'PENDIENTE_DOCUMENTACION',
       motivo_rechazo_documentacion = NULL
     WHERE id = ?

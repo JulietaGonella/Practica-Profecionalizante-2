@@ -816,12 +816,27 @@ export const PanelRepartidor = () => {
                   vehiculos.map((vehiculo) => {
                     const estaActivo = Number(vehiculo.activo) === 1;
 
-                    const estilo = estaActivo
-                      ? (estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE)
-                      : {
-                        color: '#868e96',
-                        backgroundColor: '#f1f3f5'
-                      };
+                    // Banderas claras y excluyentes para la interfaz
+                    const esRechazadoTotal = vehiculo.estado === 'RECHAZADO';
+                    const esRechazadoDoc = vehiculo.estado === 'RECHAZADO_DOCUMENTACION';
+                    const esBajaReal = vehiculo.estado === 'BAJA';
+
+                    // Cualquier estado que contenga 'PENDIENTE' debe considerarse pendiente (amarillo)
+                    const esPendienteGeneral = String(vehiculo.estado).includes('PENDIENTE');
+
+                    // Una baja solo es real si su estado es BAJA, o si está inactivo y NO fue rechazado ni pendiente
+                    const esBaja = esBajaReal || (!estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral);
+
+                    const estilo = esBaja || (!esPendienteGeneral && (esRechazadoDoc || esRechazadoTotal))
+                      ? { color: '#c92a2a', backgroundColor: '#fff5f5' } // 🔴 Rojo para rechazados o dados de baja
+                      : (esPendienteGeneral
+                        ? { color: '#f59f00', backgroundColor: '#fff9db' } // 🟡 Amarillo para cualquier pendiente
+                        : (estaActivo && !esBaja
+                          ? (estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE)
+                          : {
+                            color: '#c92a2a', // 🔴 Rojo por defecto para inactivos
+                            backgroundColor: '#fff5f5'
+                          }));
 
                     const lic = evaluarDocumento(
                       vehiculo.fecha_vencimiento_licencia,
@@ -839,7 +854,7 @@ export const PanelRepartidor = () => {
                     );
 
                     const tieneVencidos =
-                      estaActivo &&
+                      estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral &&
                       (lic.vencido || seg.vencido || ced.vencido);
 
                     return (
@@ -849,13 +864,13 @@ export const PanelRepartidor = () => {
                           padding: '0.8rem',
                           borderRadius: '8px',
                           backgroundColor: estilo.backgroundColor,
-                          border: `1px solid ${!estaActivo
-                            ? '#ced4da'
-                            : tieneVencidos
+                          border: `1px solid ${esBaja
+                            ? '#ffc9c9'
+                            : tieneVencidos || esRechazadoDoc || esRechazadoTotal
                               ? '#e03131'
                               : estilo.color
                             }`,
-                          opacity: estaActivo ? 1 : 0.75
+                          opacity: (estaActivo && !esRechazadoTotal) ? 1 : 0.75
                         }}
                       >
                         <div
@@ -871,7 +886,9 @@ export const PanelRepartidor = () => {
                             {vehiculo.marca || 'Sin marca'}{' '}
                             {vehiculo.modelo || ''}
 
-                            {!estaActivo && ' (DADO DE BAJA)'}
+                            {esBajaReal && ' (DADO DE BAJA)'}
+                            {vehiculo.estado === 'PENDIENTE_BAJA' && ' (PENDIENTE DE BAJA)'}
+                            {esRechazadoTotal && ' (RECHAZADO)'}
                           </strong>
 
                           {estaActivo && vehiculo.estado === 'APROBADO' && (
@@ -887,9 +904,7 @@ export const PanelRepartidor = () => {
                                 setCargandoAccionBtn(`baja-${vehiculo.IDvehiculo}`);
                                 try {
                                   await solicitarBajaVehiculo(vehiculo.IDvehiculo);
-
                                   await cargarTodo();
-
                                   alert(
                                     '✅ Solicitud de baja enviada correctamente. Quedará pendiente de aprobación por el administrador.'
                                   );
@@ -918,6 +933,7 @@ export const PanelRepartidor = () => {
                           )}
                         </div>
 
+                        {/* Estado visual del vehículo */}
                         <div
                           style={{
                             color: estilo.color,
@@ -926,9 +942,11 @@ export const PanelRepartidor = () => {
                             marginTop: '0.3rem'
                           }}
                         >
-                          {estaActivo
-                            ? vehiculo.estado
-                            : 'INACTIVO / DADO DE BAJA'}
+                          {esRechazadoTotal
+                            ? 'RECHAZADO POR EL ADMINISTRADOR'
+                            : (esRechazadoDoc
+                              ? 'RECHAZADO DE DOCUMENTACIÓN'
+                              : (esBajaReal ? 'DADO DE BAJA' : (vehiculo.estado === 'PENDIENTE_BAJA' ? 'PENDIENTE DE BAJA' : vehiculo.estado)))}
                         </div>
 
                         {vehiculo.patente && (
@@ -989,21 +1007,44 @@ export const PanelRepartidor = () => {
                             </div>
                           )}
 
-                        {estaActivo &&
-                          vehiculo.estado === 'RECHAZADO' &&
-                          vehiculo.motivo_rechazo && (
-                            <div
-                              style={{
-                                color: '#c92a2a',
-                                marginTop: '0.4rem',
-                                fontSize: '0.85rem'
-                              }}
-                            >
-                              Motivo: {vehiculo.motivo_rechazo}
-                            </div>
-                          )}
+                        {/* 🛑 Mensaje de motivo de rechazo de documentación */}
+                        {esRechazadoDoc && vehiculo.motivo_rechazo_documentacion && (
+                          <div
+                            style={{
+                              color: '#c92a2a',
+                              backgroundColor: '#ffe3e3',
+                              padding: '0.5rem',
+                              borderRadius: '6px',
+                              marginTop: '0.4rem',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              border: '1px solid #ffc9c9'
+                            }}
+                          >
+                            ❌ Documentación rechazada: {vehiculo.motivo_rechazo_documentacion}
+                          </div>
+                        )}
 
-                        {estaActivo && tieneVencidos && (
+                        {/* 🚫 Motivo de rechazo general del vehículo */}
+                        {esRechazadoTotal && vehiculo.motivo_rechazo && (
+                          <div
+                            style={{
+                              color: '#c92a2a',
+                              backgroundColor: '#ffe3e3',
+                              padding: '0.5rem',
+                              borderRadius: '6px',
+                              marginTop: '0.4rem',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              border: '1px solid #ffc9c9'
+                            }}
+                          >
+                            🚫 Motivo de rechazo del vehículo: {vehiculo.motivo_rechazo}
+                          </div>
+                        )}
+
+                        {/* 🔄 Botón único para actualizar documentación */}
+                        {estaActivo && ((vehiculo.estado === 'APROBADO' && tieneVencidos) || esRechazadoDoc) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -1028,8 +1069,17 @@ export const PanelRepartidor = () => {
                               cursor: 'pointer'
                             }}
                           >
-                            🔄 Actualizar documentación vencida
+                            {esRechazadoDoc
+                              ? '🔄 Actualizar documentación rechazada'
+                              : '🔄 Actualizar documentación vencida'}
                           </button>
+                        )}
+
+                        {/* Si el vehículo fue completamente rechazado */}
+                        {estaActivo && esRechazadoTotal && (
+                          <div style={{ color: '#c92a2a', fontSize: '0.85rem', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                            🚫 Vehículo rechazado por el administrador. No se puede utilizar.
+                          </div>
                         )}
                       </div>
                     );

@@ -362,6 +362,52 @@ export const PanelAdministrador = () => {
     }
   };
 
+  const obtenerInfoVehiculo = (solicitudOVehiculo) => {
+    if (!solicitudOVehiculo) {
+      return { esBici: false, esMoto: false, esAuto: false, tieneDocumentacion: true, icono: '🚗', etiqueta: 'Vehículo' };
+    }
+
+    // Extraemos el objeto vehículo si viene anidado
+    const v = solicitudOVehiculo.vehiculo || solicitudOVehiculo.documentacion_nueva || solicitudOVehiculo;
+
+    // 1. Extraer ID del tipo
+    const idTipo = Number(
+      v.IDtipo_vehiculo ||
+      v.id_tipo_vehiculo ||
+      v.tipo_vehiculo_id ||
+      solicitudOVehiculo.IDtipo_vehiculo ||
+      solicitudOVehiculo.id_tipo_vehiculo ||
+      (typeof v.tipo_vehiculo === 'object' ? v.tipo_vehiculo?.id : null)
+    );
+
+    // 2. Extraer nombre/texto del tipo
+    const rawTipo = typeof v.tipo_vehiculo === 'object'
+      ? (v.tipo_vehiculo?.nombre || v.tipo_vehiculo?.tipo)
+      : (v.tipo_vehiculo || v.nombre_tipo || v.tipo || solicitudOVehiculo.tipo_vehiculo || '');
+
+    const tipoTexto = String(rawTipo).toLowerCase().trim();
+
+    // Evaluaciones
+    const esBici = idTipo === 1 || idTipo === 2 || tipoTexto.includes('bici');
+    const esMoto = idTipo === 3 || tipoTexto.includes('moto');
+    const esAuto = idTipo === 4 || tipoTexto.includes('auto');
+
+    const tieneDocumentacion = !esBici;
+
+    let icono = '🚗';
+    let etiqueta = 'Auto';
+
+    if (esBici) {
+      icono = '🚲';
+      etiqueta = 'Bicicleta';
+    } else if (esMoto) {
+      icono = '🏍️';
+      etiqueta = 'Motocicleta';
+    }
+
+    return { esBici, esMoto, esAuto, tieneDocumentacion, icono, etiqueta };
+  };
+
   const iniciarRechazoBaja = (idVehiculo) => {
     setVehiculoARechazarBaja(idVehiculo);
     setMotivoRechazoBaja('');
@@ -400,9 +446,9 @@ export const PanelAdministrador = () => {
     ruta ? (ruta.startsWith('http') ? ruta : `${API_BASE_URL}${ruta}`) : ''
   );
 
+  // En el cuerpo de PanelAdministrador.jsx (fuera del return JSX)
   const evaluarSolicitudVehiculo = async (solicitud, estado) => {
     if (estado === 'RECHAZADO') {
-      // En lugar de prompt, abrimos nuestro propio modal de motivo
       setSolicitudARechazar(solicitud);
       setMotivoRechazoSolicitud('');
       return;
@@ -430,7 +476,18 @@ export const PanelAdministrador = () => {
 
     try {
       setProcesandoId(`vehiculo-${solicitudARechazar.id}`);
-      await evaluarSolicitudVehiculoAdmin(solicitudARechazar.id, 'RECHAZADO', motivoRechazoSolicitud.trim());
+
+      // Si la solicitud es de nueva documentación (PENDIENTE_DOCUMENTACION o no es vehículo nuevo),
+      // enviamos el estado 'RECHAZADO_DOCUMENTACION'
+      const esNuevaDoc = solicitudARechazar.estado === 'PENDIENTE_DOCUMENTACION' || Number(solicitudARechazar.es_nuevo_vehiculo) === 0;
+      const estadoEnvio = esNuevaDoc ? 'RECHAZADO_DOCUMENTACION' : 'RECHAZADO';
+
+      await evaluarSolicitudVehiculoAdmin(
+        solicitudARechazar.id,
+        estadoEnvio,
+        motivoRechazoSolicitud.trim()
+      );
+
       await cargarDatos();
       if (documentacionVehiculo?.id === solicitudARechazar.id) setDocumentacionVehiculo(null);
       setSolicitudARechazar(null);
@@ -442,6 +499,7 @@ export const PanelAdministrador = () => {
       setProcesandoId(null);
     }
   };
+
   const iniciarEdicionLocal = (local) => {
     setLocalEditando(local.id);
     setFormLocal({
@@ -1589,74 +1647,195 @@ export const PanelAdministrador = () => {
 
                 {solicitudesVehiculos.length > 0 && (
                   <div style={{ display: 'grid', gap: '0.7rem', marginTop: '1rem' }}>
-                    {solicitudesVehiculos.map((solicitud) => (
-                      <div key={solicitud.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.8rem', backgroundColor: '#fff', border: '1px solid #ffe066', borderRadius: '8px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                            <strong>
-                              {[solicitud.nombre, solicitud.apellido].filter(Boolean).join(' ') || solicitud.username}
-                            </strong>
+                    {solicitudesVehiculos.map((solicitud) => {
+                      const vehiculoObjeto = solicitud.vehiculo || solicitud.documentacion_nueva || solicitud;
 
-                            {/* 🏷️ Badge distintivo según el tipo de solicitud */}
-                            {/* 🏷️ Badge distintivo según el estado o tipo de solicitud */}
-                            {solicitud.estado === 'PENDIENTE_BAJA' ? (
-                              <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                ❌ Solicitud de Baja
-                              </span>
-                            ) : solicitud.estado === 'PENDIENTE_DOCUMENTACION' || Number(solicitud.es_nuevo_vehiculo) === 0 ? (
-                              <span style={{ backgroundColor: '#fff9db', color: '#f59f00', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                📄 Solicitud de Nueva Documentación
-                              </span>
-                            ) : (
-                              <span style={{ backgroundColor: '#e7f5ff', color: '#1c7ed6', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                🆕 Solicitud de Nuevo Vehículo
-                              </span>
-                            )}
+                      // 1. Extraemos la bandera 'esBici' directamente de obtenerInfoVehiculo
+                      const { esBici, tieneDocumentacion } = obtenerInfoVehiculo(vehiculoObjeto);
+
+                      const tipoVehiculo =
+                        solicitud.vehiculo?.tipo_vehiculo ||
+                        solicitud.tipo_vehiculo ||
+                        solicitud.documentacion_nueva?.tipo_vehiculo ||
+                        '';
+
+                      const marca =
+                        solicitud.vehiculo?.marca ||
+                        solicitud.marca ||
+                        solicitud.documentacion_nueva?.marca ||
+                        '';
+
+                      const modelo =
+                        solicitud.vehiculo?.modelo ||
+                        solicitud.modelo ||
+                        solicitud.documentacion_nueva?.modelo ||
+                        '';
+
+                      const patente =
+                        solicitud.vehiculo?.patente ||
+                        solicitud.patente ||
+                        solicitud.documentacion_nueva?.patente ||
+                        '';
+
+                      // 2. Extracción segura del nombre del repartidor
+                      const nombreRepartidor =
+                        solicitud.repartidor?.nombre_completo ||
+                        [solicitud.nombre, solicitud.apellido].filter(Boolean).join(' ') ||
+                        solicitud.username ||
+                        'Repartidor';
+
+                      // 3. Formateo dinámico: Si esBici es true, no se concatena la patente
+                      const infoVehiculo =
+                        [
+                          tipoVehiculo,
+                          [marca, modelo].filter(Boolean).join(' '),
+                          !esBici && patente ? `(${patente})` : null
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || 'Sin datos de vehículo';
+
+                      return (
+                        <div
+                          key={solicitud.id}
+                          style={{
+                            display: 'flex',
+                            justify: 'space-between',
+                            alignItems: 'center',
+                            gap: '1rem',
+                            flexWrap: 'wrap',
+                            padding: '0.8rem',
+                            backgroundColor: '#fff',
+                            border: '1px solid #ffe066',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                marginBottom: '0.2rem'
+                              }}
+                            >
+                              <strong>{nombreRepartidor}</strong>
+
+                              {/* 🏷️ Badge distintivo según el estado o tipo de solicitud */}
+                              {solicitud.estado === 'PENDIENTE_BAJA' ? (
+                                <span
+                                  style={{
+                                    backgroundColor: '#ffe3e3',
+                                    color: '#e03131',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  ❌ Solicitud de Baja
+                                </span>
+                              ) : solicitud.estado === 'PENDIENTE_DOCUMENTACION' ||
+                                Number(solicitud.es_nuevo_vehiculo) === 0 ? (
+                                <span
+                                  style={{
+                                    backgroundColor: '#fff9db',
+                                    color: '#f59f00',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  📄 Solicitud de Nueva Documentación
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    backgroundColor: '#e7f5ff',
+                                    color: '#1c7ed6',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  🆕 Solicitud de Nuevo Vehículo
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                              {infoVehiculo}
+                            </div>
                           </div>
 
-                          <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                            {solicitud.tipo_vehiculo} · {solicitud.marca || 'Sin marca'} {solicitud.modelo || ''} {solicitud.patente ? `· ${solicitud.patente}` : ''}
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => setDocumentacionVehiculo(solicitud)}
+                            >
+                              👁️ Ver detalle
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => evaluarSolicitudVehiculo(solicitud, 'APROBADO')}
+                              disabled={procesandoId === `vehiculo-${solicitud.id}`}
+                              style={{
+                                backgroundColor:
+                                  procesandoId === `vehiculo-${solicitud.id}`
+                                    ? '#868e96'
+                                    : solicitud.estado === 'PENDIENTE_BAJA'
+                                      ? '#e03131'
+                                      : '#2b8a3e',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                padding: '0.5rem 0.7rem',
+                                fontWeight: 'bold',
+                                cursor:
+                                  procesandoId === `vehiculo-${solicitud.id}` ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {procesandoId === `vehiculo-${solicitud.id}`
+                                ? '⏳ Cargando...'
+                                : solicitud.estado === 'PENDIENTE_BAJA'
+                                  ? '✅ Confirmar Baja'
+                                  : '✅ Aprobar'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => evaluarSolicitudVehiculo(solicitud, 'RECHAZADO')}
+                              disabled={procesandoId === `vehiculo-${solicitud.id}`}
+                              style={{
+                                backgroundColor:
+                                  procesandoId === `vehiculo-${solicitud.id}`
+                                    ? '#868e96'
+                                    : solicitud.estado === 'PENDIENTE_BAJA'
+                                      ? '#d9480f'
+                                      : '#e03131',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                padding: '0.5rem 0.7rem',
+                                fontWeight: 'bold',
+                                cursor:
+                                  procesandoId === `vehiculo-${solicitud.id}` ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {procesandoId === `vehiculo-${solicitud.id}`
+                                ? '⏳ Cargando...'
+                                : solicitud.estado === 'PENDIENTE_BAJA'
+                                  ? '❌ Rechazar Baja'
+                                  : Number(solicitud.es_nuevo_vehiculo) === 1
+                                    ? '❌ Rechazar Vehículo Nuevo'
+                                    : '❌ Rechazar Solicitud'}
+                            </button>
                           </div>
                         </div>
-
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <button type="button" onClick={() => setDocumentacionVehiculo(solicitud)}>
-                            👁️ Ver detalle
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => evaluarSolicitudVehiculo(solicitud, 'APROBADO')}
-                            disabled={procesandoId === `vehiculo-${solicitud.id}`}
-                            style={{ backgroundColor: solicitud.estado === 'PENDIENTE_BAJA' ? '#e03131' : '#2b8a3e', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
-                          >
-                            {solicitud.estado === 'PENDIENTE_BAJA' ? '✅ Confirmar Baja' : '✅ Aprobar'}
-                          </button>
-
-                          {/* Botón de Rechazo Dinámico según el tipo de solicitud */}
-                          <button
-                            type="button"
-                            onClick={() => evaluarSolicitudVehiculo(solicitud, 'RECHAZADO')}
-                            disabled={procesandoId === `vehiculo-${solicitud.id}`}
-                            style={{
-                              backgroundColor: solicitud.estado === 'PENDIENTE_BAJA' ? '#d9480f' : '#e03131',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '5px',
-                              padding: '0.5rem 0.7rem',
-                              fontWeight: 'bold',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {solicitud.estado === 'PENDIENTE_BAJA'
-                              ? '❌ Rechazar Baja'
-                              : Number(solicitud.es_nuevo_vehiculo) === 1
-                                ? '❌ Rechazar Vehículo Nuevo'
-                                : '❌ Rechazar Solicitud'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1695,19 +1874,49 @@ export const PanelAdministrador = () => {
                             <button
                               type="button"
                               onClick={() => handleAprobarBaja(idVehiculoBaja)}
-                              disabled={procesandoId === `baja-${idVehiculoBaja}` || procesandoId === `baja-rechazar-${idVehiculoBaja}`}
-                              style={{ backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.9rem', fontWeight: 'bold', cursor: 'pointer' }}
+                              disabled={
+                                procesandoId === `baja-${idVehiculoBaja}` ||
+                                procesandoId === `baja-rechazar-${idVehiculoBaja}`
+                              }
+                              style={{
+                                backgroundColor:
+                                  procesandoId === `baja-${idVehiculoBaja}` ? '#868e96' : '#2b8a3e',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                padding: '0.5rem 0.9rem',
+                                fontWeight: 'bold',
+                                cursor:
+                                  procesandoId === `baja-${idVehiculoBaja}` ? 'not-allowed' : 'pointer'
+                              }}
                             >
-                              {procesandoId === `baja-${idVehiculoBaja}` ? '⏳ Procesando...' : '✅ Aprobar Baja'}
+                              {procesandoId === `baja-${idVehiculoBaja}`
+                                ? '⏳ Cargando...'
+                                : '✅ Aprobar Baja'}
                             </button>
 
                             <button
                               type="button"
                               onClick={() => iniciarRechazoBaja(idVehiculoBaja)}
-                              disabled={procesandoId === `baja-${idVehiculoBaja}` || procesandoId === `baja-rechazar-${idVehiculoBaja}`}
-                              style={{ backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '5px', padding: '0.5rem 0.9rem', fontWeight: 'bold', cursor: 'pointer' }}
+                              disabled={
+                                procesandoId === `baja-${idVehiculoBaja}` ||
+                                procesandoId === `baja-rechazar-${idVehiculoBaja}`
+                              }
+                              style={{
+                                backgroundColor:
+                                  procesandoId === `baja-rechazar-${idVehiculoBaja}` ? '#868e96' : '#e03131',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '5px',
+                                padding: '0.5rem 0.9rem',
+                                fontWeight: 'bold',
+                                cursor:
+                                  procesandoId === `baja-rechazar-${idVehiculoBaja}` ? 'not-allowed' : 'pointer'
+                              }}
                             >
-                              ❌ Rechazar Baja
+                              {procesandoId === `baja-rechazar-${idVehiculoBaja}`
+                                ? '⏳ Cargando...'
+                                : '❌ Rechazar Baja'}
                             </button>
                           </div>
                         </div>
@@ -2124,270 +2333,170 @@ export const PanelAdministrador = () => {
                 </>
               )}
 
-              {documentacionVehiculo && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 4000,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem'
-                  }}
-                >
-                  <div style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '10px', padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ margin: 0 }}>📄 Detalle de Solicitud de Vehículo</h3>
-                      <button type="button" onClick={() => setDocumentacionVehiculo(null)}>✕</button>
-                    </div>
+              {documentacionVehiculo && (() => {
+                const {
+                  id,
+                  es_nuevo_vehiculo,
+                  repartidor,
+                  vehiculo,
+                  documentacion_actual,
+                  documentacion_nueva,
+                  estado
+                } = documentacionVehiculo;
 
-                    {/* Indicador de Tipo de Solicitud */}
-                    <div style={{
-                      padding: '0.8rem',
-                      borderRadius: '8px',
-                      marginBottom: '1rem',
-                      backgroundColor: Number(documentacionVehiculo.es_nuevo_vehiculo) === 1 ? '#e7f5ff' : '#fff9db',
-                      border: Number(documentacionVehiculo.es_nuevo_vehiculo) === 1 ? '1px solid #74c0fc' : '1px solid #ffe066'
-                    }}>
-                      <strong>Tipo de Solicitud: </strong>
-                      <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
-                        {Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
-                          ? 'Documentación Completa Presentada para el Alta'
-                          : 'Archivos y Fechas de Vencimiento Actualizados'}
-                      </h4>
-                    </div>
+                const vehiculoObjeto = vehiculo || documentacion_nueva || documentacionVehiculo;
+                const { esBici, tieneDocumentacion, icono, etiqueta } = obtenerInfoVehiculo(vehiculoObjeto);
 
-                    <p>
-                      <strong>Repartidor:</strong>{' '}
-                      {[documentacionVehiculo.nombre, documentacionVehiculo.apellido].filter(Boolean).join(' ') || documentacionVehiculo.username}
-                    </p>
+                const formatearFecha = (fecha) => {
+                  if (!tieneDocumentacion || !fecha) return null;
+                  const d = new Date(fecha);
+                  return isNaN(d.getTime()) ? null : d.toLocaleDateString('es-AR');
+                };
 
-                    <p>
-                      <strong>Vehículo:</strong> {documentacionVehiculo.tipo_vehiculo} · {documentacionVehiculo.marca || 'Sin marca'} {documentacionVehiculo.modelo || ''} {documentacionVehiculo.patente ? `(${documentacionVehiculo.patente})` : ''}
-                    </p>
+                // Identificar si es una solicitud de actualización de documentación
+                const esActualizacionDoc = estado === 'PENDIENTE_DOCUMENTACION' || Number(es_nuevo_vehiculo) === 0;
 
-                    {/* Sección de Documentos y Fechas de Vencimiento (Oculta si es bicicleta) */}
-                    {!(documentacionVehiculo.tipo_vehiculo?.toLowerCase().includes('bici')) ? (
-                      <>
-                        <h4 style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
-                          {Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
-                            ? 'Documentación Presentada'
-                            : 'Archivos y Vencimientos Actualizados'}
-                        </h4>
+                // 1. Mapeo de campos incluyendo el motivo de rechazo de documentación
+                let camposDocumento = tieneDocumentacion ? [
+                  {
+                    clave: 'cedula',
+                    titulo: '📄 Cédula Verde / Azul',
+                    actualUrl: documentacion_actual?.cedula_url,
+                    actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_cedula),
+                    nuevaUrl: documentacion_nueva?.cedula_url || vehiculo?.cedula_url || documentacionVehiculo.cedula_url,
+                    nuevaVenc: formatearFecha(documentacion_nueva?.fecha_vencimiento_cedula || vehiculo?.fecha_vencimiento_cedula || documentacionVehiculo.fecha_vencimiento_cedula),
+                    rawActualVenc: documentacion_actual?.fecha_vencimiento_cedula,
+                    rawNuevaVenc: documentacion_nueva?.fecha_vencimiento_cedula || vehiculo?.fecha_vencimiento_cedula || documentacionVehiculo.fecha_vencimiento_cedula,
+                    rawActualUrl: documentacion_actual?.cedula_url,
+                    rawNuevaUrl: documentacion_nueva?.cedula_url || vehiculo?.cedula_url || documentacionVehiculo.cedula_url,
+                  },
+                  {
+                    clave: 'seguro',
+                    titulo: '🛡️ Seguro Obligatorio',
+                    actualUrl: documentacion_actual?.seguro_url,
+                    actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_seguro),
+                    nuevaUrl: documentacion_nueva?.seguro_url || vehiculo?.seguro_url || documentacionVehiculo.seguro_url,
+                    nuevaVenc: formatearFecha(documentacion_nueva?.fecha_vencimiento_seguro || vehiculo?.fecha_vencimiento_seguro || documentacionVehiculo.fecha_vencimiento_seguro),
+                    rawActualVenc: documentacion_actual?.fecha_vencimiento_seguro,
+                    rawNuevaVenc: documentacion_nueva?.fecha_vencimiento_seguro || vehiculo?.fecha_vencimiento_seguro || documentacionVehiculo.seguro_url,
+                    rawActualUrl: documentacion_actual?.seguro_url,
+                    rawNuevaUrl: documentacion_nueva?.seguro_url || vehiculo?.seguro_url || documentacionVehiculo.seguro_url,
+                  },
+                  {
+                    clave: 'licencia',
+                    titulo: '🪪 Licencia de Conducir',
+                    actualUrl: documentacion_actual?.licencia_url,
+                    actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_licencia),
+                    nuevaUrl: documentacion_nueva?.licencia_url || vehiculo?.licencia_url || documentacionVehiculo.licencia_url,
+                    nuevaVenc: formatearFecha(documentacion_nueva?.fecha_vencimiento_licencia || vehiculo?.fecha_vencimiento_licencia || documentacionVehiculo.fecha_vencimiento_licencia),
+                    rawActualVenc: documentacion_actual?.fecha_vencimiento_licencia,
+                    rawNuevaVenc: documentacion_nueva?.fecha_vencimiento_licencia || vehiculo?.fecha_vencimiento_licencia || documentacionVehiculo.fecha_vencimiento_licencia,
+                    rawActualUrl: documentacion_actual?.licencia_url,
+                    rawNuevaUrl: documentacion_nueva?.licencia_url || vehiculo?.licencia_url || documentacionVehiculo.licencia_url,
+                  }
+                ] : [];
 
-                        {(() => {
-                          // 1. Mapeamos la lista completa de documentos disponibles
-                          const listaDocumentos = [
-                            {
-                              etiqueta: 'Cédula Verde',
-                              ruta: documentacionVehiculo.cedula_url,
-                              vencimiento: documentacionVehiculo.fecha_vencimiento_cedula
-                            },
-                            {
-                              etiqueta: 'Seguro Obligatorio',
-                              ruta: documentacionVehiculo.seguro_url,
-                              vencimiento: documentacionVehiculo.fecha_vencimiento_seguro
-                            },
-                            {
-                              etiqueta: 'Licencia de Conducir',
-                              ruta: documentacionVehiculo.licencia_url,
-                              vencimiento: documentacionVehiculo.fecha_vencimiento_licencia
-                            }
-                          ];
+                // 2. Si es estado PENDIENTE_DOCUMENTACION, se filtran solo los documentos actualizados
+                if (esActualizacionDoc && tieneDocumentacion) {
+                  camposDocumento = camposDocumento.filter(doc => {
+                    // Comparación directa de fecha y URL entre la versión nueva y la anterior
+                    const cambioVencimiento = Boolean(doc.rawNuevaVenc) && doc.rawNuevaVenc !== doc.rawActualVenc;
+                    const cambioUrl = Boolean(doc.rawNuevaUrl) && doc.rawNuevaUrl !== doc.rawActualUrl;
 
-                          // 2. Si es moto/auto y NO es vehículo nuevo, filtramos para mostrar 
-                          // SOLO los registros que tengan un nuevo archivo o una nueva fecha.
-                          const documentosAMostrar =
-                            Number(documentacionVehiculo.es_nuevo_vehiculo) === 1
-                              ? listaDocumentos
-                              : listaDocumentos.filter(
-                                (doc) => Boolean(doc.ruta) || Boolean(doc.vencimiento)
-                              );
+                    // Verificación directa en el objeto documentacion_nueva
+                    const existeEnObjetoNuevo = Boolean(
+                      documentacion_nueva && (
+                        (doc.clave === 'cedula' && (documentacion_nueva.fecha_vencimiento_cedula || documentacion_nueva.cedula_url)) ||
+                        (doc.clave === 'seguro' && (documentacion_nueva.fecha_vencimiento_seguro || documentacion_nueva.seguro_url)) ||
+                        (doc.clave === 'licencia' && (documentacion_nueva.fecha_vencimiento_licencia || documentacion_nueva.licencia_url))
+                      )
+                    );
 
-                          if (documentosAMostrar.length === 0) {
+                    return cambioVencimiento || cambioUrl || existeEnObjetoNuevo;
+                  });
+                }
+
+                return (
+                  <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 4000, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
+                    <div style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem' }}>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0 }}>
+                          {esActualizacionDoc
+                            ? '📄 Evaluación de Actualización de Documentación'
+                            : '🆕 Evaluación de Alta de Vehículo Nuevo'}
+                        </h3>
+                        <button type="button" onClick={() => setDocumentacionVehiculo(null)} style={{ border: 'none', background: '#f1f3f5', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}>✕</button>
+                      </div>
+
+                      {/* Info del Repartidor y Vehículo */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.2rem', backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px' }}>
+                        <div>
+                          <strong>Repartidor:</strong>
+                          <div>{repartidor?.nombre_completo || [documentacionVehiculo.nombre, documentacionVehiculo.apellido].filter(Boolean).join(' ') || documentacionVehiculo.username}</div>
+                          <small style={{ color: '#666' }}>{repartidor?.email || documentacionVehiculo.email}</small>
+                        </div>
+                        <div>
+                          <strong>Vehículo:</strong>
+                          <div>{icono} {etiqueta} - {vehiculo?.marca || documentacionVehiculo.marca || ''} {vehiculo?.modelo || documentacionVehiculo.modelo || ''}</div>
+                          <small style={{ color: '#666' }}>
+                            {tieneDocumentacion
+                              ? `Patente: ${vehiculo?.patente || documentacionVehiculo.patente || 'Sin registrar'}`
+                              : 'Sin patente requerida (Bicicleta)'}
+                          </small>
+                        </div>
+                      </div>
+
+                      {/* CONDICIONAL PRINCIPAL: BICICLETA vs MOTO/AUTO */}
+                      {!tieneDocumentacion ? (
+                        <div style={{ padding: '1.2rem', backgroundColor: '#e7f5ff', border: '1px solid #a5d8ff', borderRadius: '8px', color: '#1864ab', margin: '1rem 0', textAlign: 'center' }}>
+                          🚲 <strong>Vehículo tipo Bicicleta:</strong> No requiere patente, documentación obligatoria ni fechas de vencimiento.
+                        </div>
+                      ) : camposDocumento.length === 0 ? (
+                        <div style={{ padding: '1.2rem', backgroundColor: '#fff9db', border: '1px solid #ffe066', borderRadius: '8px', color: '#856404', margin: '1rem 0', textAlign: 'center' }}>
+                          ⚠️ No se detectaron documentos nuevos o modificados para esta solicitud.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: '1.2rem' }}>
+                          {camposDocumento.map((doc) => {
+                            const urlArchivo = doc.nuevaUrl || doc.actualUrl;
+                            const vencimiento = doc.nuevaVenc || doc.actualVenc;
+
                             return (
-                              <div
-                                style={{
-                                  padding: '1rem',
-                                  backgroundColor: '#f8f9fa',
-                                  borderRadius: '8px',
-                                  color: '#666',
-                                  fontStyle: 'italic'
-                                }}
-                              >
-                                No se adjuntaron nuevos archivos ni fechas de vencimiento en esta solicitud.
-                              </div>
-                            );
-                          }
-
-                          return documentosAMostrar.map(
-                            ({ etiqueta, ruta, vencimiento }) => {
-                              const url = resolverDocumento(ruta);
-
-                              const fechaFormateada = vencimiento
-                                ? new Date(vencimiento).toLocaleDateString('es-AR')
-                                : null;
-
-                              const estaVencido = vencimiento
-                                ? new Date(vencimiento) < new Date()
-                                : false;
-
-                              return (
-                                <div
-                                  key={etiqueta}
-                                  style={{
-                                    marginBottom: '1rem',
-                                    padding: '0.8rem',
-                                    border: '1px solid #dee2e6',
-                                    borderRadius: '8px',
-                                    backgroundColor:
-                                      Number(documentacionVehiculo.es_nuevo_vehiculo) !== 1
-                                        ? '#fffde7' // Fondo sutilmente distinguible para actualizaciones
-                                        : '#fff'
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center'
-                                    }}
-                                  >
-                                    <strong>{etiqueta}</strong>
-
-                                    {vencimiento && (
-                                      <span
-                                        style={{
-                                          fontSize: '0.85rem',
-                                          fontWeight: 'bold',
-                                          color: estaVencido ? '#e03131' : '#2b8a3e'
-                                        }}
-                                      >
-                                        Nueva Fecha Vencimiento: {fechaFormateada}{' '}
-                                        {estaVencido ? '(⚠️ VENCIDO)' : ''}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {url ? (
-                                    <a
-                                      href={url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{
-                                        display: 'inline-block',
-                                        marginTop: '0.35rem',
-                                        color: '#1c7ed6',
-                                        fontWeight: '500'
-                                      }}
-                                    >
-                                      🔗 Abrir nuevo archivo enviado
+                              <div key={doc.titulo} style={{ border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', backgroundColor: '#fff' }}>
+                                <h4 style={{ margin: '0 0 0.8rem 0', color: '#343a40' }}>{doc.titulo}</h4>
+                                <div style={{ padding: '0.8rem', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+                                  <p style={{ margin: '0 0 0.4rem 0' }}>
+                                    <strong>Fecha Vencimiento:</strong> {vencimiento || 'No especificada'}
+                                  </p>
+                                  {urlArchivo ? (
+                                    <a href={resolverDocumento(urlArchivo)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', fontWeight: 'bold' }}>
+                                      🔗 Ver archivo adjunto
                                     </a>
                                   ) : (
-                                    <p
-                                      style={{
-                                        color: '#868e96',
-                                        margin: '0.35rem 0 0',
-                                        fontSize: '0.9rem'
-                                      }}
-                                    >
-                                      Mantiene archivo anterior (Sin modificaciones en este documento)
-                                    </p>
+                                    <span style={{ color: '#868e96' }}>Sin archivo adjunto</span>
                                   )}
-
-                                  {url &&
-                                    /\.(jpg|jpeg|png|gif|webp)$/i.test(url) && (
-                                      <img
-                                        src={url}
-                                        alt={etiqueta}
-                                        style={{
-                                          maxWidth: '100%',
-                                          maxHeight: '180px',
-                                          display: 'block',
-                                          marginTop: '0.5rem',
-                                          objectFit: 'contain',
-                                          borderRadius: '4px'
-                                        }}
-                                      />
-                                    )}
                                 </div>
-                              );
-                            }
-                          );
-                        })()}
-                      </>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '1rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px',
-                          color: '#666',
-                          fontStyle: 'italic',
-                          margin: '1rem 0'
-                        }}
-                      >
-                        🚲 Al tratarse de una bicicleta, este vehículo no requiere documentación obligatoria.
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Acciones */}
+                      <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
+                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')} disabled={procesandoId === `vehiculo-${id}`} style={{ flex: 1, backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                          ✅ Aprobar Solicitud
+                        </button>
+                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')} disabled={procesandoId === `vehiculo-${id}`} style={{ flex: 1, backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                          ❌ Rechazar Solicitud
+                        </button>
                       </div>
-                    )}
 
-
-                    {/* Botones de Evaluación en el Modal */}
-                    <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
-                      <button
-                        type="button"
-                        onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')}
-                        disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
-                        style={{
-                          flex: 1,
-                          backgroundColor:
-                            documentacionVehiculo.estado === 'PENDIENTE_BAJA'
-                              ? '#e03131'
-                              : '#2b8a3e',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '0.7rem',
-                          fontWeight: 'bold',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {documentacionVehiculo.estado === 'PENDIENTE_BAJA'
-                          ? '✅ Aprobar Baja (Eliminar/Desactivar vehículo)'
-                          : `✅ Aprobar ${documentacionVehiculo.es_nuevo_vehiculo
-                            ? 'Vehículo'
-                            : 'Renovación'
-                          }`}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')
-                        }
-                        disabled={procesandoId === `vehiculo-${documentacionVehiculo.id}`}
-                        style={{
-                          flex: 1,
-                          backgroundColor: '#6c757d',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '0.7rem',
-                          fontWeight: 'bold',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ❌ Rechazar Solicitud
-                      </button>
                     </div>
                   </div>
-                </div>
-              )}
-
+                );
+              })()}
               {/* Modal de detalle de repartidor ajustado */}
               {repartidorSeleccionado && (() => {
                 const vehiculoActivo = repartidorSeleccionado.vehiculos?.find(
@@ -2529,7 +2638,9 @@ export const PanelAdministrador = () => {
                           <p
                             style={{
                               margin: '0.3rem 0 0',
-                              color: Number(repartidorSeleccionado.validado) === 1 ? '#2b8a3e' : '#d9480f',
+                              color: Number(repartidorSeleccionado.validado) === 1
+                                ? '#2b8a3e'
+                                : '#f59f00', /* 🟡 Cambiado a amarillo para pendiente */
                               fontWeight: 'bold'
                             }}
                           >
@@ -2578,19 +2689,15 @@ export const PanelAdministrador = () => {
                           🚗 Vehículos Asociados y Estado Documental
                         </h3>
 
-                        {(!repartidorSeleccionado.vehiculos ||
-                          repartidorSeleccionado.vehiculos.length === 0) ? (
+                        {(!repartidorSeleccionado.vehiculos || repartidorSeleccionado.vehiculos.length === 0) ? (
                           <div style={{ padding: '0.8rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
                             El repartidor no posee vehículos registrados.
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {repartidorSeleccionado.vehiculos.map((v) => {
-                              const esActivo =
-                                Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
-
-                              const esBici =
-                                v.tipo_vehiculo?.toLowerCase().includes('bici');
+                              const esActivo = Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
+                              const esBici = v.tipo_vehiculo?.toLowerCase().includes('bici');
 
                               // Detectamos si el vehículo está dado de baja o rechazado
                               const esDeshabilitado =
@@ -2611,7 +2718,7 @@ export const PanelAdministrador = () => {
                                         ? '1px solid #adb5bd'
                                         : '1px solid #dee2e6',
                                     backgroundColor: esDeshabilitado
-                                      ? '#e9ecef' // 👈 Color grisáceo para tarjetas deshabilitadas/rechazadas/baja
+                                      ? '#e9ecef'
                                       : esActivo
                                         ? '#f8f9fa'
                                         : '#ffffff',
@@ -2619,7 +2726,6 @@ export const PanelAdministrador = () => {
                                     opacity: esDeshabilitado ? 0.9 : 1
                                   }}
                                 >
-
                                   {/* CABECERA DEL VEHÍCULO */}
                                   <div
                                     style={{
@@ -2636,47 +2742,42 @@ export const PanelAdministrador = () => {
                                     </strong>
 
                                     {/* Badges de Estado */}
-                                    <div
-                                      style={{
-                                        display: 'flex',
-                                        gap: '0.5rem',
-                                        alignItems: 'center',
-                                        flexWrap: 'wrap'
-                                      }}
-                                    >
-                                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        {esActivo && (
-                                          <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            ACTIVO ACTUAL
-                                          </span>
-                                        )}
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                      {esActivo && (
+                                        <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          ACTIVO ACTUAL
+                                        </span>
+                                      )}
 
-                                        {/* Diferenciación entre Baja y Rechazado manteniendo sus colores originales */}
-                                        {v.estado === 'BAJA' || (Number(v.activo) === 0 && !v.motivo_rechazo) ? (
-                                          <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            ❌ Vehículo dado de baja
-                                          </span>
-                                        ) : v.estado === 'RECHAZADO' || v.motivo_rechazo ? (
-                                          <span style={{ backgroundColor: '#fff5f5', color: '#c92a2a', border: '1px solid #ffc9c9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            🚫 Vehículo Rechazado
-                                          </span>
-                                        ) : (
-                                          <span style={{ backgroundColor: '#d3f9d8', color: '#2b8a3e', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                            Activo ({v.estado || 'PENDIENTE'})
-                                          </span>
-                                        )}
-                                      </div>
+                                      {v.estado === 'BAJA' || (Number(v.activo) === 0 && !v.motivo_rechazo) ? (
+                                        <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          ❌ Vehículo dado de baja
+                                        </span>
+                                      ) : v.estado === 'RECHAZADO' || v.motivo_rechazo ? (
+                                        <span style={{ backgroundColor: '#fff5f5', color: '#c92a2a', border: '1px solid #ffc9c9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          🚫 Vehículo Rechazado
+                                        </span>
+                                      ) : v.estado === 'PENDIENTE' || !v.estado ? (
+                                        /* 🟡 Badge amarillo exclusivo para pendientes dentro del modal */
+                                        <span style={{ backgroundColor: '#fff9db', color: '#f59f00', border: '1px solid #ffe066', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          ⏳ Pendiente
+                                        </span>
+                                      ) : (
+                                        <span style={{ backgroundColor: '#d3f9d8', color: '#2b8a3e', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                          Activo ({v.estado})
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
 
+                                  {/* MOTIVO DE RECHAZO DEL VEHÍCULO GENERAL */}
                                   {v.motivo_rechazo && (
                                     <p style={{ margin: '0.5rem 0 0', color: '#e03131', fontSize: '0.85rem' }}>
-                                      <strong>Motivo de rechazo:</strong> {v.motivo_rechazo}
+                                      <strong>Motivo de rechazo del vehículo:</strong> {v.motivo_rechazo}
                                     </p>
                                   )}
 
-                                  {/* Estado de Documentación y Fechas de Vencimiento */}
-                                  {/* Estado de Documentación y Fechas de Vencimiento */}
+                                  {/* SECCIÓN DE DOCUMENTACIÓN Y FECHAS DE VENCIMIENTO */}
                                   {!esBici && (
                                     <div style={{ marginTop: '0.8rem', borderTop: '1px solid #dee2e6', paddingTop: '0.8rem' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -2699,6 +2800,14 @@ export const PanelAdministrador = () => {
                                         </span>
                                       </div>
 
+                                      {/* MOTIVO DE RECHAZO DE DOCUMENTACIÓN (Ubicarlo aquí mejora la lectura) */}
+                                      {v.motivo_rechazo_documentacion && (
+                                        <div style={{ margin: '0.5rem 0 0.8rem 0', color: '#c92a2a', fontSize: '0.85rem', backgroundColor: '#fff5f5', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #ffc9c9' }}>
+                                          <strong>📄 Motivo de rechazo de documentación:</strong> {v.motivo_rechazo_documentacion}
+                                        </div>
+                                      )}
+
+                                      {/* GRILLA DE DOCUMENTOS */}
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', fontSize: '0.85rem' }}>
                                         {/* Licencia */}
                                         <div style={{
