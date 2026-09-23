@@ -44,15 +44,22 @@ export const simularRecorrido = async (req, res) => {
   }
 };
 
+// src/services/repartidores.service.js
 export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   const log = createLoggerViaje(IDrepartidor, IDorden);
 
-  // 1️⃣ Obtener orden y validar
+  // 1️⃣ Obtener orden tomando la ubicación real de la entrega (latitud_entrega / longitud_entrega)
   const [[orden]] = await pool.query(
     `
-    SELECT o.id, o.IDestado, o.IDrepartidor, c.latitud AS cliente_lat, c.longitud AS cliente_lng
+    SELECT 
+      o.id, 
+      o.IDestado, 
+      o.IDrepartidor, 
+      COALESCE(o.latitud_entrega, dc.latitud, c.latitud) AS cliente_lat,
+      COALESCE(o.longitud_entrega, dc.longitud, c.longitud) AS cliente_lng
     FROM ordenes o
-    JOIN clientes c ON o.IDcliente = c.IDusuario
+    LEFT JOIN direcciones_cliente dc ON o.IDdireccion = dc.id
+    LEFT JOIN clientes c ON o.IDcliente = c.IDusuario
     WHERE o.id = ?
     `,
     [IDorden]
@@ -78,7 +85,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
     `
   SELECT 
     l.id, l.nombre, l.latitud, l.longitud,
-    IF(ret.id IS NOT NULL, 1, 0) AS retirado,
+    IF(COUNT(ret.id) > 0, 1, 0) AS retirado,
     COALESCE(MAX(cp.nivel_sensibilidad), 1) AS maxSensibilidad
   FROM detalle_orden do
   JOIN locales l ON do.IDlocal = l.id
@@ -86,7 +93,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
   LEFT JOIN retiros_locales_orden ret ON ret.IDorden = do.IDorden AND ret.IDlocal = l.id
   WHERE do.IDorden = ? AND do.IDestado != 6
-  GROUP BY l.id, l.nombre, l.latitud, l.longitud, ret.id
+  GROUP BY l.id, l.nombre, l.latitud, l.longitud
   ORDER BY maxSensibilidad ASC
   `,
     [IDorden]
@@ -94,17 +101,23 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
 
   if (locales.length === 0) throw new Error('La orden no tiene productos activos pendientes');
 
-  // 3️⃣ Generar etapas
-  const etapas = generarEtapasRuta(
+  // 3️⃣ Generar etapas por trazado vial real (Llamada asíncrona OSRM)
+  const etapas = await generarEtapasRuta(
     { latitud: repLat, longitud: repLng },
     locales,
     { latitud: cliLat, longitud: cliLng }
   );
 
+  // 📌 Reordenar el arreglo de locales respetando fielmente el orden dictaminado por la IA/Algoritmo de Ruta
+  const localesOrdenados = etapas
+    .filter((e) => e.tipo === 'hacia_local')
+    .map((e) => locales.find((l) => l.id === e.localId))
+    .filter(Boolean);
+
   // Asegurar que la orden pase a "En camino" (ID 5)
   await pool.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
 
-  // 4️⃣ Bucle de simulación asíncrono con control de pausas
+  // 4️⃣ Bucle de simulación asíncrono con control de pausas sobre trazado fluido
   (async () => {
     try {
       for (const etapa of etapas) {
@@ -115,16 +128,16 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
             continue;
           }
 
-          log.info(`Avanzando hacia el local "${etapa.localNombre}"...`);
+          log.info(`Avanzando hacia el local "${etapa.localNombre}" por trazado urbano...`);
 
-          // Desplazamiento punto a punto hacia el local
+          // Desplazamiento punto a punto hacia el local (500ms entre puntos para fluidez)
           for (const punto of etapa.puntos) {
             await pool.query(
               `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
               [punto.latitud, punto.longitud, IDrepartidor]
             );
             log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 150)); // 👈 Cambiado de 500 a 150 ms
           }
 
           log.local(`Llegada al local: "${etapa.localNombre}". SIMULADOR PAUSADO.`);
@@ -167,14 +180,14 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
 
             if (retiroDB) {
               retiroConfirmado = true;
-              log.éxito(`Retiro confirmado en "${etapa.localNombre}". Reanudando simulación...`);
+              log.éxito(`Retiro confirmed en "${etapa.localNombre}". Reanudando simulación...`);
             } else {
               // Reintentar/Esperar 3 segundos antes de consultar BD nuevamente
               await new Promise((r) => setTimeout(r, 3000));
             }
           }
         } else if (etapa.tipo === 'hacia_cliente') {
-          log.info(`Todos los locales retirados. Avanzando hacia el domicilio del cliente...`);
+          log.info(`Todos los locales retirados. Avanzando hacia el domicilio del cliente por calles...`);
 
           for (const punto of etapa.puntos) {
             await pool.query(
@@ -182,7 +195,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
               [punto.latitud, punto.longitud, IDrepartidor]
             );
             log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 150)); // 👈 Cambiado de 500 a 150 ms
           }
 
           log.fin(`El repartidor llegó a la ubicación del cliente. Ingrese el código OTP para completar la entrega.`);
@@ -194,10 +207,12 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   })();
 
   return {
-    message: 'Simulación iniciada. El repartidor se detendrá en cada local hasta confirmar el retiro.',
+    message: 'Simulación iniciada por calles reales. El repartidor se detendrá en cada local hasta confirmar el retiro.',
     IDorden,
     IDrepartidor,
-    IDestado: 5
+    IDestado: 5,
+    etapas,           // Contiene el itinerario completo paso a paso
+    localesOrdenados   // Arreglo de locales ordenados por la distancia GPS e IA
   };
 };
 

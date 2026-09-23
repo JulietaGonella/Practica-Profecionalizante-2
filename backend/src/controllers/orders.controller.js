@@ -17,7 +17,8 @@ import {
   simularPagoExitosoService,
   searchLocalOrdersService,
   liberarPedidoRepartidorService,
-  confirmarRetiroLocalService
+  confirmarRetiroLocalService,
+  actualizarUbicacionRepartidorService
 } from '../services/orders.service.js';
 import { procesarWebhookMercadoPagoService } from '../services/mercadopago.service.js';
 
@@ -281,6 +282,22 @@ export const confirmarRetiroLocal = async (req, res) => {
 
     const result = await confirmarRetiroLocalService(id, IDusuario, IDlocal);
     res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const actualizarUbicacionRepartidor = async (req, res) => {
+  try {
+    const IDusuario = req.user.id; // Obtenido del token JWT gracias al authMiddleware
+    const { latitud, longitud } = req.body;
+
+    if (!latitud || !longitud) {
+      return res.status(400).json({ error: 'Latitud y longitud son requeridas' });
+    }
+
+    await actualizarUbicacionRepartidorService(IDusuario, latitud, longitud);
+    res.json({ message: 'Ubicación actualizada correctamente' });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

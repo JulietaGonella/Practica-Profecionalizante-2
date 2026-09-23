@@ -34,8 +34,9 @@ export const getPedidoAsignado = async (ordenId) => {
   return data;
 };
 
-export const getOrderTracking = async (ordenId) => {
-  const { data } = await api.get(`/orders/${ordenId}/tracking`);
+// Añadir en repartidorService.js si no lo tienes:
+export const actualizarUbicacionRepartidor = async (latitud, longitud) => {
+  const { data } = await api.put('/orders/ubicacion', { latitud, longitud });
   return data;
 };
 

@@ -22,7 +22,8 @@ import {
   simularPagoExitoso,
   searchLocalOrders,
   liberarPedidoRepartidor,
-  confirmarRetiroLocal
+  confirmarRetiroLocal,
+  actualizarUbicacionRepartidor
 } from '../controllers/orders.controller.js';
 
 const router = Router();
@@ -35,6 +36,7 @@ router.get('/mis-pedidos', authMiddleware, requireRole('cliente'), getMyOrders);
 
 // 📍 Cliente consulta el tracking GPS en vivo de una orden
 router.get('/:id/tracking', authMiddleware, requireRole('cliente'), getOrderTracking);
+router.put('/ubicacion', authMiddleware, requireRole('repartidor'), actualizarUbicacionRepartidor);
 
 // ❌ Cliente cancela su orden (Únicamente si estado = 1 Creado)
 router.put('/:id/cancel', authMiddleware, requireRole('cliente'), cancelOrder);

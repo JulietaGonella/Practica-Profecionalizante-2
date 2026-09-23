@@ -5,9 +5,9 @@ import { useCart } from '../../context/CartContext';
 import { crearOrden } from '../../api/ordersService';
 import { getMisDirecciones } from '../../api/clientesService';
 import api from '../../api/axios';
-import { calcularDistanciaKm } from '../../utils/geo'; // 👈 Importamos la utilidad de cálculo
+import { calcularDistanciaKm } from '../../utils/geo';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const CarritoPage = () => {
   const {
@@ -37,7 +37,7 @@ export const CarritoPage = () => {
   const [metodoPago, setMetodoPago] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Función de validación para el límite de opciones
+  // Validación de límite de opciones
   const excedeLimiteOpciones = (item) => {
     if (!item.grupos_opciones || !item.opcionesDetalladas) return false;
 
@@ -47,7 +47,6 @@ export const CarritoPage = () => {
       if (!grupo.max_seleccion) continue;
 
       const opcionesDelGrupo = item.opcionesDetalladas.filter((opc) => opc.grupo_id === grupo.id);
-
       const totalUnidadesGrupo = opcionesDelGrupo.reduce(
         (sum, opc) => sum + (opc.cantidad || 1),
         0
@@ -63,100 +62,93 @@ export const CarritoPage = () => {
     return false;
   };
 
-  // 1️⃣ Cargar direcciones y verificar la ubicación GPS actual al montar el carrito
+  // 1️⃣ Cargar direcciones y verificar la ubicación GPS actual
   useEffect(() => {
+    let isMounted = true;
+
     const inicializarUbicacionCarrito = async () => {
       try {
         setLoadingDirecciones(true);
         setErrorDirecciones('');
 
-        // 1. Obtenemos las direcciones guardadas del cliente
         const dataDirs = await getMisDirecciones();
-        setDirecciones(dataDirs);
+        const listaDirecciones = Array.isArray(dataDirs) ? dataDirs : [];
+        
+        if (!isMounted) return;
+        setDirecciones(listaDirecciones);
 
-        if (!navigator.geolocation) {
-          // Si el navegador no soporta GPS, caemos en la principal por defecto
-          const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
-          if (principal) setDireccionSeleccionadaId(principal.id);
+        if (listaDirecciones.length === 0) {
+          setErrorDirecciones('No tienes direcciones guardadas. Agrega una desde tu perfil.');
           setLoadingDirecciones(false);
           return;
         }
 
-        // 2. Solicitamos la ubicación GPS actual del dispositivo
+        const dirPrincipal = listaDirecciones.find((d) => d.es_principal === 1) || listaDirecciones[0];
+
+        if (!navigator.geolocation) {
+          if (dirPrincipal?.id) setDireccionSeleccionadaId(String(dirPrincipal.id));
+          setLoadingDirecciones(false);
+          return;
+        }
+
         navigator.geolocation.getCurrentPosition(
-          async (pos) => {
+          (pos) => {
+            if (!isMounted) return;
             const latActual = pos.coords.latitude;
             const lngActual = pos.coords.longitude;
-            const TOLERANCIA_KM = 0.15; // 150 metros a la redonda
+            const TOLERANCIA_KM = 0.5;
 
-            // 3. Buscamos si estamos cerca de alguna dirección ya registrada
-            let direccionEncontrada = null;
-            if (dataDirs && dataDirs.length > 0) {
-              direccionEncontrada = dataDirs.find((dir) => {
-                if (!dir.latitud || !dir.longitud) return false;
-                const distancia = calcularDistanciaKm(
+            let direccionCercana = null;
+            let menorDistancia = Infinity;
+
+            listaDirecciones.forEach((dir) => {
+              if (dir.latitud && dir.longitud) {
+                const dist = calcularDistanciaKm(
                   latActual,
                   lngActual,
                   Number(dir.latitud),
                   Number(dir.longitud)
                 );
-                return distancia <= TOLERANCIA_KM;
-              });
-            }
-
-            if (direccionEncontrada) {
-              // Si coincide con una existente, la seleccionamos automáticamente
-              setDireccionSeleccionadaId(direccionEncontrada.id);
-              setLoadingDirecciones(false);
-            } else {
-              // Si NO coincide con ninguna, la guardamos obligatoriamente de forma automática
-              try {
-                const nuevaDirPayload = {
-                  alias: 'Ubicación Actual GPS',
-                  direccion: `Lat: ${latActual.toFixed(4)}, Lon: ${lngActual.toFixed(4)}`,
-                  latitud: latActual,
-                  longitud: lngActual,
-                  es_principal: dataDirs.length === 0 ? 1 : 0
-                };
-
-                const resNueva = await api.post('/clientes/mis-direcciones', nuevaDirPayload);
-                
-                // Actualizamos la lista local con la nueva dirección incorporada
-                const [dataActualizada] = await Promise.all([getMisDirecciones()]);
-                setDirecciones(dataActualizada);
-                
-                // Seleccionamos la recién creada
-                setDireccionSeleccionadaId(resNueva.id || dataActualizada[dataActualizada.length - 1].id);
-              } catch (saveErr) {
-                console.error('Error al guardar automáticamente la nueva ubicación GPS:', saveErr);
-                // Fallback a la principal si falla el guardado automático
-                const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
-                if (principal) setDireccionSeleccionadaId(principal.id);
-              } finally {
-                setLoadingDirecciones(false);
+                if (dist <= TOLERANCIA_KM && dist < menorDistancia) {
+                  menorDistancia = dist;
+                  direccionCercana = dir;
+                }
               }
+            });
+
+            if (direccionCercana?.id) {
+              setDireccionSeleccionadaId(String(direccionCercana.id));
+            } else if (dirPrincipal?.id) {
+              setDireccionSeleccionadaId(String(dirPrincipal.id));
             }
-          },
-          (geoErr) => {
-            console.warn('No se pudo obtener el GPS en el carrito:', geoErr);
-            // Fallback si el usuario deniega o falla el GPS
-            const principal = dataDirs.find((d) => d.es_principal === 1) || dataDirs[0];
-            if (principal) setDireccionSeleccionadaId(principal.id);
             setLoadingDirecciones(false);
           },
-          { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
+          (geoErr) => {
+            console.warn('GPS no disponible o denegado en el carrito:', geoErr);
+            if (isMounted) {
+              if (dirPrincipal?.id) setDireccionSeleccionadaId(String(dirPrincipal.id));
+              setLoadingDirecciones(false);
+            }
+          },
+          { timeout: 8000, maximumAge: 60000, enableHighAccuracy: false }
         );
 
       } catch (err) {
         console.error('Error al inicializar direcciones en carrito:', err);
-        setErrorDirecciones(
-          err.response?.data?.error || 'No se pudieron cargar tus direcciones guardadas.'
-        );
-        setLoadingDirecciones(false);
+        if (isMounted) {
+          setErrorDirecciones(
+            err.response?.data?.error || 'No se pudieron cargar tus direcciones guardadas.'
+          );
+          setLoadingDirecciones(false);
+        }
       }
     };
 
     inicializarUbicacionCarrito();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // 2️⃣ Cotizar envío cuando cambien productos o la dirección elegida
@@ -183,9 +175,13 @@ export const CarritoPage = () => {
 
         const { data } = await api.post('/orders/cotizar', payloadCotizar);
 
-        setCostoEnvio(Number(data.costoEnvio || 0));
-        setDistanciaKM(Number(data.distanciaKM || 0));
-        setTiempoEstimadoMin(Number(data.tiempoEstimadoMin || 0));
+        const costo = Number(data.costoEnvio || data.costo_envio || 0);
+        const distancia = Number(data.distanciaKM || data.distanciaTotalKM || data.distancia_km || 0);
+        const tiempo = Number(data.tiempoEstimadoMin || data.tiempo_estimado_min || Math.round(distancia * 3 + 15));
+
+        setCostoEnvio(costo);
+        setDistanciaKM(distancia);
+        setTiempoEstimadoMin(tiempo);
       } catch (err) {
         console.error('Error al cotizar envío:', err);
         setErrorCotizacion(
@@ -406,7 +402,7 @@ export const CarritoPage = () => {
             })}
           </div>
 
-          {/* Selector de Dirección de Entrega Actualizada */}
+          {/* Selector de Dirección de Entrega */}
           <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '8px', backgroundColor: '#fcfcfc' }}>
             <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>
               📍 Dirección de Entrega (Ubicación Actual Detectada):
@@ -426,13 +422,13 @@ export const CarritoPage = () => {
                   style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '1rem' }}
                 >
                   {direcciones.map((dir) => (
-                    <option key={dir.id} value={dir.id}>
+                    <option key={dir.id} value={String(dir.id)}>
                       {dir.alias ? `[${dir.alias}] ` : ''}{dir.direccion} {dir.piso ? `(Piso ${dir.piso} ${dir.departamento || ''})` : ''} {dir.es_principal ? '★ Principal' : ''}
                     </option>
                   ))}
                 </select>
                 <small style={{ display: 'block', marginTop: '0.4rem', color: '#666' }}>
-                  ℹ️ El selector se actualiza automáticamente con tu ubicación GPS actual para evitar envíos a destinos erróneos.
+                  ℹ️ El selector se actualiza automáticamente con tu ubicación GPS actual.
                 </small>
               </div>
             )}

@@ -45,15 +45,22 @@ export const simularRecorrido = async (req, res) => {
   }
 };
 
+// src/services/repartidores.service.js
 export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   const log = createLoggerViaje(IDrepartidor, IDorden);
 
-  // 1️⃣ Obtener orden y validar
+  // 1️⃣ Obtener orden tomando la ubicación real de la entrega (latitud_entrega / longitud_entrega)
   const [[orden]] = await pool.query(
     `
-    SELECT o.id, o.IDestado, o.IDrepartidor, c.latitud AS cliente_lat, c.longitud AS cliente_lng
+    SELECT 
+      o.id, 
+      o.IDestado, 
+      o.IDrepartidor, 
+      COALESCE(o.latitud_entrega, dc.latitud, c.latitud) AS cliente_lat,
+      COALESCE(o.longitud_entrega, dc.longitud, c.longitud) AS cliente_lng
     FROM ordenes o
-    JOIN clientes c ON o.IDcliente = c.IDusuario
+    LEFT JOIN direcciones_cliente dc ON o.IDdireccion = dc.id
+    LEFT JOIN clientes c ON o.IDcliente = c.IDusuario
     WHERE o.id = ?
     `,
     [IDorden]
@@ -79,7 +86,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
     `
   SELECT 
     l.id, l.nombre, l.latitud, l.longitud,
-    IF(ret.id IS NOT NULL, 1, 0) AS retirado,
+    IF(COUNT(ret.id) > 0, 1, 0) AS retirado,
     COALESCE(MAX(cp.nivel_sensibilidad), 1) AS maxSensibilidad
   FROM detalle_orden do
   JOIN locales l ON do.IDlocal = l.id
@@ -87,7 +94,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
   LEFT JOIN retiros_locales_orden ret ON ret.IDorden = do.IDorden AND ret.IDlocal = l.id
   WHERE do.IDorden = ? AND do.IDestado != 6
-  GROUP BY l.id, l.nombre, l.latitud, l.longitud, ret.id
+  GROUP BY l.id, l.nombre, l.latitud, l.longitud
   ORDER BY maxSensibilidad ASC
   `,
     [IDorden]
@@ -95,17 +102,23 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
 
   if (locales.length === 0) throw new Error('La orden no tiene productos activos pendientes');
 
-  // 3️⃣ Generar etapas
-  const etapas = generarEtapasRuta(
+  // 3️⃣ Generar etapas por trazado vial real (Llamada asíncrona OSRM)
+  const etapas = await generarEtapasRuta(
     { latitud: repLat, longitud: repLng },
     locales,
     { latitud: cliLat, longitud: cliLng }
   );
 
+  // 📌 Reordenar el arreglo de locales respetando fielmente el orden dictaminado por la IA/Algoritmo de Ruta
+  const localesOrdenados = etapas
+    .filter((e) => e.tipo === 'hacia_local')
+    .map((e) => locales.find((l) => l.id === e.localId))
+    .filter(Boolean);
+
   // Asegurar que la orden pase a "En camino" (ID 5)
   await pool.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
 
-  // 4️⃣ Bucle de simulación asíncrono con control de pausas
+  // 4️⃣ Bucle de simulación asíncrono con control de pausas sobre trazado fluido
   (async () => {
     try {
       for (const etapa of etapas) {
@@ -116,16 +129,16 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
             continue;
           }
 
-          log.info(`Avanzando hacia el local "${etapa.localNombre}"...`);
+          log.info(`Avanzando hacia el local "${etapa.localNombre}" por trazado urbano...`);
 
-          // Desplazamiento punto a punto hacia el local
+          // Desplazamiento punto a punto hacia el local (500ms entre puntos para fluidez)
           for (const punto of etapa.puntos) {
             await pool.query(
               `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
               [punto.latitud, punto.longitud, IDrepartidor]
             );
             log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 500));
           }
 
           log.local(`Llegada al local: "${etapa.localNombre}". SIMULADOR PAUSADO.`);
@@ -168,14 +181,14 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
 
             if (retiroDB) {
               retiroConfirmado = true;
-              log.éxito(`Retiro confirmado en "${etapa.localNombre}". Reanudando simulación...`);
+              log.éxito(`Retiro confirmed en "${etapa.localNombre}". Reanudando simulación...`);
             } else {
               // Reintentar/Esperar 3 segundos antes de consultar BD nuevamente
               await new Promise((r) => setTimeout(r, 3000));
             }
           }
         } else if (etapa.tipo === 'hacia_cliente') {
-          log.info(`Todos los locales retirados. Avanzando hacia el domicilio del cliente...`);
+          log.info(`Todos los locales retirados. Avanzando hacia el domicilio del cliente por calles...`);
 
           for (const punto of etapa.puntos) {
             await pool.query(
@@ -183,7 +196,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
               [punto.latitud, punto.longitud, IDrepartidor]
             );
             log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 500));
           }
 
           log.fin(`El repartidor llegó a la ubicación del cliente. Ingrese el código OTP para completar la entrega.`);
@@ -195,10 +208,12 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   })();
 
   return {
-    message: 'Simulación iniciada. El repartidor se detendrá en cada local hasta confirmar el retiro.',
+    message: 'Simulación iniciada por calles reales. El repartidor se detendrá en cada local hasta confirmar el retiro.',
     IDorden,
     IDrepartidor,
-    IDestado: 5
+    IDestado: 5,
+    etapas,           // Contiene el itinerario completo paso a paso
+    localesOrdenados   // Arreglo de locales ordenados por la distancia GPS e IA
   };
 };
 
@@ -1532,9 +1547,11 @@ export default router;
 */
 
 /*ia.service.js:
+// src/services/ai.service.js
+
 // 📐 Calcular distancia en kilómetros entre dos coordenadas GPS (Haversine)
 export const calcularDistanciaKM = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
+  const R = 6371; // Radio medio de la Tierra en km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
 
@@ -1551,8 +1568,8 @@ export const calcularDistanciaKM = (lat1, lon1, lat2, lon2) => {
 
 // 💰 Algoritmo Dinámico para calcular el Costo de Envío Multiorigen
 export const calcularCostoEnvioMultiorigen = (puntosRuta) => {
-  const TARIFA_BASE = 500.00; 
-  const PRECIO_POR_KM = 250.00; 
+  const TARIFA_BASE = 500.00;
+  const PRECIO_POR_KM = 250.00;
   const RECARGO_PARADA_EXTRA = 200.00;
 
   let distanciaTotal = 0;
@@ -1578,48 +1595,84 @@ export const calcularCostoEnvioMultiorigen = (puntosRuta) => {
   };
 };
 
-// 📍 Interpola N puntos intermedios en línea recta entre dos coordenadas GPS
-export const interpolarCoordenadas = (puntoA, puntoB, pasos = 4) => {
-  const puntos = [];
-  for (let i = 0; i <= pasos; i++) {
-    const factor = i / pasos;
-    const lat = puntoA.latitud + (puntoB.latitud - puntoA.latitud) * factor;
-    const lng = puntoA.longitud + (puntoB.longitud - puntoA.longitud) * factor;
-    puntos.push({
-      latitud: Number(lat.toFixed(8)),
-      longitud: Number(lng.toFixed(8))
-    });
-  }
-  return puntos;
-};
+// 📍 Interpola coordenadas con paso constante (metros) para un avance fluido
+export const interpolarDenseCoordinates = (puntos, pasoMetros = 20) => {
+  if (!puntos || puntos.length === 0) return [];
+  const result = [puntos[0]];
 
-export const evaluarProximoLocalOptimo = (origenActual, localesPendientes) => {
-  let mejorLocal = localesPendientes[0];
-  let menorScore = Infinity;
+  for (let i = 0; i < puntos.length - 1; i++) {
+    const p1 = puntos[i];
+    const p2 = puntos[i + 1];
+    const distKm = calcularDistanciaKM(p1.latitud, p1.longitud, p2.latitud, p2.longitud);
+    const distM = distKm * 1000;
 
-  for (const local of localesPendientes) {
-    const distancia = calcularDistanciaKM(
-      origenActual.latitud,
-      origenActual.longitud,
-      Number(local.latitud),
-      Number(local.longitud)
-    );
-
-    // Priorizar locales más cercanos y con mayor nivel de sensibilidad
-    const sensibilidad = Number(local.maxSensibilidad) || 1;
-    const score = distancia / sensibilidad;
-
-    if (score < menorScore) {
-      menorScore = score;
-      mejorLocal = local;
+    if (distM > pasoMetros) {
+      const numPasos = Math.floor(distM / pasoMetros);
+      for (let j = 1; j <= numPasos; j++) {
+        const factor = j / (numPasos + 1);
+        const lat = p1.latitud + (p2.latitud - p1.latitud) * factor;
+        const lng = p1.longitud + (p2.longitud - p1.longitud) * factor;
+        result.push({
+          latitud: Number(lat.toFixed(8)),
+          longitud: Number(lng.toFixed(8))
+        });
+      }
     }
+    result.push(p2);
   }
 
-  return mejorLocal;
+  return result;
 };
 
-// 🧠 ORDENADOR INTELIGENTE POR NIVEL DE SENSIBILIDAD
-export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion) => {
+// 🗺️ Obtener ruta real sobre calles de la ciudad mediante OSRM
+export const obtenerRutaCallesOSRM = async (origen, destino) => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${origen.longitud},${origen.latitud};${destino.longitud},${destino.latitud}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Respuesta no válida de OSRM');
+
+    const data = await response.json();
+    if (data.routes && data.routes.length > 0) {
+      const coords = data.routes[0].geometry.coordinates;
+      const puntosGeo = coords.map(([lng, lat]) => ({
+        latitud: Number(lat.toFixed(8)),
+        longitud: Number(lng.toFixed(8))
+      }));
+      // Subdividir para suavizar el desplazamiento GPS en el frontend
+      return interpolarDenseCoordinates(puntosGeo, 25);
+    }
+  } catch (error) {
+    console.warn('⚠️ OSRM indisponible, utilizando ruta interpolada de respaldo:', error.message);
+  }
+
+  // Fallback: Interpolación densa en tramo directo
+  return interpolarDenseCoordinates([
+    { latitud: Number(origen.latitud), longitud: Number(origen.longitud) },
+    { latitud: Number(destino.latitud), longitud: Number(destino.longitud) }
+  ], 25);
+};
+
+// src/services/ai.service.js
+export const evaluarProximoLocalOptimo = (origenActual, localesPendientes) => {
+  // Ordenar primero por mayor/menor sensibilidad de forma estricta, y en caso de empate, por distancia.
+  return localesPendientes.sort((a, b) => {
+    const sensA = Number(a.maxSensibilidad) || 1;
+    const sensB = Number(b.maxSensibilidad) || 1;
+
+    // Si difieren en sensibilidad, priorizar la menor o mayor según la regla del negocio
+    if (sensB !== sensA) {
+      return sensA - sensB; // O sensB - sensA según la jerarquía requerida
+    }
+
+    // Si tienen la misma sensibilidad, desempatar por distancia GPS al repartidor
+    const distA = calcularDistanciaKM(origenActual.latitud, origenActual.longitud, Number(a.latitud), Number(a.longitud));
+    const distB = calcularDistanciaKM(origenActual.latitud, origenActual.longitud, Number(b.latitud), Number(b.longitud));
+    
+    return distA - distB;
+  })[0];
+};
+// 🧠 ORDENADOR INTELIGENTE POR SENSIBILIDAD Y RUTEO REAL SOBRE CALLES
+export const generarEtapasRuta = async (repartidorUbicacion, locales, clienteUbicacion) => {
   const etapas = [];
   let puntoOrigenActual = { latitud: Number(repartidorUbicacion.latitud), longitud: Number(repartidorUbicacion.longitud) };
   let localesPendientes = [...locales];
@@ -1627,14 +1680,16 @@ export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion
   while (localesPendientes.length > 0) {
     const proximoLocal = evaluarProximoLocalOptimo(puntoOrigenActual, localesPendientes);
     const puntoDestino = { latitud: Number(proximoLocal.latitud), longitud: Number(proximoLocal.longitud) };
-    const puntos = interpolarCoordenadas(puntoOrigenActual, puntoDestino, 4);
+    
+    // Obtener ruta sobre trazado vial
+    const puntos = await obtenerRutaCallesOSRM(puntoOrigenActual, puntoDestino);
 
     etapas.push({
       tipo: 'hacia_local',
       localId: proximoLocal.id,
       localNombre: proximoLocal.nombre,
       maxSensibilidad: proximoLocal.maxSensibilidad,
-      retirado: Boolean(proximoLocal.retirado), // 👈 Saber si ya fue confirmado
+      retirado: Boolean(proximoLocal.retirado),
       puntos: puntos.slice(1)
     });
 
@@ -1642,9 +1697,9 @@ export const generarEtapasRuta = (repartidorUbicacion, locales, clienteUbicacion
     localesPendientes = localesPendientes.filter(l => l.id !== proximoLocal.id);
   }
 
-  // Tramo final hacia el cliente
+  // Tramo final hacia la dirección del cliente
   const puntoCliente = { latitud: Number(clienteUbicacion.latitud), longitud: Number(clienteUbicacion.longitud) };
-  const puntosCliente = interpolarCoordenadas(puntoOrigenActual, puntoCliente, 5);
+  const puntosCliente = await obtenerRutaCallesOSRM(puntoOrigenActual, puntoCliente);
 
   etapas.push({
     tipo: 'hacia_cliente',

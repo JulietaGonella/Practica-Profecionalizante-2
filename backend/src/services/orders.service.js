@@ -525,17 +525,19 @@ export const getAvailableOrdersService = async (IDusuario) => {
     throw new Error('Cuenta no validada como repartidor');
   }
 
+  // ✅ CORRECCIÓN: Usar las columnas de entrega exactas guardadas en la orden
   const [orders] = await pool.query(
     `
     SELECT 
-    o.id AS IDorden,
-    o.precio AS subtotal,
-    o.costo_envio,
-    o.total,
-    o.tiempo_estimado_min,
-    c.direccion AS direccion_cliente
+      o.id AS IDorden,
+      o.precio AS subtotal,
+      o.costo_envio,
+      o.total,
+      o.tiempo_estimado_min,
+      o.direccion_entrega AS direccion_cliente,
+      o.latitud_entrega AS cliente_latitud,
+      o.longitud_entrega AS cliente_longitud
     FROM ordenes o
-    JOIN clientes c ON o.IDcliente = c.IDusuario
     WHERE o.IDestado IN (2, 7) AND o.IDrepartidor IS NULL
     ORDER BY o.id DESC;
     `
@@ -567,7 +569,6 @@ export const getAvailableOrdersService = async (IDusuario) => {
 export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
   const conn = await pool.getConnection();
   try {
-    // 1️⃣ Obtener el ID del local perteneciente al usuario logueado
     const [[local]] = await conn.query(
       `SELECT id FROM locales WHERE IDusuario = ?`,
       [IDusuario]
@@ -579,7 +580,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 
     const localId = local.id;
 
-    // 2️⃣ Consultar cabeceras de órdenes que contengan productos de este local
+    // ✅ CORRECCIÓN: Usar o.direccion_entrega y los detalles de direcciones_cliente
     let queryOrders = `
       SELECT DISTINCT
         o.id AS IDorden,
@@ -589,10 +590,12 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         u.apellido AS cliente_apellido,
         u.username AS cliente_username,
         c.telefono AS cliente_telefono,
-        c.direccion AS cliente_direccion,
-        c.piso AS cliente_piso,
-        c.departamento AS cliente_depto,
-        c.referencia AS cliente_referencia,
+        o.direccion_entrega AS cliente_direccion,
+        d.piso AS cliente_piso,
+        d.departamento AS cliente_depto,
+        d.referencia AS cliente_referencia,
+        o.latitud_entrega AS cliente_latitud,
+        o.longitud_entrega AS cliente_longitud,
         o.IDestado,
         e.nombre AS estado_orden,
         o.total,
@@ -605,9 +608,10 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         o.motivo_cancelacion,
         h.creado_en AS fecha_creacion
       FROM ordenes o
-      JOIN detalle_orden d ON o.id = d.IDorden
+      JOIN detalle_orden d_ord ON o.id = d_ord.IDorden
       JOIN usuarios u ON o.IDcliente = u.id
       LEFT JOIN clientes c ON u.id = c.IDusuario
+      LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
       JOIN estados e ON o.IDestado = e.id
       LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
       LEFT JOIN estados_pago ep ON o.IDestado_pago = ep.id
@@ -616,7 +620,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         FROM hitorial_estado_orden
         GROUP BY IDorden
       ) h ON o.id = h.IDorden
-      WHERE d.IDlocal = ?
+      WHERE d_ord.IDlocal = ?
     `;
 
     const params = [localId];
@@ -636,7 +640,6 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 
     const orderIds = ordenes.map((o) => o.IDorden);
 
-    // 3️⃣ Obtener todos los productos de las órdenes que pertenecen a este local
     const [detalles] = await conn.query(
       `
       SELECT
@@ -660,21 +663,20 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 
     const detalleIds = detalles.map((d) => d.IDdetalle);
 
-    // 4️⃣ Obtener opciones/adicionales de los ítems
     let opcionesMap = {};
     if (detalleIds.length > 0) {
       const [opciones] = await conn.query(
         `
-    SELECT
-      doo.detalle_orden_id,
-      op.id AS opcion_id,
-      op.nombre,
-      doo.precio_adicional,
-      doo.cantidad              -- 👈 Agregar el campo cantidad de la opción
-    FROM detalle_orden_opciones doo
-    JOIN opciones_producto op ON doo.opcion_id = op.id
-    WHERE doo.detalle_orden_id IN (?)
-    `,
+        SELECT
+          doo.detalle_orden_id,
+          op.id AS opcion_id,
+          op.nombre,
+          doo.precio_adicional,
+          doo.cantidad
+        FROM detalle_orden_opciones doo
+        JOIN opciones_producto op ON doo.opcion_id = op.id
+        WHERE doo.detalle_orden_id IN (?)
+        `,
         [detalleIds]
       );
 
@@ -686,12 +688,11 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
           id: op.opcion_id,
           nombre: op.nombre,
           precio_adicional: op.precio_adicional,
-          cantidad: op.cantidad || 1 // 👈 Mapear la cantidad
+          cantidad: op.cantidad || 1
         });
       });
     }
 
-    // 5️⃣ Estructurar la respuesta
     const productosPorOrden = {};
     detalles.forEach((det) => {
       if (!productosPorOrden[det.IDorden]) {
@@ -1837,7 +1838,9 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
 
     if (!local) throw new Error('El local especificado no existe.');
 
-    // 3️⃣ Validar geofencing (100 metros)
+    // ✅ Código corregido (100 metros = 0.1 km):
+    const DISTANCIA_MAXIMA_CONFIRMACION_KM = 0.1; // 100 metros
+
     const distanciaKM = calcularDistanciaKM(
       Number(repartidor.latitud),
       Number(repartidor.longitud),
@@ -1845,10 +1848,10 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       Number(local.longitud)
     );
 
-    if (distanciaKM > 0.1) {
+    if (distanciaKM > DISTANCIA_MAXIMA_CONFIRMACION_KM) {
       const distanciaMetros = Math.round(distanciaKM * 1000);
       throw new Error(
-        `Te encuentras a ${distanciaMetros}m del local "${local.nombre}". Debes estar a menos de 100m para confirmar.`
+        `Te encuentras a ${distanciaMetros}m del local "${local.nombre}". Debes estar a 100m o menos para confirmar el retiro.`
       );
     }
 
@@ -1947,6 +1950,80 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
   } catch (error) {
     await conn.rollback();
     throw error;
+  } finally {
+    conn.release();
+  }
+};
+
+export const actualizarUbicacionRepartidorService = async (IDusuario, latitud, longitud) => {
+  const conn = await pool.getConnection();
+  try {
+    // 1. Obtener ID del repartidor
+    const [[repartidor]] = await conn.query(
+      `SELECT id, latitud, longitud FROM repartidores WHERE IDusuario = ?`,
+      [IDusuario]
+    );
+
+    if (!repartidor) return;
+
+    // 2. Verificar si el repartidor está asignado a un pedido activo (En camino / En retiro)
+    const [[ordenActiva]] = await conn.query(
+      `SELECT id, IDestado FROM ordenes 
+       WHERE IDrepartidor = ? AND IDestado IN (4, 5, 7, 8) LIMIT 1`,
+      [repartidor.id]
+    );
+
+    let congelarMetros = false;
+
+    if (ordenActiva) {
+      // A. Verificar si está esperando un local (el producto no está listo o no ha sido retirado)
+      const [pendientesLocal] = await conn.query(
+        `SELECT do.IDlocal, do.IDestado AS estado_item, l.latitud, l.longitud 
+         FROM detalle_orden do
+         JOIN locales l ON do.IDlocal = l.id
+         WHERE do.IDorden = ? AND do.IDestado NOT IN (8, 6)`, // 8: Retirado en Local, 6: Rechazado
+        [ordenActiva.id]
+      );
+
+      if (pendientesLocal.length > 0) {
+        const proximoLocal = pendientesLocal[0];
+        // Calcular distancia actual del repartidor al local objetivo
+        const distLocal = calcularDistanciaKM(latitud, longitud, proximoLocal.latitud, proximoLocal.longitud);
+
+        // Si el repartidor está en el local (<= 100m) y el item NO está listo/confirmado, CONGELAR
+        if (distLocal <= 0.1 && (proximoLocal.estado_item !== 7 || proximoLocal.estado_item !== 8)) {
+          congelarMetros = true;
+        }
+      }
+
+      // B. Verificar si está en la ubicación del cliente esperando confirmación TOTP
+      const [[clienteDestino]] = await conn.query(
+        `SELECT latitud_entrega, longitud_entrega FROM ordenes WHERE id = ?`,
+        [ordenActiva.id]
+      );
+
+      if (clienteDestino) {
+        const distCliente = calcularDistanciaKM(latitud, longitud, clienteDestino.latitud_entrega, clienteDestino.longitud_entrega);
+        // Si llegó a la casa del cliente (<= 100m) esperando el código TOTP, CONGELAR
+        if (distCliente <= 0.1) {
+          congelarMetros = true;
+        }
+      }
+    }
+
+    // 3. Si no debe congelar metros, actualizar las coordenadas reales
+    if (!congelarMetros) {
+      await conn.query(
+        `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
+        [latitud, longitud, repartidor.id]
+      );
+    } else {
+      // Si debe estar congelado, actualiza solo el timestamp de última ubicación manteniéndose estático
+      await conn.query(
+        `UPDATE repartidores SET ultima_ubicacion = NOW() WHERE id = ?`,
+        [repartidor.id]
+      );
+    }
   } finally {
     conn.release();
   }
