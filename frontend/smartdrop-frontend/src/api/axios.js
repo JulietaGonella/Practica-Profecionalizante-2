@@ -43,11 +43,20 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// src/api/axios.js (o axios_2.js)
+
 // 2️⃣ Interceptor de Respuesta: Refresco automático y transparente con cola
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // 🟢 AGREGAR ESTA CONDICIÓN:
+    // Si la petición vino del endpoint de login y falló (401),
+    // NO ejecutamos la lógica de refresh token ni hacemos window.location.href
+    if (originalRequest.url?.includes('/auth/login')) {
+      return Promise.reject(error);
+    }
 
     // Si la API responde 401 y la petición no se ha reintentado aún
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -93,13 +102,12 @@ api.interceptors.response.use(
         // Reintentar la petición original
         return api(originalRequest);
       } catch (refreshError) {
-        // Si el refresh token venció (30 días) o fue revocado, limpiar sesión
+        // Si el refresh token venció o fue revocado, limpiar sesión
         processQueue(refreshError, null);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
         
-        // 🟢 Corregido: Redirección a '/login'
         window.location.href = '/login'; 
         return Promise.reject(refreshError);
       } finally {

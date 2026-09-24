@@ -1,10 +1,9 @@
-// src/pages/LoginPage.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
-  const { user, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -12,17 +11,14 @@ export const LoginPage = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🟢 Función unificada para resolver la navegación según el estado del usuario
   const redirigirPorUsuario = (usuario) => {
     if (!usuario) return;
 
-    // 1️⃣ Si debe cambiar la contraseña obligatoriamente, redirigir a la pantalla de actualización
     if (usuario.debe_cambiar_pass) {
       navigate('/actualizar-password-inicial', { replace: true });
       return;
     }
 
-    // 2️⃣ Si la contraseña está en orden, redirigir según su rol correspondiente
     const rol = usuario.rol ? usuario.rol.toLowerCase() : '';
     if (rol === 'cliente') navigate('/cliente/inicio', { replace: true });
     else if (rol === 'local' || rol === 'administrador local') navigate('/local/inicio', { replace: true });
@@ -31,23 +27,25 @@ export const LoginPage = () => {
     else navigate('/login', { replace: true });
   };
 
-  // 🟢 Si el usuario ya está autenticado e intenta ingresar a /login
-  useEffect(() => {
-    if (user) {
-      redirigirPorUsuario(user);
-    }
-  }, [user, navigate]);
+  // 🔴 IMPORTANTE: Se eliminó el useEffect que dependía de [user]. 
+  // Ese hook hacía que si cambiaba el estado, el formulario se reiniciara.
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     setIsSubmitting(true);
 
     try {
+      // 1. Intentamos loguear al usuario
       const userLogged = await login(email, password);
+      
+      // 2. Si las credenciales SON CORRECTAS:
+      setError('');
       redirigirPorUsuario(userLogged);
     } catch (err) {
-      setError(err.response?.data?.error || 'Credenciales inválidas');
+      // 3. Si las credenciales SON INCORRECTAS:
+      // No redirige, no desmonta el componente, retiene los campos e imprime el mensaje.
+      const mensajeError = err.response?.data?.error || err.message || 'Error al iniciar sesión';
+      setError(mensajeError);
     } finally {
       setIsSubmitting(false);
     }
@@ -56,7 +54,13 @@ export const LoginPage = () => {
   return (
     <div style={{ maxWidth: '400px', margin: '3rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
       <h2>Iniciar Sesión</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      
+      {/* El cartel permanene visible con el mensaje del servidor */}
+      {error && (
+        <div style={{ padding: '0.75rem', marginBottom: '1rem', color: '#721c24', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px' }}>
+          ⚠️ {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <input
@@ -79,7 +83,7 @@ export const LoginPage = () => {
         <br /><br />
 
         <button type="submit" disabled={isSubmitting} style={{ cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-          {isSubmitting ? '⏳ Ingresando a la cuenta...' : 'Ingresar'}
+          {isSubmitting ? '⏳ Cargando...' : 'Ingresar'}
         </button>
       </form>
 

@@ -62,7 +62,7 @@ export const CarritoPage = () => {
     return false;
   };
 
-  // 1️⃣ Cargar direcciones y verificar la ubicación GPS actual
+  // 1️⃣ Cargar únicamente direcciones guardadas y autoselect por GPS (150m)
   useEffect(() => {
     let isMounted = true;
 
@@ -71,10 +71,17 @@ export const CarritoPage = () => {
         setLoadingDirecciones(true);
         setErrorDirecciones('');
 
+        // Obtener EXCLUSIVAMENTE las direcciones reales guardadas en la BD
         const dataDirs = await getMisDirecciones();
-        const listaDirecciones = Array.isArray(dataDirs) ? dataDirs : [];
-        
+
+        // Filtrar asegurando que solo sean objetos con ID válido de la BD
+        const listaDirecciones = Array.isArray(dataDirs)
+          ? dataDirs.filter(d => d && d.id)
+          : [];
+
         if (!isMounted) return;
+
+        // Guardar en el estado ÚNICAMENTE las direcciones de la BD
         setDirecciones(listaDirecciones);
 
         if (listaDirecciones.length === 0) {
@@ -83,32 +90,40 @@ export const CarritoPage = () => {
           return;
         }
 
+        // Buscar la dirección principal como valor predeterminado (fallback)
         const dirPrincipal = listaDirecciones.find((d) => d.es_principal === 1) || listaDirecciones[0];
 
+        // Si el navegador no soporta geolocalización, asignar la dirección principal por defecto
         if (!navigator.geolocation) {
           if (dirPrincipal?.id) setDireccionSeleccionadaId(String(dirPrincipal.id));
           setLoadingDirecciones(false);
           return;
         }
 
+        // Obtener coordenadas del dispositivo para comparar distancias en segundo plano
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (!isMounted) return;
+
             const latActual = pos.coords.latitude;
             const lngActual = pos.coords.longitude;
-            const TOLERANCIA_KM = 0.5;
+
+            // 🎯 Margen exacto: 150 metros = 0.15 km
+            const TOLERANCIA_KM = 0.15;
 
             let direccionCercana = null;
             let menorDistancia = Infinity;
 
+            // Comparar distancias con las direcciones guardadas
             listaDirecciones.forEach((dir) => {
-              if (dir.latitud && dir.longitud) {
+              if (dir.latitud !== null && dir.longitud !== null) {
                 const dist = calcularDistanciaKm(
                   latActual,
                   lngActual,
                   Number(dir.latitud),
                   Number(dir.longitud)
                 );
+
                 if (dist <= TOLERANCIA_KM && dist < menorDistancia) {
                   menorDistancia = dist;
                   direccionCercana = dir;
@@ -116,21 +131,24 @@ export const CarritoPage = () => {
               }
             });
 
+            // 🎯 SI ESTÁ A MENOS DE 150m: Selecciona la dirección guardada correspondiente.
+            // SI NO COINCIDE CON NINGUNA: Selecciona la dirección principal guardada por defecto.
             if (direccionCercana?.id) {
               setDireccionSeleccionadaId(String(direccionCercana.id));
             } else if (dirPrincipal?.id) {
               setDireccionSeleccionadaId(String(dirPrincipal.id));
             }
+
             setLoadingDirecciones(false);
           },
           (geoErr) => {
-            console.warn('GPS no disponible o denegado en el carrito:', geoErr);
+            console.warn('GPS no disponible o denegado:', geoErr);
             if (isMounted) {
               if (dirPrincipal?.id) setDireccionSeleccionadaId(String(dirPrincipal.id));
               setLoadingDirecciones(false);
             }
           },
-          { timeout: 8000, maximumAge: 60000, enableHighAccuracy: false }
+          { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
         );
 
       } catch (err) {

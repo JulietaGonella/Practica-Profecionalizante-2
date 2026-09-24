@@ -140,19 +140,21 @@ import { enviarEmailRecuperacion } from '../helpers/email.helper.js';
 
 export const loginService = async (email, password, userAgent, ipAddress) => {
   if (!email || !password) {
-    throw new Error('Email y password requeridos');
+    throw new Error('Email y contraseña requeridos');
   }
 
   const cleanEmail = String(email).trim().toLowerCase();
   const user = await getUserByEmailService(cleanEmail);
 
+  // 🔴 1. Si no existe el usuario registrado con ese correo
   if (!user) {
-    throw new Error('Credenciales inválidas');
+    throw new Error('El correo electrónico no está registrado.');
   }
 
   const isMatch = await bcrypt.compare(password, user.password_hash);
+  // 🔴 2. Si la contraseña no coincide con la base de datos
   if (!isMatch) {
-    throw new Error('Credenciales inválidas');
+    throw new Error('La contraseña es incorrecta.');
   }
 
   if (
@@ -187,7 +189,7 @@ export const loginService = async (email, password, userAgent, ipAddress) => {
       apellido: user.apellido,
       email: user.email,
       rol: user.rol,
-      debe_cambiar_pass: Boolean(user.debe_cambiar_pass) // 👈 Retornamos el estado de la bandera
+      debe_cambiar_pass: Boolean(user.debe_cambiar_pass)
     }
   };
 };

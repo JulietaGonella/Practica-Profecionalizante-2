@@ -27,6 +27,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+  try {
     const { data } = await api.post('/auth/login', { email, password });
 
     localStorage.setItem('accessToken', data.accessToken);
@@ -35,8 +36,11 @@ export const AuthProvider = ({ children }) => {
 
     setUser(data.user);
     return data.user;
-  };
-
+  } catch (error) {
+    // 🛑 IMPORTANTE: Captura el error y vuelve a lanzarlo sin tocar el estado 'user'
+    throw error;
+  }
+};
   const registerClient = async (formData) => {
     const { data } = await api.post('/auth/register', formData);
     return data;

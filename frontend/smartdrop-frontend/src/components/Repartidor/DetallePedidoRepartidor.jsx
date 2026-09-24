@@ -9,7 +9,7 @@ import {
   actualizarUbicacionRepartidor
 } from '../../api/repartidorService';
 
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 /* ============================================================
@@ -122,6 +122,22 @@ const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+// Componente auxiliar para re centrar el mapa suavemente en las coordenadas del repartidor
+const CentrarMapaRepartidor = ({ lat, lng }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (lat != null && lng != null) {
+      map.panTo([lat, lng], {
+        animate: true,
+        duration: 0.8
+      });
+    }
+  }, [lat, lng, map]);
+
+  return null;
+};
+
 export const DetallePedidoRepartidor = () => {
   const { ordenId } = useParams();
   const navigate = useNavigate();
@@ -168,9 +184,11 @@ export const DetallePedidoRepartidor = () => {
 
   // 📡 Envío de geolocalización GPS real
   useEffect(() => {
+    // Desactivar si no hay pedido o si el recorrido en la simulación está activo/en proceso
+    if (!ordenId || accionProcesando === 'recorrido') return;
+
     const enviarUbicacionGPS = () => {
       if (!navigator.geolocation) return;
-
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
@@ -191,7 +209,7 @@ export const DetallePedidoRepartidor = () => {
     enviarUbicacionGPS();
     const intervaloGPS = setInterval(enviarUbicacionGPS, 7000);
     return () => clearInterval(intervaloGPS);
-  }, [ordenId]);
+  }, [ordenId, accionProcesando]);
 
   const handleSimularRecorrido = async () => {
     if (!pedido?.IDrepartidor) {
@@ -451,7 +469,11 @@ export const DetallePedidoRepartidor = () => {
 
           {repLat != null && repLng != null ? (
             <div style={{ height: '400px', width: '100%', borderRadius: '8px', overflow: 'hidden', marginTop: '1rem' }}>
-              <MapContainer center={[repLat, repLng]} zoom={14} style={{ height: '100%', width: '100%' }}>
+              <MapContainer center={[repLat, repLng]} zoom={16} style={{ height: '100%', width: '100%' }}>
+
+                {/* 🎯 SEGUIMIENTO EN VIVO: Centra el mapa cada vez que repLat o repLng cambien */}
+                <CentrarMapaRepartidor lat={repLat} lng={repLng} />
+
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

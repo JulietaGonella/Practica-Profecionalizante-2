@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getPedidoById } from '../../api/ordersService';
+import { getPedidoById, getOrderTracking } from '../../api/ordersService';
 import api from '../../api/axios';
 import { obtenerEstadoEfectivoCliente, SECUENCIA_ESTADOS } from '../../utils/estados';
 import L from 'leaflet';
@@ -17,6 +17,8 @@ export const SeguimientoPedido = () => {
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const repartidorMarkerRef = useRef(null);
+  const boundsCalculadosRef = useRef(false); // Evita reajustar el zoom en cada actualización GPS
 
   const paymentStatusParam = searchParams.get('status') || searchParams.get('collection_status');
 
@@ -56,19 +58,109 @@ export const SeguimientoPedido = () => {
     }
   }, [ordenId]);
 
+  // --- GPS DEL REPARTIDOR EN TIEMPO REAL ---
+  useEffect(() => {
+    if (
+      !ordenId ||
+      !orden ||
+      Number(orden.IDestado) === 3 ||
+      Number(orden.IDestado) === 6
+    ) {
+      return;
+    }
+
+    const consultarTrackingGPS = async () => {
+      try {
+        const dataTracking = await getOrderTracking(ordenId);
+
+        const latitud = dataTracking?.repartidor?.ubicacion?.latitud;
+        const longitud = dataTracking?.repartidor?.ubicacion?.longitud;
+
+        if (latitud != null && longitud != null) {
+          const lat = Number(latitud);
+          const lng = Number(longitud);
+
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+          // Mover el marcador del repartidor
+          if (repartidorMarkerRef.current) {
+            repartidorMarkerRef.current.setLatLng([lat, lng]);
+          }
+
+          // 🎯 EVALUACIÓN DE TRAYECTO FINAL A CASA DEL CLIENTE:
+          // Verifica si la orden está en camino Y si ya se confirmaron todos los retiros en los locales.
+          const estaEnCamino = Number(orden.IDestado) === 5 || Number(orden.IDestado) === 4;
+          const todosRetirados = Boolean(orden.retiro_confirmado) || (
+            orden.productos &&
+            orden.productos.filter(p => Number(p.IDestado_item ?? p.IDestado) !== 6)
+              .every(p => Number(p.IDestado_item ?? p.IDestado) === 8)
+          );
+
+          if (mapInstanceRef.current && estaEnCamino && todosRetirados) {
+            const latCliente = Number(orden.latitud_entrega || orden.latitud);
+            const lngCliente = Number(orden.longitud_entrega || orden.longitud);
+
+            if (Number.isFinite(latCliente) && Number.isFinite(lngCliente)) {
+              // Encuadra la cámara abarcando ÚNICAMENTE el repartidor y la casa del cliente
+              const boundsTrayectoFinal = L.latLngBounds(
+                [lat, lng],
+                [latCliente, lngCliente]
+              );
+
+              mapInstanceRef.current.fitBounds(boundsTrayectoFinal, {
+                padding: [60, 60],
+                maxZoom: 15,
+                animate: true,
+                duration: 0.8
+              });
+            }
+          } else if (mapInstanceRef.current && estaEnCamino) {
+            // Si va hacia los locales a buscar productos, solo centra en el repartidor/panorámico
+            mapInstanceRef.current.panTo([lat, lng], {
+              animate: true,
+              duration: 0.8
+            });
+          }
+
+          // Sincronizar ubicación en el estado local de la orden
+          setOrden((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              repartidor: {
+                ...prev.repartidor,
+                latitud: lat,
+                longitud: lng
+              }
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('Error al consultar el GPS del repartidor:', err.message);
+      }
+    };
+
+    consultarTrackingGPS();
+    const intervalGPS = setInterval(consultarTrackingGPS, 3000);
+
+    return () => clearInterval(intervalGPS);
+  }, [ordenId, orden?.IDestado, orden?.retiro_confirmado]);
+
   // --- RENDERIZADO DEL MAPA CON LEAFLET ---
   useEffect(() => {
-    if (!orden || loading) return;
+    if (!orden || loading || !mapRef.current) return;
 
-    // Coordenadas del cliente (Destino)
-    const latCliente = Number(orden.latitud_entrega || orden.latitud || -32.4080);
-    const lngCliente = Number(orden.longitud_entrega || orden.longitud || -63.2410);
+    const latCliente = Number(
+      orden.latitud_entrega || orden.latitud || -32.4080
+    );
+    const lngCliente = Number(
+      orden.longitud_entrega || orden.longitud || -63.2410
+    );
 
-    // Extraer locales únicos desde los productos del pedido
     const listaProductos = orden.productos || orden.detalles || [];
     const localesMap = new Map();
 
-    listaProductos.forEach(p => {
+    listaProductos.forEach((p) => {
       if (p.latitud && p.longitud) {
         localesMap.set(p.IDlocal || p.local, {
           nombre: p.local || 'Local Comercial',
@@ -78,94 +170,152 @@ export const SeguimientoPedido = () => {
       }
     });
 
-    if (!mapInstanceRef.current && mapRef.current) {
-      // Inicializar mapa centrado en el cliente
-      const map = L.map(mapRef.current).setView([latCliente, lngCliente], 14);
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapRef.current).setView(
+        [latCliente, lngCliente],
+        14
+      );
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; OpenStreetMap contributors'
+        }
+      ).addTo(map);
 
       mapInstanceRef.current = map;
     }
 
     const map = mapInstanceRef.current;
 
-    // Limpiar capas anteriores para evitar duplicados en el polling
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Marker) {
-        map.removeLayer(layer);
+    // Los elementos estáticos se crean una sola vez.
+    if (!boundsCalculadosRef.current) {
+      const bounds = [];
+
+      // 1. Pin del Cliente
+      const clienteIcon = L.divIcon({
+        className: 'custom-pin',
+        html:
+          '<div style="background-color: #2b8a3e; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
+        iconSize: [30, 30]
+      });
+
+      L.marker(
+        [latCliente, lngCliente],
+        { icon: clienteIcon }
+      )
+        .addTo(map)
+        .bindPopup(
+          `<b>Dirección de Entrega</b><br>${orden.direccion_entrega || 'Tu ubicación'
+          }`
+        );
+
+      bounds.push([latCliente, lngCliente]);
+
+      // 2. Pines de los Locales
+      localesMap.forEach((local) => {
+        const localIcon = L.divIcon({
+          className: 'custom-pin',
+          html:
+            '<div style="background-color: #1c7ed6; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
+          iconSize: [30, 30]
+        });
+
+        L.marker(
+          [local.lat, local.lng],
+          { icon: localIcon }
+        )
+          .addTo(map)
+          .bindPopup(`<b>Local:</b> ${local.nombre}`);
+
+        bounds.push([local.lat, local.lng]);
+      });
+
+      // 3. Pin inicial del repartidor, si ya tiene ubicación.
+      const repLat = Number(orden.repartidor?.latitud);
+      const repLng = Number(orden.repartidor?.longitud);
+
+      if (Number.isFinite(repLat) && Number.isFinite(repLng)) {
+        const repIcon = L.divIcon({
+          className: 'custom-pin',
+          html:
+            '<div style="background-color: #f59f00; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transition: transform 0.3s ease;">🚴</div>',
+          iconSize: [30, 30]
+        });
+
+        repartidorMarkerRef.current = L.marker(
+          [repLat, repLng],
+          { icon: repIcon }
+        )
+          .addTo(map)
+          .bindPopup('<b>Repartidor en camino</b>');
+
+        bounds.push([repLat, repLng]);
       }
-    });
 
-    const bounds = [];
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, {
+          padding: [50, 50]
+        });
+      }
 
-    // 1. Agregar Pin del Cliente (Destino)
-    const clienteIcon = L.divIcon({
-      className: 'custom-pin',
-      html: '<div style="background-color: #2b8a3e; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
-      iconSize: [30, 30]
-    });
+      boundsCalculadosRef.current = true;
+      // En el bloque else del useEffect de renderizado del mapa (donde el GPS apareció después):
+    } else {
+      // Si el GPS apareció después de crear el mapa, crear el marcador.
+      const repLat = Number(orden.repartidor?.latitud);
+      const repLng = Number(orden.repartidor?.longitud);
 
-    const markerCliente = L.marker(
-      [latCliente, lngCliente],
-      { icon: clienteIcon }
-    ).addTo(map);
+      if (Number.isFinite(repLat) && Number.isFinite(repLng)) {
+        if (!repartidorMarkerRef.current) {
+          const repIcon = L.divIcon({
+            className: 'custom-pin',
+            html:
+              '<div style="background-color: #f59f00; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transition: transform 0.3s ease;">🚴</div>',
+            iconSize: [30, 30]
+          });
 
-    markerCliente.bindPopup(
-      `<b>Dirección de Entrega</b><br>${orden.direccion_entrega || 'Tu ubicación'}`
-    );
+          repartidorMarkerRef.current = L.marker(
+            [repLat, repLng],
+            { icon: repIcon }
+          )
+            .addTo(map)
+            .bindPopup('<b>Repartidor en camino</b>');
+        } else {
+          repartidorMarkerRef.current.setLatLng([
+            repLat,
+            repLng
+          ]);
+        }
 
-    bounds.push([latCliente, lngCliente]);
-
-    // 2. Agregar Pines de los Locales
-    localesMap.forEach((local) => {
-      const localIcon = L.divIcon({
-        className: 'custom-pin',
-        html: '<div style="background-color: #1c7ed6; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
-        iconSize: [30, 30]
-      });
-
-      const markerLocal = L.marker(
-        [local.lat, local.lng],
-        { icon: localIcon }
-      ).addTo(map);
-
-      markerLocal.bindPopup(`<b>Local:</b> ${local.nombre}`);
-
-      bounds.push([local.lat, local.lng]);
-    });
-
-    // 3. Agregar Pin del Repartidor
-    // Si está en camino y tiene ubicación
-    if (orden.repartidor?.latitud && orden.repartidor?.longitud) {
-      const repLat = Number(orden.repartidor.latitud);
-      const repLng = Number(orden.repartidor.longitud);
-
-      const repIcon = L.divIcon({
-        className: 'custom-pin',
-        html: '<div style="background-color: #f59f00; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">🚴</div>',
-        iconSize: [30, 30]
-      });
-
-      const markerRep = L.marker(
-        [repLat, repLng],
-        { icon: repIcon }
-      ).addTo(map);
-
-      markerRep.bindPopup(`<b>Repartidor en camino</b>`);
-
-      bounds.push([repLat, repLng]);
+        // 🎯 Re centrar también si se actualiza la posición desde las props de la orden
+        if (Number(orden.IDestado) === 4) {
+          map.panTo([repLat, repLng], { animate: true });
+        }
+      }
     }
-
-    // Ajustar vista del mapa para que contenga todos los pines
-    if (bounds.length > 0) {
-      map.fitBounds(bounds, {
-        padding: [50, 50]
-      });
-    }
-
   }, [orden, loading]);
+
+  // --- REDIRECCIÓN AUTOMÁTICA SI EL PEDIDO PASA A ENTREGADO ---
+  useEffect(() => {
+    if (orden && Number(orden.IDestado) === 3) {
+      // Redirige al cliente a la vista de sus pedidos inmediatamente
+      navigate('/cliente/pedidos', { replace: true });
+    }
+  }, [orden, navigate]);
+
+  // Limpiar Leaflet al desmontar el componente.
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
+      repartidorMarkerRef.current = null;
+      boundsCalculadosRef.current = false;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -428,9 +578,8 @@ export const SeguimientoPedido = () => {
             }}
           >
             {orden.repartidor?.nombre
-              ? `${orden.repartidor.nombre} ${
-                  orden.repartidor.apellido || ''
-                } se encargará de retirar y entregar tu pedido.`
+              ? `${orden.repartidor.nombre} ${orden.repartidor.apellido || ''
+              } se encargará de retirar y entregar tu pedido.`
               : 'Un repartidor ya ha tomado tu pedido y se encuentra en camino al local.'}
           </p>
         </div>
@@ -533,11 +682,10 @@ export const SeguimientoPedido = () => {
                   backgroundColor: esCancelado
                     ? '#fff5f5'
                     : '#fff',
-                  border: `1px solid ${
-                    esCancelado
-                      ? '#ffc9c9'
-                      : '#dee2e6'
-                  }`,
+                  border: `1px solid ${esCancelado
+                    ? '#ffc9c9'
+                    : '#dee2e6'
+                    }`,
                   borderRadius: '6px',
                   flexWrap: 'wrap',
                   gap: '10px',
@@ -597,13 +745,13 @@ export const SeguimientoPedido = () => {
                               precioStr =
                                 cant > 1
                                   ? ` (+$${precioUnit.toFixed(
-                                      2
-                                    )} c/u = +$${(
-                                      precioUnit * cant
-                                    ).toFixed(2)})`
+                                    2
+                                  )} c/u = +$${(
+                                    precioUnit * cant
+                                  ).toFixed(2)})`
                                   : ` (+$${precioUnit.toFixed(
-                                      2
-                                    )})`;
+                                    2
+                                  )})`;
                             }
 
                             return `${cantStr}${o.nombre}${precioStr}`;
@@ -957,4 +1105,3 @@ export const SeguimientoPedido = () => {
     </div>
   );
 };
-
