@@ -1217,9 +1217,10 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       // 6️⃣ REGLA DE NEGOCIO: Evaluación e Invariabilidad del Estado Global
       let nuevoEstadoOrden = Number(ordenActual.IDestado);
 
-      // 🔒 SI EL PEDIDO YA INICIÓ EL RECORRIDO (5: En camino, 3: Entregado), SE CONSERVA EL ESTADO GLOBAL
-      if (nuevoEstadoOrden === 5 || nuevoEstadoOrden === 3) {
-        // No se altera `nuevoEstadoOrden`, garantizando la invariabilidad y persistencia de "En camino"
+      // 🔒 SI EL PEDIDO YA INICIÓ EL RECORRIDO / RETIRO (5: En camino, 8: Retirado en local, 3: Entregado), 
+      // SE CONSERVA EL ESTADO GLOBAL Y NO SE VUELVE A ESTADOS ANTERIORES.
+      if (nuevoEstadoOrden === 5 || nuevoEstadoOrden === 8 || nuevoEstadoOrden === 3) {
+        // Se mantiene el estado global sin cambios
       } else {
         // Evaluación estándar previa a "En camino"
         const todosItemsListos = detallesActivos.every(d => Number(d.IDestado) === 7);
@@ -1231,11 +1232,11 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         } else {
           const [[estadoMenorAvance]] = await conn.query(
             `SELECT e.id AS IDestado
-             FROM detalle_orden do
-             JOIN estados e ON do.IDestado = e.id
-             WHERE do.IDorden = ? AND do.IDestado != 6
-             ORDER BY e.orden ASC
-             LIMIT 1`,
+       FROM detalle_orden do
+       JOIN estados e ON do.IDestado = e.id
+       WHERE do.IDorden = ? AND do.IDestado != 6
+       ORDER BY e.orden ASC
+       LIMIT 1`,
             [IDorden]
           );
           nuevoEstadoOrden = estadoMenorAvance ? Number(estadoMenorAvance.IDestado) : nuevoEstadoOrden;
@@ -1404,7 +1405,7 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
 // 🛒 1. Obtener las órdenes del cliente con datos de tracking del repartidor
 // src/services/orders.service.js
 export const getMyOrdersService = async (IDcliente) => {
-  // 1️⃣ Consulta principal de órdenes del cliente incluyendo los datos del repartidor si está asignado
+  // 1️⃣ Consulta principal de órdenes del cliente incluyendo coordenadas del repartidor si está asignado
   const [ordenes] = await pool.query(
     `SELECT 
         o.id AS IDorden, 
@@ -1419,7 +1420,9 @@ export const getMyOrdersService = async (IDcliente) => {
         o.IDrepartidor,
         u_rep.nombre AS repartidor_nombre,
         u_rep.apellido AS repartidor_apellido,
-        c_rep.telefono AS repartidor_telefono
+        c_rep.telefono AS repartidor_telefono,
+        r.latitud AS repartidor_latitud,
+        r.longitud AS repartidor_longitud
      FROM ordenes o
      JOIN estados e ON o.IDestado = e.id
      LEFT JOIN repartidores r ON o.IDrepartidor = r.id
@@ -1439,42 +1442,50 @@ export const getMyOrdersService = async (IDcliente) => {
 
   // 2️⃣ Mapear productos, opciones y formatear el objeto del repartidor para cada orden
   for (const orden of ordenes) {
-    // Estructuración de los datos del repartidor asignado
+    // Estructuración de los datos del repartidor asignado (incluyendo coordenadas a nivel raíz y subobjeto ubicacion)
     orden.repartidor_asignado = orden.IDrepartidor !== null;
     orden.repartidor = orden.IDrepartidor ? {
       id: orden.IDrepartidor,
       nombre: orden.repartidor_nombre,
       apellido: orden.repartidor_apellido,
-      telefono: orden.repartidor_telefono
+      telefono: orden.repartidor_telefono,
+      latitud: orden.repartidor_latitud,
+      longitud: orden.repartidor_longitud,
+      ubicacion: {
+        latitud: orden.repartidor_latitud,
+        longitud: orden.repartidor_longitud
+      }
     } : null;
 
     // Limpieza de propiedades auxiliares
     delete orden.repartidor_nombre;
     delete orden.repartidor_apellido;
     delete orden.repartidor_telefono;
+    delete orden.repartidor_latitud;
+    delete orden.repartidor_longitud;
 
-    // Dentro de getMyOrdersService en orders.service.js:
+    // Obtención de productos asociados a la orden
     const [productos] = await pool.query(
       `SELECT 
-      do.id AS IDdetalle, 
-      do.IDproducto, 
-      p.nombre AS producto, 
-      do.cantidad, 
-      do.precio_unitario, 
-      do.comentario, 
-      do.motivo_cancelacion AS motivo_rechazo, 
-      do.IDlocal, 
-      l.nombre AS local, 
-      l.latitud AS latitud,  
-      l.longitud AS longitud, 
-      do.IDestado AS IDestado_item, 
-      e.nombre AS estado_item
-   FROM detalle_orden do
-   JOIN productos p ON do.IDproducto = p.id
-   JOIN locales l ON do.IDlocal = l.id
-   JOIN estados e ON do.IDestado = e.id
-   WHERE do.IDorden = ?`,
-      [orden.IDorden] // ✅ Corrección aplicada
+        do.id AS IDdetalle, 
+        do.IDproducto, 
+        p.nombre AS producto, 
+        do.cantidad, 
+        do.precio_unitario, 
+        do.comentario, 
+        do.motivo_cancelacion AS motivo_rechazo, 
+        do.IDlocal, 
+        l.nombre AS local, 
+        l.latitud AS latitud,  
+        l.longitud AS longitud, 
+        do.IDestado AS IDestado_item, 
+        e.nombre AS estado_item
+       FROM detalle_orden do
+       JOIN productos p ON do.IDproducto = p.id
+       JOIN locales l ON do.IDlocal = l.id
+       JOIN estados e ON do.IDestado = e.id
+       WHERE do.IDorden = ?`,
+      [orden.IDorden]
     );
 
     for (const prod of productos) {
@@ -1544,8 +1555,9 @@ export const getOrderTrackingService = async (IDorden, IDcliente) => {
       apellido: orden.repartidor_apellido,
       telefono: orden.repartidor_telefono,
       ubicacion: {
-        latitud: orden.repartidor_latitud,
-        longitud: orden.repartidor_longitud,
+        // 📍 Retorna directamente los valores tal como están guardados en MySQL
+        latitud: orden.repartidor_latitud,       // Ejemplo: -32.43641394
+        longitud: orden.repartidor_longitud,     // Ejemplo: -63.23634976
         ultima_ubicacion: orden.repartidor_ultima_ubicacion
       }
     } : null,
@@ -1670,7 +1682,7 @@ export const cotizarOrdenService = async (data) => {
 };
 
 export const getOrderByIdService = async (IDorden, IDcliente) => {
-  // 1️⃣ Consulta con JOIN a repartidores y usuarios para extraer datos completos del repartidor
+  // 1️⃣ Consulta con JOIN a repartidores y usuarios para extraer datos completos del repartidor (incluyendo coordenadas GPS)
   const [[orden]] = await pool.query(
     `SELECT 
         o.id AS IDorden,
@@ -1696,7 +1708,9 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
         o.creado_en,
         u_rep.nombre AS repartidor_nombre,
         u_rep.apellido AS repartidor_apellido,
-        c_rep.telefono AS repartidor_telefono
+        c_rep.telefono AS repartidor_telefono,
+        r.latitud AS repartidor_latitud,
+        r.longitud AS repartidor_longitud
      FROM ordenes o
      JOIN estados e ON o.IDestado = e.id
      LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
@@ -1717,7 +1731,6 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
   }
 
   // 2️⃣ Obtener los productos con el estado individual de cada uno
-  // Dentro de getMyOrdersService en orders.service.js:
   const [productos] = await pool.query(
     `SELECT 
       do.id AS IDdetalle, 
@@ -1738,7 +1751,7 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
    JOIN locales l ON do.IDlocal = l.id
    JOIN estados e ON do.IDestado = e.id
    WHERE do.IDorden = ?`,
-    [orden.IDorden] // ✅ Corrección aplicada
+    [orden.IDorden]
   );
 
   for (const prod of productos) {
@@ -1752,18 +1765,27 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
     prod.opciones = opciones;
   }
 
-  // Estructuración final con los datos del repartidor
+  // 3️⃣ Estructuración final con los datos del repartidor (coordenadas a nivel raíz y subobjeto ubicacion)
   orden.repartidor_asignado = orden.IDrepartidor !== null;
   orden.repartidor = orden.IDrepartidor ? {
     id: orden.IDrepartidor,
     nombre: orden.repartidor_nombre,
     apellido: orden.repartidor_apellido,
-    telefono: orden.repartidor_telefono
+    telefono: orden.repartidor_telefono,
+    latitud: orden.repartidor_latitud,
+    longitud: orden.repartidor_longitud,
+    ubicacion: {
+      latitud: orden.repartidor_latitud,
+      longitud: orden.repartidor_longitud
+    }
   } : null;
 
+  // Limpieza de propiedades auxiliares
   delete orden.repartidor_nombre;
   delete orden.repartidor_apellido;
   delete orden.repartidor_telefono;
+  delete orden.repartidor_latitud;
+  delete orden.repartidor_longitud;
 
   orden.productos = productos;
   return orden;
@@ -1813,6 +1835,7 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
     LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
     LEFT JOIN repartidores r ON r.id = o.IDrepartidor
     WHERE o.IDrepartidor = ?
+    ORDER BY IDorden DESC;
     `,
     [repartidor.id]
   );
@@ -1842,6 +1865,51 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
   }
 
   return orders;
+};
+
+export const ordenarLocalesPorDistanciaYSensibilidad = (repartidorUbicacion, locales) => {
+  let origenActual = {
+    latitud: Number(repartidorUbicacion?.latitud) || -32.4085,
+    longitud: Number(repartidorUbicacion?.longitud) || -63.2415
+  };
+
+  const pendientes = locales.filter(l => !l.retirado);
+  const retirados = locales.filter(l => l.retirado);
+  const rutaOrdenada = [];
+
+  while (pendientes.length > 0) {
+    pendientes.sort((a, b) => {
+      const sensA = Number(a.maxSensibilidad ?? a.max_sensibilidad) || 1;
+      const sensB = Number(b.maxSensibilidad ?? b.max_sensibilidad) || 1;
+
+      // 1. Criterio por sensibilidad (Menor sensibilidad primero, mayor sensibilidad al final)
+      if (sensA !== sensB) {
+        return sensA - sensB;
+      }
+
+      // 2. Desempate por ruta más óptima / distancia desde la ubicación actual
+      const distA = calcularDistanciaKM(
+        origenActual.latitud, origenActual.longitud,
+        Number(a.latitud), Number(a.longitud)
+      );
+      const distB = calcularDistanciaKM(
+        origenActual.latitud, origenActual.longitud,
+        Number(b.latitud), Number(b.longitud)
+      );
+
+      return distA - distB;
+    });
+
+    const siguienteLocal = pendientes.shift();
+    rutaOrdenada.push(siguienteLocal);
+
+    origenActual = {
+      latitud: Number(siguienteLocal.latitud),
+      longitud: Number(siguienteLocal.longitud)
+    };
+  }
+
+  return [...rutaOrdenada, ...retirados];
 };
 
 export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
@@ -1922,10 +1990,8 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     [orden.IDorden]
   );
 
-  orden.productos = productos;
-
-  // 2️⃣ Obtener resumen de locales en ruta (coordenadas, sensibilidad máxima y estado de retiro)
-  const [localesRuta] = await pool.query(
+  // 2️⃣ Obtener resumen de locales en ruta (Alias maxSensibilidad en camelCase)
+  const [localesConsulta] = await pool.query(
     `
     SELECT 
       l.id AS IDlocal,
@@ -1934,7 +2000,7 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       l.direccion,
       l.latitud,
       l.longitud,
-      MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS max_sensibilidad,
+      MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS maxSensibilidad,
       CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END AS retirado
     FROM detalle_orden do
     JOIN productos p ON do.IDproducto = p.id
@@ -1947,16 +2013,40 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     [orden.IDorden]
   );
 
-  orden.localesRuta = localesRuta;
-
   // 3️⃣ Obtener lista de IDs de retiros ya realizados
   const [retirosRows] = await pool.query(
     `SELECT IDlocal FROM retiros_locales_orden WHERE IDorden = ?`,
     [orden.IDorden]
   );
-  orden.retiros_realizados = retirosRows.map(row => row.IDlocal);
 
-  return orden;
+  // 4️⃣ Calcular la ruta optimizada
+  const ESTADOS_RUTA_OPTIMA = [4, 5, 7, 8];
+  let localesRuta = localesConsulta;
+
+  if (ESTADOS_RUTA_OPTIMA.includes(Number(orden.IDestado))) {
+    localesRuta = ordenarLocalesPorDistanciaYSensibilidad(
+      { latitud: orden.repartidor_latitud, longitud: orden.repartidor_longitud },
+      localesConsulta
+    );
+  }
+
+  // 5️⃣ Estructurar respuesta final
+  return {
+    ...orden,
+    ubicacion_repartidor: {
+      latitud: orden.repartidor_latitud,
+      longitud: orden.repartidor_longitud,
+      ultima_ubicacion: orden.repartidor_ultima_ubicacion
+    },
+    destino_cliente: {
+      direccion: orden.direccion_entrega,
+      latitud: orden.latitud_entrega,
+      longitud: orden.longitud_entrega
+    },
+    productos,
+    localesRuta, // Devuelve los locales en el orden optimizado
+    retiros_realizados: retirosRows.map(row => row.IDlocal)
+  };
 };
 
 // Aplicar de forma equivalente en getMisPedidosAsignadosService si es requerido
@@ -2237,8 +2327,8 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
 
     if (!local) throw new Error('El local especificado no existe.');
 
-    // ✅ Código corregido (100 metros = 0.1 km):
-    const DISTANCIA_MAXIMA_CONFIRMACION_KM = 0.1; // 100 metros
+    // 3️⃣ Validar distancia física al local (100 metros = 0.1 km)
+    const DISTANCIA_MAXIMA_CONFIRMACION_KM = 0.1;
 
     const distanciaKM = calcularDistanciaKM(
       Number(repartidor.latitud),
@@ -2265,36 +2355,43 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       throw new Error('Acción denegada: No eres el repartidor asignado a esta orden');
     }
 
-    // 5️⃣ VALIDACIÓN DE ORDEN DE RUTA SEGÚN NIVEL DE SENSIBILIDAD
-    // Obtenemos los locales pendientes de retiro ordenados secuencialmente por sensibilidad
-    const [localesPendientesOrdenados] = await conn.query(
+    // 5️⃣ VALIDACIÓN DE ORDEN DE RUTA SEGÚN SENSIBILIDAD Y DISTANCIA
+    const [localesConsulta] = await conn.query(
       `
-  SELECT 
-    l.id AS IDlocal,
-    l.nombre AS local_nombre,
-    MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS max_sensibilidad
-  FROM detalle_orden do
-  JOIN productos p ON do.IDproducto = p.id
-  LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
-  JOIN locales l ON do.IDlocal = l.id
-  LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
-  WHERE do.IDorden = ? 
-    AND do.IDestado != 6 -- Excluir cancelados
-    AND r.id IS NULL      -- Excluir ya retirados
-  GROUP BY l.id, l.nombre
-  ORDER BY max_sensibilidad ASC, l.id ASC  -- 👈 CAMBIAR DE DESC A ASC
-  `,
+      SELECT 
+        l.id AS IDlocal,
+        l.nombre,
+        l.latitud,
+        l.longitud,
+        MAX(IFNULL(cp.nivel_sensibilidad, 1)) AS maxSensibilidad,
+        MAX(CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END) AS retirado
+      FROM detalle_orden do
+      JOIN productos p ON do.IDproducto = p.id
+      LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
+      JOIN locales l ON do.IDlocal = l.id
+      LEFT JOIN retiros_locales_orden r ON r.IDorden = do.IDorden AND r.IDlocal = l.id
+      WHERE do.IDorden = ? AND do.IDestado != 6
+      GROUP BY l.id, l.nombre, l.latitud, l.longitud
+      `,
       [IDorden]
     );
 
-    if (localesPendientesOrdenados.length > 0) {
-      const proximoLocalRequerido = localesPendientesOrdenados[0];
+    const rutaOptima = ordenarLocalesPorDistanciaYSensibilidad(
+      { latitud: repartidor.latitud, longitud: repartidor.longitud },
+      localesConsulta
+    );
 
-      if (Number(proximoLocalRequerido.IDlocal) !== Number(IDlocal)) {
-        throw new Error(
-          `Secuencia de ruta incorrecta: Debes retirar primero en "${proximoLocalRequerido.local_nombre}" debido al nivel de sensibilidad de sus productos.`
-        );
-      }
+    const primerPendiente = rutaOptima.find(l => !l.retirado);
+
+    if (primerPendiente && Number(primerPendiente.IDlocal) !== Number(IDlocal)) {
+      const localAConfirmar = localesConsulta.find(l => Number(l.IDlocal) === Number(IDlocal));
+      const esDiferenciaSensibilidad = Number(primerPendiente.maxSensibilidad) !== Number(localAConfirmar?.maxSensibilidad);
+
+      const mensaje = esDiferenciaSensibilidad
+        ? `Secuencia de ruta incorrecta: Debes retirar primero en "${primerPendiente.nombre}" debido al nivel de sensibilidad de sus productos.`
+        : `Secuencia de ruta incorrecta: Debes retirar primero en "${primerPendiente.nombre}" por ser la parada más cercana en la ruta óptima.`;
+
+      throw new Error(mensaje);
     }
 
     // 6️⃣ Validar que los ítems del local estén listos
@@ -2332,9 +2429,12 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       [IDorden]
     );
 
-    if (pendientesGlobales.sinRetirar === 0 && orden.IDestado !== ESTADO_RETIRADO_ID) {
-      await conn.query(`UPDATE ordenes SET IDestado = ? WHERE id = ?`, [ESTADO_RETIRADO_ID, IDorden]);
-      await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`, [IDorden, ESTADO_RETIRADO_ID]);
+    // Actualiza estado general de la orden si no estaba en camino o entregada
+    if (pendientesGlobales.sinRetirar === 0) {
+      if (orden.IDestado !== 5 && orden.IDestado !== 3) {
+        await conn.query(`UPDATE ordenes SET IDestado = ? WHERE id = ?`, [ESTADO_RETIRADO_ID, IDorden]);
+        await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`, [IDorden, ESTADO_RETIRADO_ID]);
+      }
     }
 
     await conn.commit();
@@ -2410,19 +2510,14 @@ export const actualizarUbicacionRepartidorService = async (IDusuario, latitud, l
       }
     }
 
-    // 3. Si no debe congelar metros, actualizar las coordenadas reales
-    if (!congelarMetros) {
-      await conn.query(
-        `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
-        [latitud, longitud, repartidor.id]
-      );
-    } else {
-      // Si debe estar congelado, actualiza solo el timestamp de última ubicación manteniéndose estático
-      await conn.query(
-        `UPDATE repartidores SET ultima_ubicacion = NOW() WHERE id = ?`,
-        [repartidor.id]
-      );
-    }
+    // 3. Mantenimiento de ubicación estática:
+    // Independientemente del valor de 'congelarMetros', NO se sobreescriben latitud ni longitud.
+    // Solo se actualiza el timestamp para confirmar que la sesión del repartidor está activa.
+    await conn.query(
+      `UPDATE repartidores SET ultima_ubicacion = NOW() WHERE id = ?`,
+      [repartidor.id]
+    );
+
   } finally {
     conn.release();
   }

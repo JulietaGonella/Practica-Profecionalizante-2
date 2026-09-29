@@ -2,19 +2,6 @@ import { pool } from '../config/db.js';
 import { generarEtapasRuta } from './ai.service.js';
 import { evaluarEstadoDocumentación } from './admin.service.js';
 
-// 🛠️ Helper de logs estructurados con identificador de contexto
-const createLoggerViaje = (IDrepartidor, IDorden) => {
-  const prefijo = `[REP #${IDrepartidor} | ORD #${IDorden}]`;
-  return {
-    info: (msg) => console.log(`ℹ️  ${prefijo} ${msg}`),
-    gps: (lat, lng) => console.log(`   📍 ${prefijo} GPS: (${lat}, ${lng})`),
-    local: (msg) => console.log(`🏪 ${prefijo} ${msg}`),
-    alerta: (msg) => console.log(`⚠️  ${prefijo} ${msg}`),
-    éxito: (msg) => console.log(`   ✅ ${prefijo} ${msg}`),
-    fin: (msg) => console.log(`\n🏁 ${prefijo} ${msg}\n`)
-  };
-};
-
 export const simularRecorrido = async (req, res) => {
   try {
     const { id } = req.params;
@@ -44,175 +31,249 @@ export const simularRecorrido = async (req, res) => {
   }
 };
 
-// src/services/repartidores.service.js
+// 🛠️ Registro global para controlar simulaciones activas por repartidor
+const simulacionesActivas = new Map();
+
+const createLoggerViaje = (IDrepartidor, IDorden) => {
+  const prefijo = `[REP #${IDrepartidor} | ORD #${IDorden}]`;
+  return {
+    info: (msg) => console.log(`ℹ️  ${prefijo} ${msg}`),
+    gps: (lat, lng) => console.log(`   📍 ${prefijo} GPS: (${lat}, ${lng})`),
+    local: (msg) => console.log(`🏪 ${prefijo} ${msg}`),
+    alerta: (msg) => console.log(`⚠️  ${prefijo} ${msg}`),
+    éxito: (msg) => console.log(`   ✅ ${prefijo} ${msg}`),
+    fin: (msg) => console.log(`\n🏁 ${prefijo} ${msg}\n`)
+  };
+};
+
+// repartidores.service.js
+
 export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
   const log = createLoggerViaje(IDrepartidor, IDorden);
 
-  // 1️⃣ Obtener orden tomando la ubicación real de la entrega (latitud_entrega / longitud_entrega)
-  const [[orden]] = await pool.query(
-    `
-    SELECT 
-      o.id, 
-      o.IDestado, 
-      o.IDrepartidor, 
-      COALESCE(o.latitud_entrega, dc.latitud, c.latitud) AS cliente_lat,
-      COALESCE(o.longitud_entrega, dc.longitud, c.longitud) AS cliente_lng
-    FROM ordenes o
-    LEFT JOIN direcciones_cliente dc ON o.IDdireccion = dc.id
-    LEFT JOIN clientes c ON o.IDcliente = c.IDusuario
-    WHERE o.id = ?
-    `,
-    [IDorden]
-  );
-
-  if (!orden) throw new Error(`La orden con ID ${IDorden} no existe`);
-  if (!orden.IDrepartidor || Number(orden.IDrepartidor) !== Number(IDrepartidor)) {
-    throw new Error(`La orden no está asignada al repartidor #${IDrepartidor}`);
+  // 1️⃣ PRIMERO: Cancelar simulación anterior si existía
+  if (simulacionesActivas.has(IDrepartidor)) {
+    log.info('Cancelando simulación previa activa para este repartidor...');
+    simulacionesActivas.get(IDrepartidor).activa = false;
   }
 
-  const [[repartidor]] = await pool.query(
-    `SELECT id, latitud, longitud FROM repartidores WHERE id = ?`,
-    [IDrepartidor]
-  );
+  // 2️⃣ REGISTRAR LA SIMULACIÓN DESDE EL INICIO (Evita que updateUbicacionService pise las coordenadas)
+  const controlSimulacion = { activa: true };
+  simulacionesActivas.set(IDrepartidor, controlSimulacion);
 
-  const repLat = Number(repartidor.latitud) || -32.4085;
-  const repLng = Number(repartidor.longitud) || -63.2415;
-  const cliLat = Number(orden.cliente_lat) || -32.4150;
-  const cliLng = Number(orden.cliente_lng) || -63.2450;
+  try {
+    const [[orden]] = await pool.query(
+      `
+      SELECT 
+        o.id, 
+        o.IDestado, 
+        o.IDrepartidor, 
+        COALESCE(o.latitud_entrega, dc.latitud, c.latitud) AS cliente_lat,
+        COALESCE(o.longitud_entrega, dc.longitud, c.longitud) AS cliente_lng
+      FROM ordenes o
+      LEFT JOIN direcciones_cliente dc ON o.IDdireccion = dc.id
+      LEFT JOIN clientes c ON o.IDcliente = c.IDusuario
+      WHERE o.id = ?
+      `,
+      [IDorden]
+    );
 
-  // 2️⃣ Obtener locales involucrados y verificar si ya fueron retirados previamente
-  const [locales] = await pool.query(
-    `
-  SELECT 
-    l.id, l.nombre, l.latitud, l.longitud,
-    IF(COUNT(ret.id) > 0, 1, 0) AS retirado,
-    COALESCE(MAX(cp.nivel_sensibilidad), 1) AS maxSensibilidad
-  FROM detalle_orden do
-  JOIN locales l ON do.IDlocal = l.id
-  JOIN productos p ON do.IDproducto = p.id
-  LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
-  LEFT JOIN retiros_locales_orden ret ON ret.IDorden = do.IDorden AND ret.IDlocal = l.id
-  WHERE do.IDorden = ? AND do.IDestado != 6
-  GROUP BY l.id, l.nombre, l.latitud, l.longitud
-  ORDER BY maxSensibilidad ASC
-  `,
-    [IDorden]
-  );
-
-  if (locales.length === 0) throw new Error('La orden no tiene productos activos pendientes');
-
-  // 3️⃣ Generar etapas por trazado vial real (Llamada asíncrona OSRM)
-  const etapas = await generarEtapasRuta(
-    { latitud: repLat, longitud: repLng },
-    locales,
-    { latitud: cliLat, longitud: cliLng }
-  );
-
-  // 📌 Reordenar el arreglo de locales respetando fielmente el orden dictaminado por la IA/Algoritmo de Ruta
-  const localesOrdenados = etapas
-    .filter((e) => e.tipo === 'hacia_local')
-    .map((e) => locales.find((l) => l.id === e.localId))
-    .filter(Boolean);
-
-  // Asegurar que la orden pase a "En camino" (ID 5)
-  await pool.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
-
-  // 4️⃣ Bucle de simulación asíncrono con control de pausas sobre trazado fluido
-  (async () => {
-    try {
-      for (const etapa of etapas) {
-        if (etapa.tipo === 'hacia_local') {
-          // Si el local ya fue retirado previamente, saltear tramo
-          if (etapa.retirado) {
-            log.info(`El local "${etapa.localNombre}" ya fue retirado. Se omite la parada.`);
-            continue;
-          }
-
-          log.info(`Avanzando hacia el local "${etapa.localNombre}" por trazado urbano...`);
-
-          // Desplazamiento punto a punto hacia el local (500ms entre puntos para fluidez)
-          for (const punto of etapa.puntos) {
-            await pool.query(
-              `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
-              [punto.latitud, punto.longitud, IDrepartidor]
-            );
-            log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 150)); // 👈 Cambiado de 500 a 150 ms
-          }
-
-          log.local(`Llegada al local: "${etapa.localNombre}". SIMULADOR PAUSADO.`);
-
-          // 🛑 BUCLE DE ESPERA Y PAUSA OBLIGATORIA
-          let retiroConfirmado = false;
-          while (!retiroConfirmado) {
-            // Verificación de cancelación o interrupción del pedido
-            const [[ordenCheck]] = await pool.query(
-              `SELECT IDestado FROM ordenes WHERE id = ?`,
-              [IDorden]
-            );
-
-            if (!ordenCheck || Number(ordenCheck.IDestado) === 6) {
-              log.alerta(`Simulación terminada: la orden #${IDorden} se canceló o modificó.`);
-              return;
-            }
-
-            // A. Verificar si los productos están listos en el local
-            const [[estadoItems]] = await pool.query(
-              `SELECT 
-                 COUNT(*) AS total_items,
-                 SUM(IF(IDestado IN (7, 8), 1, 0)) AS listos_o_retirados
-               FROM detalle_orden 
-               WHERE IDorden = ? AND IDlocal = ? AND IDestado != 6`,
-              [IDorden, etapa.localId]
-            );
-
-            if (Number(estadoItems.listos_o_retirados) < Number(estadoItems.total_items)) {
-              log.alerta(`El pedido en "${etapa.localNombre}" aún NO está listo para retirar. Esperando preparación del local...`);
-            } else {
-              log.info(`Pedido en "${etapa.localNombre}" LISTO. Esperando confirmación de retiro en la App...`);
-            }
-
-            // B. Verificar si el repartidor confirmó el retiro desde la aplicación
-            const [[retiroDB]] = await pool.query(
-              `SELECT id FROM retiros_locales_orden WHERE IDorden = ? AND IDlocal = ?`,
-              [IDorden, etapa.localId]
-            );
-
-            if (retiroDB) {
-              retiroConfirmado = true;
-              log.éxito(`Retiro confirmed en "${etapa.localNombre}". Reanudando simulación...`);
-            } else {
-              // Reintentar/Esperar 3 segundos antes de consultar BD nuevamente
-              await new Promise((r) => setTimeout(r, 3000));
-            }
-          }
-        } else if (etapa.tipo === 'hacia_cliente') {
-          log.info(`Todos los locales retirados. Avanzando hacia el domicilio del cliente por calles...`);
-
-          for (const punto of etapa.puntos) {
-            await pool.query(
-              `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
-              [punto.latitud, punto.longitud, IDrepartidor]
-            );
-            log.gps(punto.latitud, punto.longitud);
-            await new Promise((r) => setTimeout(r, 150)); // 👈 Cambiado de 500 a 150 ms
-          }
-
-          log.fin(`El repartidor llegó a la ubicación del cliente. Ingrese el código OTP para completar la entrega.`);
-        }
-      }
-    } catch (error) {
-      log.alerta(`Error inesperado durante la simulación: ${error.message}`);
+    if (!orden) {
+      simulacionesActivas.delete(IDrepartidor);
+      throw new Error(`La orden con ID ${IDorden} no existe`);
     }
-  })();
+    
+    if (!orden.IDrepartidor || Number(orden.IDrepartidor) !== Number(IDrepartidor)) {
+      simulacionesActivas.delete(IDrepartidor);
+      throw new Error(`La orden no está asignada al repartidor #${IDrepartidor}`);
+    }
+
+    const [[repartidor]] = await pool.query(
+      `SELECT id, latitud, longitud FROM repartidores WHERE id = ?`,
+      [IDrepartidor]
+    );
+
+    // Tomar última ubicación de la BD o la del local/defecto (NUNCA el GPS físico en tiempo real)
+    const repLat = Number(repartidor.latitud) || -32.4085;
+    const repLng = Number(repartidor.longitud) || -63.2415;
+    const cliLat = Number(orden.cliente_lat) || -32.4150;
+    const cliLng = Number(orden.cliente_lng) || -63.2450;
+
+    const [locales] = await pool.query(
+      `
+      SELECT 
+        l.id, l.nombre, l.latitud, l.longitud,
+        IF(COUNT(ret.id) > 0, 1, 0) AS retirado,
+        COALESCE(MAX(cp.nivel_sensibilidad), 1) AS maxSensibilidad
+      FROM detalle_orden do
+      JOIN locales l ON do.IDlocal = l.id
+      JOIN productos p ON do.IDproducto = p.id
+      LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
+      LEFT JOIN retiros_locales_orden ret ON ret.IDorden = do.IDorden AND ret.IDlocal = l.id
+      WHERE do.IDorden = ? AND do.IDestado != 6
+      GROUP BY l.id, l.nombre, l.latitud, l.longitud
+      ORDER BY maxSensibilidad ASC
+      `,
+      [IDorden]
+    );
+
+    if (locales.length === 0) {
+      simulacionesActivas.delete(IDrepartidor);
+      throw new Error('La orden no tiene productos activos pendientes');
+    }
+
+    const etapas = await generarEtapasRuta(
+      { latitud: repLat, longitud: repLng },
+      locales,
+      { latitud: cliLat, longitud: cliLng }
+    );
+
+    const localesOrdenados = etapas
+      .filter((e) => e.tipo === 'hacia_local')
+      .map((e) => locales.find((l) => l.id === e.localId))
+      .filter(Boolean);
+
+    await pool.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
+
+    // 3️⃣ BUCLE DE SIMULACIÓN EN SEGUNDO PLANO
+    (async () => {
+      try {
+        for (const etapa of etapas) {
+          if (!controlSimulacion.activa) {
+            log.alerta('Simulación detenida externamente.');
+            return;
+          }
+
+          if (etapa.tipo === 'hacia_local') {
+            if (etapa.retirado) {
+              log.info(`El local "${etapa.localNombre}" ya fue retirado. Se omite la parada.`);
+              continue;
+            }
+
+            log.info(`Avanzando hacia el local "${etapa.localNombre}"...`);
+
+            for (const punto of etapa.puntos) {
+              if (!controlSimulacion.activa) return;
+
+              // Actualiza coordenadas de la simulación en BD
+              await pool.query(
+                `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
+                [punto.latitud, punto.longitud, IDrepartidor]
+              );
+              log.gps(punto.latitud, punto.longitud);
+              await new Promise((r) => setTimeout(r, 500));
+            }
+
+            log.local(`Llegada al local: "${etapa.localNombre}". Esperando retiro en el local...`);
+
+            // Asegurar que durante la espera en el local, el pin quede EXACTAMENTE en la ubicación del local
+            const localDestino = locales.find((l) => l.id === etapa.localId);
+            if (localDestino) {
+              await pool.query(
+                `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
+                [localDestino.latitud, localDestino.longitud, IDrepartidor]
+              );
+            }
+
+            let retiroConfirmado = false;
+            while (!retiroConfirmado && controlSimulacion.activa) {
+              const [[ordenCheck]] = await pool.query(
+                `SELECT IDestado FROM ordenes WHERE id = ?`,
+                [IDorden]
+              );
+
+              if (!ordenCheck || Number(ordenCheck.IDestado) === 6) {
+                log.alerta(`La orden #${IDorden} fue cancelada. Finalizando simulación.`);
+                simulacionesActivas.delete(IDrepartidor);
+                return;
+              }
+
+              const [[retiroDB]] = await pool.query(
+                `SELECT id FROM retiros_locales_orden WHERE IDorden = ? AND IDlocal = ?`,
+                [IDorden, etapa.localId]
+              );
+
+              if (retiroDB) {
+                retiroConfirmado = true;
+                log.éxito(`Retiro confirmado en "${etapa.localNombre}". Continuando simulador...`);
+              } else {
+                // Espera activa hasta que se confirme el retiro sin pisar las coordenadas con el GPS real
+                await new Promise((r) => setTimeout(r, 2000));
+              }
+            }
+          } else if (etapa.tipo === 'hacia_cliente') {
+            log.info(`Avanzando hacia el cliente...`);
+
+            for (const punto of etapa.puntos) {
+              if (!controlSimulacion.activa) return;
+
+              await pool.query(
+                `UPDATE repartidores SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() WHERE id = ?`,
+                [punto.latitud, punto.longitud, IDrepartidor]
+              );
+              log.gps(punto.latitud, punto.longitud);
+              await new Promise((r) => setTimeout(r, 500));
+            }
+
+            log.fin(`El repartidor llegó a la ubicación del cliente.`);
+          }
+        }
+      } catch (error) {
+        log.alerta(`Error durante la simulación: ${error.message}`);
+      } finally {
+        simulacionesActivas.delete(IDrepartidor);
+      }
+    })();
+
+    return {
+      message: 'Simulación iniciada por calles reales.',
+      IDorden,
+      IDrepartidor,
+      IDestado: 5,
+      etapas,
+      localesOrdenados
+    };
+  } catch (err) {
+    simulacionesActivas.delete(IDrepartidor);
+    throw err;
+  }
+};
+
+// src/services/repartidores.service.js
+
+export const updateUbicacionService = async (IDusuario, latitud, longitud) => {
+  // Buscar el ID del repartidor
+  const [[repartidor]] = await pool.query(
+    `SELECT id, latitud, longitud FROM repartidores WHERE IDusuario = ?`,
+    [IDusuario]
+  );
+
+  if (!repartidor) {
+    throw new Error('No se encontró el registro de repartidor para este usuario');
+  }
+
+  // Ignorar actualizaciones de coordenadas si hay simulación activa
+  if (simulacionesActivas.has(repartidor.id)) {
+    return {
+      message: 'Ubicación omitida: Hay una simulación activa en progreso.',
+      latitud: repartidor.latitud,
+      longitud: repartidor.longitud
+    };
+  }
+
+  // ⛔ Mantener intactos repartidores.latitud y repartidores.longitud en BD.
+  // Solo se actualiza el timestamp de última actividad.
+  await pool.query(
+    `UPDATE repartidores 
+     SET ultima_ubicacion = NOW() 
+     WHERE IDusuario = ?`,
+    [IDusuario]
+  );
 
   return {
-    message: 'Simulación iniciada por calles reales. El repartidor se detendrá en cada local hasta confirmar el retiro.',
-    IDorden,
-    IDrepartidor,
-    IDestado: 5,
-    etapas,           // Contiene el itinerario completo paso a paso
-    localesOrdenados   // Arreglo de locales ordenados por la distancia GPS e IA
+    message: 'Ubicación del repartidor mantenida según registro en BD',
+    latitud: repartidor.latitud,
+    longitud: repartidor.longitud
   };
 };
 
@@ -414,36 +475,6 @@ export const validarRepartidorService = async (id, validado) => {
   }
 
   return { message: `Estado de validación del repartidor actualizado a: ${validado ? 'Aprobado' : 'Pendiente'}` };
-};
-
-export const updateUbicacionService = async (IDusuario, latitud, longitud) => {
-  // 📍 Coordenadas por defecto (Centro de Villa María) por si no vienen en el Body
-  const DEFAULT_LAT = -32.4085;
-  const DEFAULT_LNG = -63.2415;
-
-  const lat = latitud !== undefined ? Number(latitud) : DEFAULT_LAT;
-  const lng = longitud !== undefined ? Number(longitud) : DEFAULT_LNG;
-
-  if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lng) || lng < -180 || lng > 180) {
-    throw new Error('Coordenadas GPS no válidas');
-  }
-
-  const [result] = await pool.query(
-    `UPDATE repartidores 
-     SET latitud = ?, longitud = ?, ultima_ubicacion = NOW() 
-     WHERE IDusuario = ?`,
-    [lat, lng, IDusuario]
-  );
-
-  if (result.affectedRows === 0) {
-    throw new Error('No se encontró el registro de repartidor para este usuario');
-  }
-
-  return {
-    message: 'Ubicación del repartidor actualizada correctamente',
-    latitud: lat,
-    longitud: lng
-  };
 };
 
 export const getDisponibilidadService = async (IDusuario) => {

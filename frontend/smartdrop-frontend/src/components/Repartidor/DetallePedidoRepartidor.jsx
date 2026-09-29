@@ -5,11 +5,10 @@ import {
   simularRecorridoPedido,
   entregarPedido,
   liberarPedidoRepartidor,
-  confirmarRetiroLocal,
-  actualizarUbicacionRepartidor
+  confirmarRetiroLocal
+  // Se remueve actualizarUbicacionRepartidor para no sobreescribir el GPS real
 } from '../../api/repartidorService';
-
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 /* ============================================================
@@ -122,7 +121,7 @@ const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// Componente auxiliar para re centrar el mapa suavemente en las coordenadas del repartidor
+// Componente auxiliar para re centrar el mapa suavemente en las coordenadas registradas en BD
 const CentrarMapaRepartidor = ({ lat, lng }) => {
   const map = useMap();
 
@@ -177,39 +176,10 @@ export const DetallePedidoRepartidor = () => {
 
   useEffect(() => {
     cargarPedido();
-    // Disminuimos a 1000ms (1 segundo) para reflejar los metros en tiempo real de la simulación
+    // Consulta periódica al backend para obtener las coordenadas registradas en la Base de Datos
     const intervalo = setInterval(actualizarPedido, 1000);
     return () => clearInterval(intervalo);
   }, [ordenId]);
-
-  // 📡 Envío de geolocalización GPS real
-  useEffect(() => {
-    // Desactivar si no hay pedido o si el recorrido en la simulación está activo/en proceso
-    if (!ordenId || accionProcesando === 'recorrido') return;
-
-    const enviarUbicacionGPS = () => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            await actualizarUbicacionRepartidor(lat, lng);
-          } catch (err) {
-            console.error('Error al actualizar la ubicación GPS:', err);
-          }
-        },
-        (error) => {
-          console.warn('Advertencia de geolocalización:', error.message);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    };
-
-    enviarUbicacionGPS();
-    const intervaloGPS = setInterval(enviarUbicacionGPS, 7000);
-    return () => clearInterval(intervaloGPS);
-  }, [ordenId, accionProcesando]);
 
   const handleSimularRecorrido = async () => {
     if (!pedido?.IDrepartidor) {
@@ -240,16 +210,11 @@ export const DetallePedidoRepartidor = () => {
     try {
       setAccionProcesando(`retiro_${localAConfirmar.id}`);
 
-      // 1. Petición al backend
       await confirmarRetiroLocal(Number(ordenId), {
         IDlocal: localAConfirmar.id
       });
 
-      // 2. Cerrar el modal DE INMEDIATO para no interrumpir el mapa ni pausar la vista
-      const localNombre = localAConfirmar.nombre;
       setLocalAConfirmar(null);
-
-      // 3. Recargar el pedido en segundo plano para reflejar el retiro en el mapa de inmediato
       await cargarPedido();
 
     } catch (err) {
@@ -312,13 +277,24 @@ export const DetallePedidoRepartidor = () => {
     if (!p.local) return;
     const idLocal = p.IDlocal || p.local;
 
-    const localRutaInfo = pedido?.localesRuta?.find((l) => Number(l.IDlocal) === Number(idLocal));
+    const localRutaInfo = pedido?.localesRuta?.find(
+      (l) => Number(l.IDlocal ?? l.id ?? l.localId) === Number(idLocal)
+    );
 
-    // Obtener la sensibilidad más alta presente en el local
-    const sensibilidadProd = Number(localRutaInfo?.max_sensibilidad ?? p.nivel_sensibilidad ?? 1);
+    // Reemplaza la asignación de sensibilidadProd dentro del loop por:
+    const sensibilidadProd = Number(
+      localRutaInfo?.maxSensibilidad ??
+      localRutaInfo?.max_sensibilidad ??
+      p.nivel_sensibilidad ??
+      1
+    );
 
-    const latLocal = p.latitud_local != null ? Number(p.latitud_local) : (localRutaInfo?.latitud ? Number(localRutaInfo.latitud) : null);
-    const lngLocal = p.longitud_local != null ? Number(p.longitud_local) : (localRutaInfo?.longitud ? Number(localRutaInfo.longitud) : null);
+    const latLocal = p.latitud_local != null
+      ? Number(p.latitud_local)
+      : (localRutaInfo?.latitud ? Number(localRutaInfo.latitud) : null);
+    const lngLocal = p.longitud_local != null
+      ? Number(p.longitud_local)
+      : (localRutaInfo?.longitud ? Number(localRutaInfo.longitud) : null);
 
     const yaRetirado =
       localRutaInfo?.retirado === 1 ||
@@ -339,7 +315,6 @@ export const DetallePedidoRepartidor = () => {
         items: []
       });
     } else {
-      // Si el local tiene más de un producto, aseguramos tomar la MAYOR sensibilidad
       const localExistente = localesMap.get(idLocal);
       if (sensibilidadProd > localExistente.maxSensibilidad) {
         localExistente.maxSensibilidad = sensibilidadProd;
@@ -349,25 +324,36 @@ export const DetallePedidoRepartidor = () => {
     localesMap.get(idLocal).items.push(p);
   });
 
-  // 2. 🎯 ORDENAMIENTO ESTRICTO POR SENSIBILIDAD PARA EL MAPA Y NAVEGACIÓN
+  const getOrdenRutaBackend = (idLocal) => {
+    const listaRuta = pedido?.localesRuta || pedido?.localesOrdenados || [];
+    if (!Array.isArray(listaRuta)) return -1;
+    return listaRuta.findIndex(
+      (l) => Number(l.IDlocal ?? l.id ?? l.localId) === Number(idLocal)
+    );
+  };
+
   const localesOrdenados = Array.from(localesMap.values()).sort((a, b) => {
-    // Criterio 1: Los ya retirados van al final de la secuencia
     if (a.retirado !== b.retirado) {
       return a.retirado ? 1 : -1;
     }
-    // Criterio 2: Menor sensibilidad primero (Nivel 1: Bebidas/Panadería -> Nivel 4: Helados)
+
+    const idxA = getOrdenRutaBackend(a.id);
+    const idxB = getOrdenRutaBackend(b.id);
+
+    if (idxA !== -1 && idxB !== -1) {
+      return idxA - idxB;
+    }
+
     if (a.maxSensibilidad !== b.maxSensibilidad) {
       return a.maxSensibilidad - b.maxSensibilidad;
     }
-    // Criterio 3: Desempate por ID de local
-    return a.id - b.id;
+
+    return 0;
   });
 
-  // 1. Coordenadas en tiempo real del repartidor
   const repLat = pedido?.repartidor_latitud != null ? Number(pedido.repartidor_latitud) : null;
   const repLng = pedido?.repartidor_longitud != null ? Number(pedido.repartidor_longitud) : null;
 
-  // 2. Mapeo con recálculo dinámico de la distancia a cada local
   const localesInvolucrados = localesOrdenados.map((local) => {
     const distanciaMetros = (repLat != null && repLng != null && local.latitud != null && local.longitud != null)
       ? Math.round(calcularDistanciaMetros(repLat, repLng, local.latitud, local.longitud))
@@ -387,7 +373,7 @@ export const DetallePedidoRepartidor = () => {
       productosListos
     };
   });
-  // 3. 📍 Determinar la SIGUIENTE PARADA en base a la ordenación por sensibilidad
+
   const primerLocalPendiente = localesInvolucrados.find((l) => !l.retirado);
 
   if (loading) {
@@ -470,8 +456,6 @@ export const DetallePedidoRepartidor = () => {
           {repLat != null && repLng != null ? (
             <div style={{ height: '400px', width: '100%', borderRadius: '8px', overflow: 'hidden', marginTop: '1rem' }}>
               <MapContainer center={[repLat, repLng]} zoom={16} style={{ height: '100%', width: '100%' }}>
-
-                {/* 🎯 SEGUIMIENTO EN VIVO: Centra el mapa cada vez que repLat o repLng cambien */}
                 <CentrarMapaRepartidor lat={repLat} lng={repLng} />
 
                 <TileLayer
@@ -481,9 +465,9 @@ export const DetallePedidoRepartidor = () => {
 
                 <Marker position={[repLat, repLng]} icon={iconoRepartidor}>
                   <Popup>
-                    <strong>🚴 Tu ubicación actual (Repartidor)</strong>
+                    <strong>🚴 Ubicación en Base de Datos (Repartidor)</strong>
                     <br />
-                    Lat: {repLat.toFixed(6)}, Lng: {repLng.toFixed(6)}
+                    Lat: {repLat}, Lng: {repLng}
                   </Popup>
                 </Marker>
 
@@ -518,6 +502,37 @@ export const DetallePedidoRepartidor = () => {
                   );
                 })}
 
+                {(() => {
+                  const trayectoCoords = [];
+
+                  if (repLat != null && repLng != null) {
+                    trayectoCoords.push([repLat, repLng]);
+
+                    if (primerLocalPendiente?.latitud != null && primerLocalPendiente?.longitud != null) {
+                      trayectoCoords.push([Number(primerLocalPendiente.latitud), Number(primerLocalPendiente.longitud)]);
+                    }
+
+                    if (todosLocalesRetirados && pedido.latitud_entrega != null && pedido.longitud_entrega != null) {
+                      trayectoCoords.push([Number(pedido.latitud_entrega), Number(pedido.longitud_entrega)]);
+                    }
+                  }
+
+                  if (trayectoCoords.length < 2) return null;
+
+                  return (
+                    <Polyline
+                      positions={trayectoCoords}
+                      pathOptions={{
+                        color: '#1c7ed6',
+                        weight: 5,
+                        opacity: 0.85,
+                        dashArray: '8, 12',
+                        lineCap: 'round'
+                      }}
+                    />
+                  );
+                })()}
+
                 {pedido.latitud_entrega != null && pedido.longitud_entrega != null && (
                   <Marker
                     position={[Number(pedido.latitud_entrega), Number(pedido.longitud_entrega)]}
@@ -534,19 +549,18 @@ export const DetallePedidoRepartidor = () => {
             </div>
           ) : (
             <div style={{ padding: '1rem', backgroundColor: '#fff3cd', borderRadius: '8px', color: '#856404', textAlign: 'center' }}>
-              ⏳ Esperando coordenadas GPS del repartidor para desplegar el mapa interactivo...
+              ⏳ Cargando coordenadas guardadas en la base de datos...
             </div>
           )}
         </section>
 
-        {/* 📍 LISTADO DE LOCALES Y BOTÓN DE CONFIRMACIÓN */}
+        {/* 📍 LISTADO DE LOCALES */}
         <section style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
           <h3 style={{ marginTop: 0 }}>📍 Datos de entrega y locales</h3>
           <p>
             <strong>Dirección del cliente:</strong> {pedido.direccion_entrega || pedido.direccion_cliente || 'No informada'}
           </p>
 
-          {/* 📞 Accesos Directos Cliente */}
           {pedido.telefono_cliente && (
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
               <a
@@ -590,7 +604,8 @@ export const DetallePedidoRepartidor = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {localesInvolucrados.map((local, index) => {
                 const esSiguienteEnRuta = primerLocalPendiente?.id === local.id;
-                const habilitadoPorProximidad = local.estaCerca && esSiguienteEnRuta;
+                // 🛑 CORRECCIÓN CLAVE: Solamente estará habilitado si el recorrido YA inició (estaEnCamino es true)
+                const habilitadoPorProximidad = estaEnCamino && local.estaCerca && esSiguienteEnRuta;
 
                 return (
                   <div
@@ -624,7 +639,6 @@ export const DetallePedidoRepartidor = () => {
                       </p>
                     )}
 
-                    {/* 📞 Botones de contacto y Confirmación de Retiro */}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.5rem' }}>
                       {local.telefono ? (
                         <>
@@ -683,20 +697,28 @@ export const DetallePedidoRepartidor = () => {
                           >
                             {accionProcesando === `retiro_${local.id}`
                               ? '⏳ Confirmando...'
-                              : !esSiguienteEnRuta
-                                ? 'Espere turno de ruta'
-                                : !local.estaCerca
-                                  ? `Debes estar a menos de 100m`
-                                  : '📦 Confirmar Retiro'}
+                              : !estaEnCamino
+                                ? 'Iniciá el recorrido primero'
+                                : !esSiguienteEnRuta
+                                  ? 'Espere turno de ruta'
+                                  : !local.estaCerca
+                                    ? `Debes estar a menos de 100m`
+                                    : '📦 Confirmar Retiro'}
                           </button>
 
-                          {!esSiguienteEnRuta && (
+                          {!estaEnCamino && (
+                            <span style={{ fontSize: '0.75rem', color: '#e67700', fontWeight: 'bold' }}>
+                              📍 Iniciá el recorrido para poder confirmar retiros
+                            </span>
+                          )}
+
+                          {estaEnCamino && !esSiguienteEnRuta && (
                             <span style={{ fontSize: '0.75rem', color: '#fa5252' }}>
                               Debe completar las paradas anteriores
                             </span>
                           )}
 
-                          {esSiguienteEnRuta && !local.estaCerca && (
+                          {estaEnCamino && esSiguienteEnRuta && !local.estaCerca && (
                             <span style={{ fontSize: '0.75rem', color: '#e67700', fontWeight: 'bold' }}>
                               📍 Debes estar en el local para confirmar ({local.distanciaMetros ?? '---'}m de distancia)
                             </span>
@@ -717,14 +739,13 @@ export const DetallePedidoRepartidor = () => {
           )}
         </section>
 
-        {/* 🛑 AVISO VISUAL DE PAUSA EN SIMULACIÓN */}
         {enEsperadeRetiro && (
           <div style={{ padding: '1rem', backgroundColor: '#fff3cd', border: '1px solid #ffe8cc', borderRadius: '8px', color: '#856404', marginBottom: '1.5rem', fontWeight: 'bold' }}>
             🛑 Simulación pausada: Llegaste al local. Debes confirmar el retiro de los productos para continuar con el recorrido.
           </div>
         )}
 
-        {/* 📦 SECCIÓN PRODUCTOS CON ESTADO INDIVIDUAL */}
+        {/* 📦 SECCIÓN PRODUCTOS */}
         <section style={{ marginBottom: '1.5rem' }}>
           <h3>📦 Productos del pedido</h3>
 
