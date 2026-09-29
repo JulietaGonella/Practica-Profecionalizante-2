@@ -50,15 +50,15 @@ const LocationSelector = ({ position, setPosition }) => {
   );
 };
 
-export const MisDireccionesManager = ({ onSuccessRedirect }) => {
+// Agregamos la prop 'permitirAgregar' con valor por defecto true
+export const MisDireccionesManager = ({ onSuccessRedirect, permitirAgregar = true }) => {
   const navigate = useNavigate();
   const [direcciones, setDirecciones] = useState([]);
   const [loadingGps, setLoadingGps] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorGps, setErrorGps] = useState('');
-  
-  // Coordenadas por defecto (ej: centro de referencia o ciudad)
-  const defaultCenter = { lat: -32.4133, lng: -63.2431 }; // Ajusta según tu ciudad base
+
+  const defaultCenter = { lat: -32.4133, lng: -63.2431 };
 
   const [form, setForm] = useState({
     alias: '',
@@ -71,17 +71,13 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
     es_principal: false
   });
 
-  // Estado para la posición visual en el mapa
   const [mapPosition, setMapPosition] = useState(null);
 
-  // Dentro de MisDireccionesManager (src/components/Cliente/MisDirecciones.jsx)
   const cargarDirecciones = async () => {
     try {
       const data = await getMisDirecciones();
       setDirecciones(data);
 
-      // Si nos pasaron una redirección de éxito y el usuario ya tiene direcciones,
-      // podemos validar de manera preventiva si su GPS actual ya coincide con alguna.
       if (onSuccessRedirect && data.length > 0 && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => {
           const TOLERANCIA_KM = 0.15;
@@ -91,11 +87,10 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
             return dist <= TOLERANCIA_KM;
           });
 
-          // Si ya está dentro del rango de una dirección guardada y entró a esta pantalla por error, lo mandamos al inicio
           if (estaCerca) {
             navigate(onSuccessRedirect, { replace: true });
           }
-        }, () => {}, { timeout: 10000 });
+        }, () => { }, { timeout: 10000 });
       }
     } catch (err) {
       console.error('Error al cargar direcciones:', err);
@@ -104,7 +99,6 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
 
   useEffect(() => { cargarDirecciones(); }, []);
 
-  // Sincronizar el mapa con el formulario cada vez que el usuario hace clic o arrastra el pin
   useEffect(() => {
     if (mapPosition) {
       setForm(prev => ({
@@ -127,7 +121,7 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
     if (!navigator.geolocation) return alert('GPS no soportado en este navegador.');
     setLoadingGps(true);
     setErrorGps('');
-    
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const newCoords = {
@@ -148,9 +142,9 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
         setLoadingGps(false);
       },
       {
-        timeout: 25000,      // ⏱️ Aumentado de 10s a 25s para darle más tiempo al celular
-        maximumAge: 60000,   // Permite usar una ubicación en caché reciente para agilizar la respuesta
-        enableHighAccuracy: false // Cambiado a false temporalmente para evitar bloqueos estrictos de hardware
+        timeout: 25000,
+        maximumAge: 60000,
+        enableHighAccuracy: false
       }
     );
   };
@@ -170,8 +164,9 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
         latitud: Number(form.latitud),
         longitud: Number(form.longitud)
       });
-      
-      // 🛠️ CONDICIONAL DE REDIRECCIÓN SEGÚN EL ORIGEN
+
+      sessionStorage.setItem('ubicacionValidada', 'true');
+
       if (onSuccessRedirect) {
         navigate(onSuccessRedirect, { replace: true });
         return;
@@ -203,7 +198,7 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
   return (
     <div>
       <h3>📍 Mis Ubicaciones Guardadas</h3>
-      
+
       {direcciones.length === 0 ? (
         <p style={{ color: '#666' }}>No tienes direcciones guardadas.</p>
       ) : (
@@ -220,74 +215,71 @@ export const MisDireccionesManager = ({ onSuccessRedirect }) => {
         </ul>
       )}
 
-      <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <h4>➕ Agregar Nueva Ubicación</h4>
-        
-        <input name="alias" placeholder="Alias (ej: Casa, Trabajo)" value={form.alias} onChange={handleChange} required style={{ padding: '0.5rem' }} />
-        <input name="direccion" placeholder="Calle y Altura (ej: Av. San Martín 450)" value={form.direccion} onChange={handleChange} required style={{ padding: '0.5rem' }} />
-        
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input name="piso" placeholder="Piso (opcional)" value={form.piso} onChange={handleChange} style={{ flex: 1, padding: '0.5rem' }} />
-          <input name="departamento" placeholder="Depto (opcional)" value={form.departamento} onChange={handleChange} style={{ flex: 1, padding: '0.5rem' }} />
-        </div>
+      {/* RENDERIZADO CONDICIONAL DEL FORMULARIO */}
+      {permitirAgregar && (
+        <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <h4>➕ Agregar Nueva Ubicación</h4>
 
-        <input name="referencia" placeholder="Referencia de entrega (opcional)" value={form.referencia} onChange={handleChange} style={{ padding: '0.5rem' }} />
+          <input name="alias" placeholder="Alias (ej: Casa, Trabajo)" value={form.alias} onChange={handleChange} required style={{ padding: '0.5rem' }} />
+          <input name="direccion" placeholder="Calle y Altura (ej: Av. San Martín 450)" value={form.direccion} onChange={handleChange} required style={{ padding: '0.5rem' }} />
 
-        {/* SECCIÓN DEL MAPA INTERACTIVO */}
-        <div style={{ margin: '0.5rem 0' }}>
-          <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.4rem' }}>
-            Selecciona tu ubicación exacta en el mapa: <span style={{ color: 'red' }}>*</span>
-          </label>
-          <small style={{ color: '#666', display: 'block', marginBottom: '0.5rem' }}>
-            Haz clic en el mapa o usa el botón de GPS para centrar automáticamente el marcador.
-          </small>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input name="piso" placeholder="Piso (opcional)" value={form.piso} onChange={handleChange} style={{ flex: 1, padding: '0.5rem' }} />
+            <input name="departamento" placeholder="Depto (opcional)" value={form.departamento} onChange={handleChange} style={{ flex: 1, padding: '0.5rem' }} />
+          </div>
 
-          <div style={{ height: '250px', width: '100%', borderRadius: '6px', overflow: 'hidden', border: '1px solid #ccc' }}>
-            <MapContainer 
-              center={mapPosition || defaultCenter} 
-              zoom={13} 
-              style={{ height: '100%', width: '100%' }}
+          <input name="referencia" placeholder="Referencia de entrega (opcional)" value={form.referencia} onChange={handleChange} style={{ padding: '0.5rem' }} />
+
+          <div style={{ margin: '0.5rem 0' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.4rem' }}>
+              Selecciona tu ubicación exacta en el mapa: <span style={{ color: 'red' }}>*</span>
+            </label>
+            <small style={{ color: '#666', display: 'block', marginBottom: '0.5rem' }}>
+              Haz clic en el mapa o usa el botón de GPS para centrar automáticamente el marcador.
+            </small>
+
+            <div style={{ height: '250px', width: '100%', borderRadius: '6px', overflow: 'hidden', border: '1px solid #ccc' }}>
+              <MapContainer center={mapPosition || defaultCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapController center={mapPosition} />
+                <LocationSelector position={mapPosition} setPosition={setMapPosition} />
+              </MapContainer>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem', backgroundColor: tieneGps ? '#ebfbee' : '#fff9db', border: `1px solid ${tieneGps ? '#2b8a3e' : '#f59f00'}`, borderRadius: '6px' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: tieneGps ? '#2b8a3e' : '#f59f00' }}>
+              {tieneGps ? '✓ Ubicación seleccionada en el mapa' : '⚠️️ Aún no has marcado tu ubicación'}
+            </span>
+            <button
+              type="button"
+              onClick={handleObtenerGpsActual}
+              disabled={loadingGps}
+              style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
             >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapController center={mapPosition} />
-              <LocationSelector position={mapPosition} setPosition={setMapPosition} />
-            </MapContainer>
+              {loadingGps ? '⏳ Buscando...' : '🎯 Usar mi GPS actual'}
+            </button>
           </div>
-        </div>
 
-        {/* Botón de apoyo GPS rápido */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem', backgroundColor: tieneGps ? '#ebfbee' : '#fff9db', border: `1px solid ${tieneGps ? '#2b8a3e' : '#f59f00'}`, borderRadius: '6px' }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: tieneGps ? '#2b8a3e' : '#f59f00' }}>
-            {tieneGps ? '✓ Ubicación seleccionada en el mapa' : '⚠️ Aún no has marcado tu ubicación'}
-          </span>
-          <button 
-            type="button" 
-            onClick={handleObtenerGpsActual} 
-            disabled={loadingGps} 
-            style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-          >
-            {loadingGps ? '⏳ Buscando...' : '🎯 Usar mi GPS actual'}
+          {errorGps && (
+            <div style={{ padding: '0.6rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '4px', color: '#e03131', fontSize: '0.85rem' }}>
+              ⚠️ {errorGps}
+            </div>
+          )}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.5rem' }}>
+            <input type="checkbox" name="es_principal" checked={form.es_principal} onChange={handleChange} />
+            Establecer como dirección principal
+          </label>
+
+          <button type="submit" disabled={submitting} style={{ padding: '0.7rem', backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
+            {submitting ? 'Guardando...' : '💾 Guardar Dirección'}
           </button>
-        </div>
-
-        {errorGps && (
-          <div style={{ padding: '0.6rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '4px', color: '#e03131', fontSize: '0.85rem' }}>
-            ⚠️ {errorGps}
-          </div>
-        )}
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.5rem' }}>
-          <input type="checkbox" name="es_principal" checked={form.es_principal} onChange={handleChange} />
-          Establecer como dirección principal
-        </label>
-
-        <button type="submit" disabled={submitting} style={{ padding: '0.7rem', backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', marginTop: '0.5rem' }}>
-          {submitting ? 'Guardando...' : '💾 Guardar Dirección'}
-        </button>
-      </form>
+        </form>
+      )}
     </div>
   );
 };

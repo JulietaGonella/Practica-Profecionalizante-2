@@ -62,6 +62,8 @@ export const CarritoPage = () => {
     return false;
   };
 
+  // src/pages/Cliente/CarritoPage.jsx
+
   // 1️⃣ Cargar únicamente direcciones guardadas y autoselect por GPS (150m)
   useEffect(() => {
     let isMounted = true;
@@ -71,17 +73,22 @@ export const CarritoPage = () => {
         setLoadingDirecciones(true);
         setErrorDirecciones('');
 
-        // Obtener EXCLUSIVAMENTE las direcciones reales guardadas en la BD
+        // Obtener direcciones guardadas en la BD
         const dataDirs = await getMisDirecciones();
 
-        // Filtrar asegurando que solo sean objetos con ID válido de la BD
+        // Filtrar asegurando solo objetos válidos y excluyendo registros ficticios de GPS
         const listaDirecciones = Array.isArray(dataDirs)
-          ? dataDirs.filter(d => d && d.id)
+          ? dataDirs.filter(d =>
+            d &&
+            d.id &&
+            !d.alias?.toLowerCase().includes('ubicación actual') &&
+            !d.alias?.toLowerCase().includes('ubicacion actual') &&
+            !d.direccion?.toLowerCase().startsWith('lat:')
+          )
           : [];
 
         if (!isMounted) return;
 
-        // Guardar en el estado ÚNICAMENTE las direcciones de la BD
         setDirecciones(listaDirecciones);
 
         if (listaDirecciones.length === 0) {
@@ -90,17 +97,17 @@ export const CarritoPage = () => {
           return;
         }
 
-        // Buscar la dirección principal como valor predeterminado (fallback)
+        // Obtener dirección principal como respaldo/fallback
         const dirPrincipal = listaDirecciones.find((d) => d.es_principal === 1) || listaDirecciones[0];
 
-        // Si el navegador no soporta geolocalización, asignar la dirección principal por defecto
+        // Si el navegador no soporta geolocalización, seleccionar la principal por defecto
         if (!navigator.geolocation) {
           if (dirPrincipal?.id) setDireccionSeleccionadaId(String(dirPrincipal.id));
           setLoadingDirecciones(false);
           return;
         }
 
-        // Obtener coordenadas del dispositivo para comparar distancias en segundo plano
+        // Obtener coordenadas GPS reales del dispositivo para comparar distancias
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (!isMounted) return;
@@ -108,13 +115,13 @@ export const CarritoPage = () => {
             const latActual = pos.coords.latitude;
             const lngActual = pos.coords.longitude;
 
-            // 🎯 Margen exacto: 150 metros = 0.15 km
+            // Rango de tolerancia: 150 metros (0.15 km)
             const TOLERANCIA_KM = 0.15;
 
             let direccionCercana = null;
             let menorDistancia = Infinity;
 
-            // Comparar distancias con las direcciones guardadas
+            // Comparar GPS actual con TODAS las direcciones guardadas en la BD
             listaDirecciones.forEach((dir) => {
               if (dir.latitud !== null && dir.longitud !== null) {
                 const dist = calcularDistanciaKm(
@@ -131,8 +138,8 @@ export const CarritoPage = () => {
               }
             });
 
-            // 🎯 SI ESTÁ A MENOS DE 150m: Selecciona la dirección guardada correspondiente.
-            // SI NO COINCIDE CON NINGUNA: Selecciona la dirección principal guardada por defecto.
+            // Si el cliente está en una de sus ubicaciones guardadas (<= 150m), la selecciona.
+            // Si está en otro lugar no guardado, selecciona su dirección principal.
             if (direccionCercana?.id) {
               setDireccionSeleccionadaId(String(direccionCercana.id));
             } else if (dirPrincipal?.id) {

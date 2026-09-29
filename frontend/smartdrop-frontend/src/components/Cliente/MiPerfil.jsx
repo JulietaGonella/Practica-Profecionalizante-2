@@ -167,7 +167,7 @@ export const MiPerfil = () => {
       </div>
 
       {seccion === 'direcciones' ? (
-        <MisDireccionesManager />
+        <MisDireccionesManager permitirAgregar={false} />
       ) : (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

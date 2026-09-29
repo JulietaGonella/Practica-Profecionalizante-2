@@ -26,22 +26,33 @@ export const MisPedidos = () => {
   const [puntaje, setPuntaje] = useState(5);
   const [submittingRating, setSubmittingRating] = useState(false);
 
-  const cargarPedidos = async () => {
-    setLoading(true);
-    setError('');
+  // 1. Modificamos cargarPedidos para permitir actualizaciones silenciosas en segundo plano
+  const cargarPedidos = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const data = await getMisPedidos();
       setPedidos(data);
+      setError('');
     } catch (err) {
       console.error('Error al cargar pedidos:', err);
-      setError('No se pudieron obtener tus pedidos.');
+      if (!isSilent) setError('No se pudieron obtener tus pedidos.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
+  // 2. useEffect con Intervalo (polling) idéntico a SeguimientoPedido
   useEffect(() => {
+    // Carga inicial (muestra spinner)
     cargarPedidos();
+
+    // Polling en segundo plano cada 2 segundos sin interrumpir la interfaz
+    const interval = setInterval(() => {
+      cargarPedidos(true);
+    }, 2000);
+
+    // Limpieza del temporizador al desmontar el componente
+    return () => clearInterval(interval);
   }, []);
 
   // 🔄 Handler para la funcionalidad "Pedir de nuevo" con soporte multilocal y validación individual
@@ -178,10 +189,11 @@ export const MisPedidos = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3>Pedido #{orden.IDorden}</h3>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {/* 🚴 Repartidor Asignado (Solo se muestra si está asignado y el pedido NO está entregado ni cancelado) */}
+                    {/* 🚴 Repartidor Asignado (Solo se muestra si tiene repartidor asignado, NO está entregado ni cancelado, y ya avanzó de estado) */}
                     {(orden.repartidor_asignado || orden.IDrepartidor) &&
                       estadoId !== ESTADOS_ORDEN.ENTREGADO &&
-                      estadoId !== ESTADOS_ORDEN.CANCELADO && (
+                      estadoId !== ESTADOS_ORDEN.CANCELADO &&
+                      estadoId !== ESTADOS_ORDEN.REPARTIDOR_ASIGNADO && (
                         <span style={{
                           fontWeight: 'bold',
                           padding: '0.3rem 0.6rem',

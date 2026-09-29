@@ -11,6 +11,7 @@ export const LogoutButton = () => {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      sessionStorage.removeItem('ubicacionValidada');
       await logout();
       navigate('/login', { replace: true }); // 👈 3. Reemplazar historial al salir
     } catch (error) {

@@ -6,7 +6,6 @@ import {
   entregarPedido,
   liberarPedidoRepartidor,
   confirmarRetiroLocal
-  // Se remueve actualizarUbicacionRepartidor para no sobreescribir el GPS real
 } from '../../api/repartidorService';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -61,10 +60,16 @@ const iconoCliente = L.divIcon({
   iconAnchor: [18, 18]
 });
 
-const iconoLocal = (esSiguiente, retirado) => {
+const iconoLocal = (esSiguiente, retirado, todosRechazados) => {
   let bgColor = '#868e96'; // Gris = en espera
+  let emoji = '🏪';
+  let opacity = '1';
 
-  if (retirado) {
+  if (todosRechazados) {
+    bgColor = '#e03131'; // Rojo = Rechazado
+    emoji = '❌';
+    opacity = '0.6';
+  } else if (retirado) {
     bgColor = '#20c997'; // Verde = retirado
   } else if (esSiguiente) {
     bgColor = '#fd7e14'; // Naranja = siguiente parada
@@ -85,8 +90,9 @@ const iconoLocal = (esSiguiente, retirado) => {
         font-size: 18px;
         box-shadow: 0 3px 8px rgba(0,0,0,0.3);
         border: 2px solid white;
+        opacity: ${opacity};
       ">
-        🏪
+        ${emoji}
       </div>
     `,
     iconSize: [36, 36],
@@ -121,7 +127,7 @@ const calcularDistanciaMetros = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// Componente auxiliar para re centrar el mapa suavemente en las coordenadas registradas en BD
+// Componente auxiliar para re centrar el mapa suavemente
 const CentrarMapaRepartidor = ({ lat, lng }) => {
   const map = useMap();
 
@@ -176,8 +182,7 @@ export const DetallePedidoRepartidor = () => {
 
   useEffect(() => {
     cargarPedido();
-    // Consulta periódica al backend para obtener las coordenadas registradas en la Base de Datos
-    const intervalo = setInterval(actualizarPedido, 1000);
+    const intervalo = setInterval(actualizarPedido, 500);
     return () => clearInterval(intervalo);
   }, [ordenId]);
 
@@ -270,7 +275,7 @@ export const DetallePedidoRepartidor = () => {
     }
   };
 
-  // 1. Agrupar productos por local
+  // 1. Agrupar productos por local y calcular rechazos / retiros
   const localesMap = new Map();
 
   pedido?.productos?.forEach((p) => {
@@ -281,7 +286,6 @@ export const DetallePedidoRepartidor = () => {
       (l) => Number(l.IDlocal ?? l.id ?? l.localId) === Number(idLocal)
     );
 
-    // Reemplaza la asignación de sensibilidadProd dentro del loop por:
     const sensibilidadProd = Number(
       localRutaInfo?.maxSensibilidad ??
       localRutaInfo?.max_sensibilidad ??
@@ -296,11 +300,17 @@ export const DetallePedidoRepartidor = () => {
       ? Number(p.longitud_local)
       : (localRutaInfo?.longitud ? Number(localRutaInfo.longitud) : null);
 
+    const estadoDetalleId = Number(p.IDestado_detalle || p.IDestado_item || p.IDestado);
+    const esRechazado = estadoDetalleId === 6;
+
     const yaRetirado =
-      localRutaInfo?.retirado === 1 ||
-      localRutaInfo?.retirado === true ||
-      pedido?.retiros_realizados?.includes(idLocal) ||
-      p.retirado === true;
+      !esRechazado && (
+        localRutaInfo?.retirado === 1 ||
+        localRutaInfo?.retirado === true ||
+        pedido?.retiros_realizados?.includes(idLocal) ||
+        p.retirado === true ||
+        estadoDetalleId === 8
+      );
 
     if (!localesMap.has(idLocal)) {
       localesMap.set(idLocal, {
@@ -310,18 +320,30 @@ export const DetallePedidoRepartidor = () => {
         direccion: p.direccion_local,
         latitud: latLocal,
         longitud: lngLocal,
-        retirado: Boolean(yaRetirado),
+        totalProductos: 0,
+        rechazadosCount: 0,
+        retiradosCount: 0,
         maxSensibilidad: sensibilidadProd,
         items: []
       });
-    } else {
-      const localExistente = localesMap.get(idLocal);
-      if (sensibilidadProd > localExistente.maxSensibilidad) {
-        localExistente.maxSensibilidad = sensibilidadProd;
-      }
     }
 
-    localesMap.get(idLocal).items.push(p);
+    const localExistente = localesMap.get(idLocal);
+    localExistente.totalProductos += 1;
+    if (esRechazado) localExistente.rechazadosCount += 1;
+    if (yaRetirado) localExistente.retiradosCount += 1;
+
+    if (sensibilidadProd > localExistente.maxSensibilidad) {
+      localExistente.maxSensibilidad = sensibilidadProd;
+    }
+
+    localExistente.items.push(p);
+  });
+
+  // Calcular estado del local
+  localesMap.forEach((local) => {
+    local.todosRechazados = local.totalProductos > 0 && local.rechazadosCount === local.totalProductos;
+    local.retirado = !local.todosRechazados && ((local.retiradosCount + local.rechazadosCount) === local.totalProductos);
   });
 
   const getOrdenRutaBackend = (idLocal) => {
@@ -333,8 +355,11 @@ export const DetallePedidoRepartidor = () => {
   };
 
   const localesOrdenados = Array.from(localesMap.values()).sort((a, b) => {
-    if (a.retirado !== b.retirado) {
-      return a.retirado ? 1 : -1;
+    const aFinalizado = a.retirado || a.todosRechazados;
+    const bFinalizado = b.retirado || b.todosRechazados;
+
+    if (aFinalizado !== bFinalizado) {
+      return aFinalizado ? 1 : -1;
     }
 
     const idxA = getOrdenRutaBackend(a.id);
@@ -363,7 +388,7 @@ export const DetallePedidoRepartidor = () => {
 
     const productosListos = local.items.every((it) => {
       const st = Number(it.IDestado_detalle || it.IDestado_item || it.IDestado);
-      return st === 7 || st === 8;
+      return st === 7 || st === 8 || st === 6;
     });
 
     return {
@@ -374,7 +399,8 @@ export const DetallePedidoRepartidor = () => {
     };
   });
 
-  const primerLocalPendiente = localesInvolucrados.find((l) => !l.retirado);
+  // 🛑 Omitir locales 100% rechazados para determinar la siguiente parada
+  const primerLocalPendiente = localesInvolucrados.find((l) => !l.retirado && !l.todosRechazados);
 
   if (loading) {
     return (
@@ -401,7 +427,7 @@ export const DetallePedidoRepartidor = () => {
   }
 
   const estadoGlobalId = Number(pedido.IDestado);
-  const todosLocalesRetirados = localesInvolucrados.length === 0 || localesInvolucrados.every((l) => l.retirado);
+  const todosLocalesListos = localesInvolucrados.length === 0 || localesInvolucrados.every((l) => l.retirado || l.todosRechazados);
 
   const estaEnCamino = [5, 8].includes(estadoGlobalId);
   const estaFinalizado = [3, 6].includes(estadoGlobalId);
@@ -410,7 +436,7 @@ export const DetallePedidoRepartidor = () => {
   const puedeLiberar = !estaEnCamino && !estaFinalizado;
   const puedeEntregar = estaEnCamino && !estaFinalizado;
 
-  const enEsperadeRetiro = estaEnCamino && !todosLocalesRetirados;
+  const enEsperadeRetiro = estaEnCamino && !todosLocalesListos;
 
   return (
     <div style={{ maxWidth: '900px', margin: '2rem auto', padding: '1rem' }}>
@@ -477,17 +503,20 @@ export const DetallePedidoRepartidor = () => {
 
                   return (
                     <div key={local.id}>
-                      <Marker position={[local.latitud, local.longitud]} icon={iconoLocal(esSiguiente, local.retirado)}>
+                      <Marker
+                        position={[local.latitud, local.longitud]}
+                        icon={iconoLocal(esSiguiente, local.retirado, local.todosRechazados)}
+                      >
                         <Popup>
                           <strong>Parada {index + 1}: {local.nombre} 🏪</strong>
                           <br />
-                          Estado: {local.retirado ? '✅ Retirado' : esSiguiente ? '📍 Siguiente parada' : '⏳ En espera'}
+                          Estado: {local.todosRechazados ? '❌ Rechazado (Omitido)' : local.retirado ? '✅ Retirado' : esSiguiente ? '📍 Siguiente parada' : '⏳ En espera'}
                           <br />
                           Distancia: {local.distanciaMetros != null ? `${local.distanciaMetros}m` : 'Calculando...'}
                         </Popup>
                       </Marker>
 
-                      {esSiguiente && !local.retirado && (
+                      {esSiguiente && !local.retirado && !local.todosRechazados && (
                         <Circle
                           center={[local.latitud, local.longitud]}
                           radius={UMBRAL_DISTANCIA_METROS}
@@ -512,7 +541,7 @@ export const DetallePedidoRepartidor = () => {
                       trayectoCoords.push([Number(primerLocalPendiente.latitud), Number(primerLocalPendiente.longitud)]);
                     }
 
-                    if (todosLocalesRetirados && pedido.latitud_entrega != null && pedido.longitud_entrega != null) {
+                    if (todosLocalesListos && pedido.latitud_entrega != null && pedido.longitud_entrega != null) {
                       trayectoCoords.push([Number(pedido.latitud_entrega), Number(pedido.longitud_entrega)]);
                     }
                   }
@@ -604,16 +633,29 @@ export const DetallePedidoRepartidor = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {localesInvolucrados.map((local, index) => {
                 const esSiguienteEnRuta = primerLocalPendiente?.id === local.id;
-                // 🛑 CORRECCIÓN CLAVE: Solamente estará habilitado si el recorrido YA inició (estaEnCamino es true)
-                const habilitadoPorProximidad = estaEnCamino && local.estaCerca && esSiguienteEnRuta;
+                const habilitadoPorProximidad = estaEnCamino && local.estaCerca && esSiguienteEnRuta && !local.todosRechazados;
+
+                let cardBg = '#f1f3f5';
+                let cardBorder = '1px solid #dee2e6';
+
+                if (local.todosRechazados) {
+                  cardBg = '#ffe3e3';
+                  cardBorder = '1px solid #ffc9c9';
+                } else if (local.retirado) {
+                  cardBg = '#e6fcf5';
+                  cardBorder = '1px solid #20c997';
+                } else if (esSiguienteEnRuta) {
+                  cardBg = '#fff';
+                  cardBorder = '2px solid #1c7ed6';
+                }
 
                 return (
                   <div
                     key={local.id || index}
                     style={{
                       padding: '0.8rem',
-                      backgroundColor: local.retirado ? '#e6fcf5' : esSiguienteEnRuta ? '#fff' : '#f1f3f5',
-                      border: local.retirado ? '1px solid #20c997' : esSiguienteEnRuta ? '2px solid #1c7ed6' : '1px solid #dee2e6',
+                      backgroundColor: cardBg,
+                      border: cardBorder,
                       borderRadius: '6px'
                     }}
                   >
@@ -624,8 +666,14 @@ export const DetallePedidoRepartidor = () => {
                         </span>
                         <strong>{local.nombre}</strong>
                       </p>
-                      {local.retirado ? (
-                        <span style={{ color: '#0ca678', fontWeight: 'bold', fontSize: '0.85rem' }}>✅ Paquete Retirado</span>
+                      {local.todosRechazados ? (
+                        <span style={{ color: '#c92a2a', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          ❌ Productos Rechazados (Parada Omitida)
+                        </span>
+                      ) : local.retirado ? (
+                        <span style={{ color: '#0ca678', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          ✅ Paquete Retirado
+                        </span>
                       ) : (
                         <span style={{ fontSize: '0.8rem', color: esSiguienteEnRuta ? '#1c7ed6' : '#868e96', fontWeight: 'bold' }}>
                           {esSiguienteEnRuta ? '📍 Siguiente parada' : '⏳ En espera de turno'}
@@ -679,7 +727,11 @@ export const DetallePedidoRepartidor = () => {
                         </span>
                       )}
 
-                      {!local.retirado ? (
+                      {local.todosRechazados ? (
+                        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#c92a2a', fontWeight: 'bold' }}>
+                          🚫 Omitido del recorrido
+                        </span>
+                      ) : !local.retirado ? (
                         <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
                           <button
                             onClick={() => setLocalAConfirmar(local)}
@@ -781,7 +833,7 @@ export const DetallePedidoRepartidor = () => {
                           backgroundColor: esCancelado ? '#ffe3e3' : '#e6fcf5'
                         }}
                       >
-                        {producto.estado_detalle || (esCancelado ? 'Cancelado' : 'En proceso')}
+                        {producto.estado_detalle || (esCancelado ? 'Cancelado / Rechazado' : 'En proceso')}
                       </span>
                     </div>
 

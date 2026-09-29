@@ -37,6 +37,8 @@ export const LoginPage = () => {
     try {
       // 1. Intentamos loguear al usuario
       const userLogged = await login(email, password);
+
+      sessionStorage.removeItem('ubicacionValidada');
       
       // 2. Si las credenciales SON CORRECTAS:
       setError('');

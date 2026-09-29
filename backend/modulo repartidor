@@ -162,7 +162,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
                 [punto.latitud, punto.longitud, IDrepartidor]
               );
               log.gps(punto.latitud, punto.longitud);
-              await new Promise((r) => setTimeout(r, 500));
+              await new Promise((r) => setTimeout(r, 150));
             }
 
             log.local(`Llegada al local: "${etapa.localNombre}". Esperando retiro en el local...`);

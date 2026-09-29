@@ -1,11 +1,14 @@
 import { pool } from '../config/db.js';
 
-// Listar todas las direcciones del cliente
+// Listar todas las direcciones reales del cliente
 export const getDireccionesClienteService = async (userId) => {
   const [rows] = await pool.query(
     `SELECT id, alias, direccion, piso, departamento, referencia, latitud, longitud, es_principal
      FROM direcciones_cliente
      WHERE IDusuario = ?
+       AND alias NOT LIKE '%Ubicación Actual%'
+       AND alias NOT LIKE '%Ubicacion Actual%'
+       AND direccion NOT LIKE 'Lat:%'
      ORDER BY es_principal DESC, id DESC`,
     [userId]
   );

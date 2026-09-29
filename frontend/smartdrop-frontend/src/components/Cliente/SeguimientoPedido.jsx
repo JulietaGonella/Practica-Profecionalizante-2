@@ -57,13 +57,15 @@ export const SeguimientoPedido = () => {
   useEffect(() => {
     if (ordenId) {
       cargarPedido();
-      const interval = setInterval(cargarPedido, 1000); // 👈 Cambiado de 5000 a 1000 ms
+      const interval = setInterval(cargarPedido, 1000);
       return () => clearInterval(interval);
     }
   }, [ordenId]);
 
   // --- GPS Y SEGUIMIENTO EN TIEMPO REAL DEL REPARTIDOR ---
   useEffect(() => {
+    const tieneRepartidor = Boolean(orden?.IDrepartidor || orden?.repartidor_asignado || orden?.repartidor);
+
     if (
       !ordenId ||
       !orden ||
@@ -73,14 +75,24 @@ export const SeguimientoPedido = () => {
       return;
     }
 
+    if (!tieneRepartidor) {
+      setRepartidorGps(null);
+      if (repartidorMarkerRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.removeLayer(repartidorMarkerRef.current);
+        repartidorMarkerRef.current = null;
+      }
+      return;
+    }
+
     const consultarTrackingGPS = async () => {
       try {
         const dataTracking = await getOrderTracking(ordenId);
+        const repData = dataTracking?.repartidor;
 
-        const latitud = dataTracking?.repartidor?.ubicacion?.latitud ?? dataTracking?.repartidor?.latitud;
-        const longitud = dataTracking?.repartidor?.ubicacion?.longitud ?? dataTracking?.repartidor?.longitud;
+        const latitud = repData?.ubicacion?.latitud ?? repData?.latitud;
+        const longitud = repData?.ubicacion?.longitud ?? repData?.longitud;
 
-        if (latitud != null && longitud != null) {
+        if (repData && latitud != null && longitud != null) {
           const lat = Number(latitud);
           const lng = Number(longitud);
 
@@ -101,6 +113,12 @@ export const SeguimientoPedido = () => {
               .addTo(mapInstanceRef.current)
               .bindPopup('<b>Repartidor en camino</b>');
           }
+        } else {
+          setRepartidorGps(null);
+          if (repartidorMarkerRef.current && mapInstanceRef.current) {
+            mapInstanceRef.current.removeLayer(repartidorMarkerRef.current);
+            repartidorMarkerRef.current = null;
+          }
         }
       } catch (err) {
         console.warn('Error al consultar GPS:', err.message);
@@ -108,9 +126,9 @@ export const SeguimientoPedido = () => {
     };
 
     consultarTrackingGPS();
-    const intervalGPS = setInterval(consultarTrackingGPS, 1000);
+    const intervalGPS = setInterval(consultarTrackingGPS, 500);
     return () => clearInterval(intervalGPS);
-  }, [ordenId, orden?.IDestado]);
+  }, [ordenId, orden?.IDestado, orden?.IDrepartidor, orden?.repartidor]);
 
   // --- RENDERIZADO E INICIALIZACIÓN DEL MAPA Y ZOOM DINÁMICO ---
   useEffect(() => {
@@ -122,11 +140,13 @@ export const SeguimientoPedido = () => {
     const listaProductos = orden.productos || orden.detalles || [];
     const localesMap = new Map();
 
+    // 1. Agrupar productos por local y calcular rechazos / retiros
     listaProductos.forEach((p) => {
       if (p.latitud && p.longitud) {
         const idLocal = p.IDlocal || p.local;
         const estadoProd = Number(p.IDestado_item ?? p.IDestado_detalle ?? p.IDestado);
         const estaRetirado = estadoProd === 8 || Boolean(orden.retiro_confirmado);
+        const estaRechazado = estadoProd === 6;
 
         if (!localesMap.has(idLocal)) {
           localesMap.set(idLocal, {
@@ -134,15 +154,27 @@ export const SeguimientoPedido = () => {
             nombre: p.local || 'Local Comercial',
             lat: Number(p.latitud),
             lng: Number(p.longitud),
-            retirado: estaRetirado
+            totalProductos: 0,
+            rechazados: 0,
+            retirados: 0
           });
-        } else if (estaRetirado) {
-          localesMap.get(idLocal).retirado = true;
         }
+
+        const localData = localesMap.get(idLocal);
+        localData.totalProductos += 1;
+        if (estaRechazado) localData.rechazados += 1;
+        if (estaRetirado) localData.retirados += 1;
       }
     });
 
-    // 1. Inicializar mapa e ícono del cliente
+    // Determinar estado final de cada local
+    localesMap.forEach((local) => {
+      local.todosRechazados = local.totalProductos > 0 && local.rechazados === local.totalProductos;
+      local.retirado = !local.todosRechazados && ((local.retirados + local.rechazados) === local.totalProductos);
+      local.pendiente = !local.todosRechazados && !local.retirado;
+    });
+
+    // 2. Inicializar mapa e ícono del cliente
     if (!mapInstanceRef.current) {
       const map = L.map(mapRef.current).setView([latCliente, lngCliente], 15);
 
@@ -165,10 +197,25 @@ export const SeguimientoPedido = () => {
 
     const map = mapInstanceRef.current;
 
-    // 2. Renderizar o actualizar marcadores visuales de los locales
+    // 3. Renderizar o actualizar marcadores visuales de los locales
     localesMap.forEach((local, idLocal) => {
-      const bgColor = local.retirado ? '#20c997' : '#1c7ed6';
-      const iconHtml = `<div style="background-color: ${bgColor}; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); opacity: ${local.retirado ? 0.6 : 1}; transition: all 0.4s ease;">🏪</div>`;
+      let bgColor = '#1c7ed6';
+      let iconEmoji = '🏪';
+      let opacity = 1;
+      let estadoTexto = '⏳ Esperando retiro';
+
+      if (local.todosRechazados) {
+        bgColor = '#e03131'; // Rojo si rechazó todos los productos
+        iconEmoji = '❌';
+        opacity = 0.5;
+        estadoTexto = '❌ Productos Rechazados (No requiere visita)';
+      } else if (local.retirado) {
+        bgColor = '#20c997'; // Verde si los productos fueron retirados
+        opacity = 0.6;
+        estadoTexto = '✅ Productos Retirados';
+      }
+
+      const iconHtml = `<div style="background-color: ${bgColor}; color: white; padding: 6px; border-radius: 50%; text-align: center; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); opacity: ${opacity}; transition: all 0.4s ease;">${iconEmoji}</div>`;
 
       const localIcon = L.divIcon({
         className: 'custom-pin',
@@ -176,46 +223,52 @@ export const SeguimientoPedido = () => {
         iconSize: [30, 30]
       });
 
+      const popupContent = `<b>Local:</b> ${local.nombre}<br><b>Estado:</b> ${estadoTexto}`;
+
       if (localMarkersMapRef.current.has(idLocal)) {
         const existingMarker = localMarkersMapRef.current.get(idLocal);
         existingMarker.setIcon(localIcon);
+        existingMarker.setPopupContent(popupContent);
       } else {
         const marker = L.marker([local.lat, local.lng], { icon: localIcon })
           .addTo(map)
-          .bindPopup(`<b>Local:</b> ${local.nombre}<br><b>Estado:</b> ${local.retirado ? '✅ Productos Retirados' : '⏳ Esperando retiro'}`);
+          .bindPopup(popupContent);
         localMarkersMapRef.current.set(idLocal, marker);
       }
     });
 
-    // 3. CÁLCULO DINÁMICO DE BOUNDS Y ZOOM EN BASE A PINES RELEVANTES
+    // 4. CÁLCULO DINÁMICO DE BOUNDS (Solo locales PENDIENTES activos)
+    const tieneRepartidorAsignado = Boolean(orden.IDrepartidor || orden.repartidor_asignado || orden.repartidor);
+
+    if (!tieneRepartidorAsignado && repartidorMarkerRef.current) {
+      map.removeLayer(repartidorMarkerRef.current);
+      repartidorMarkerRef.current = null;
+    }
+
     const latRep = repartidorGps?.lat ?? Number(orden.repartidor?.latitud ?? orden.repartidor?.ubicacion?.latitud);
     const lngRep = repartidorGps?.lng ?? Number(orden.repartidor?.longitud ?? orden.repartidor?.ubicacion?.longitud);
-    const tieneGpsRepartidor = Number.isFinite(latRep) && Number.isFinite(lngRep);
+    const tieneGpsRepartidor = tieneRepartidorAsignado && Number.isFinite(latRep) && Number.isFinite(lngRep);
 
-    // Filtrar únicamente locales PENDIENTES de retiro
-    const localesPendientes = Array.from(localesMap.values()).filter(l => !l.retirado);
+    // Filtrar ÚNICAMENTE locales que realmente estén pendientes (excluye retirados y 100% rechazados)
+    const localesPendientes = Array.from(localesMap.values()).filter(l => l.pendiente);
 
-    // Inicializar límites con la ubicación del Cliente siempre obligatoria
     const bounds = L.latLngBounds([[latCliente, lngCliente]]);
 
-    // Agregar Repartidor si está disponible
     if (tieneGpsRepartidor) {
       bounds.extend([latRep, lngRep]);
     }
 
-    // Agregar ÚNICAMENTE los locales cuya recolección esté pendiente
     localesPendientes.forEach((local) => {
       bounds.extend([local.lat, local.lng]);
     });
 
-    // Aplicar ajuste de cámara dinámico
     map.fitBounds(bounds, {
       padding: [30, 30],
       maxZoom: 20,
       animate: true
     });
 
-  }, [orden?.IDestado, orden?.retiro_confirmado, loading, repartidorGps]);
+  }, [orden?.IDestado, orden?.IDrepartidor, orden?.repartidor, orden?.retiro_confirmado, loading, repartidorGps]);
 
   // --- REDIRECCIÓN SI PASA A ENTREGADO ---
   useEffect(() => {
@@ -328,12 +381,17 @@ export const SeguimientoPedido = () => {
             gap: '15px',
             marginTop: '0.5rem',
             fontSize: '0.85rem',
-            color: '#555'
+            color: '#555',
+            flexWrap: 'wrap'
           }}
         >
-          <span>🏪 <b>Local(es)</b></span>
+          <span>🏪 <b>Local Pendiente</b></span>
+          <span>✅ <b>Local Retirado</b></span>
+          <span>❌ <b>Local Rechazado</b></span>
           <span>🏠 <b>Tu Dirección</b></span>
-          <span>🚴 <b>Repartidor</b></span>
+          {(orden.IDrepartidor || orden.repartidor_asignado || orden.repartidor) && (
+            <span>🚴 <b>Repartidor</b></span>
+          )}
         </div>
       </div>
 

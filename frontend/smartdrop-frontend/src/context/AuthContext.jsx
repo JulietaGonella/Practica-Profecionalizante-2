@@ -58,6 +58,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('ubicacionValidada');
       setUser(null);
     }
   };

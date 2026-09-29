@@ -44,7 +44,7 @@ export const PanelRepartidor = () => {
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
 
   // 🟢 Estados de carga específicos para botones genéricos y select de vehículos
-  const [cargandoAccionBtn, setCargandoAccionBtn] = useState(null); // Identificador de qué botón está cargando
+  const [cargandoAccionBtn, setCargandoAccionBtn] = useState(null);
   const [cambiandoVehiculo, setCambiandoVehiculo] = useState(false);
 
   // 🟢 Estado para editar/actualizar un vehículo con documentación vencida
@@ -101,18 +101,26 @@ export const PanelRepartidor = () => {
       const pedidos = Array.isArray(asignados) ? asignados : [];
 
       setPedidosDisponibles(Array.isArray(disponibles) ? disponibles : []);
-      setMisPedidos(
-        pedidos.filter((pedido) => {
-          const estado = Number(pedido.IDestado ?? pedido.id_estado ?? 0);
-          return estado === 4 || estado === 5 || estado === 7 || estado === 8;
-        })
-      );
+
+      const pedidosEnCurso = pedidos.filter((pedido) => {
+        const estado = Number(pedido.IDestado ?? pedido.id_estado ?? 0);
+        return estado === 4 || estado === 5 || estado === 7 || estado === 8;
+      });
+
+      setMisPedidos(pedidosEnCurso);
+
       setHistorialPedidos(
         pedidos.filter((pedido) => {
           const estado = Number(pedido.IDestado ?? pedido.id_estado);
           return estado === 3;
         })
       );
+
+      if (pedidosEnCurso.length > 0) {
+        setVista('aceptados');
+      } else {
+        setVista('disponibles');
+      }
     } catch (err) {
       console.error('Error cargando pedidos:', err);
       setError(err.response?.data?.error || 'Error al cargar los pedidos');
@@ -126,6 +134,16 @@ export const PanelRepartidor = () => {
   }, []);
 
   const handleAceptarPedido = async (ordenId) => {
+    if (!vehiculoActivo) {
+      alert('⚠️ Debes seleccionar un vehículo activo para poder aceptar pedidos.');
+      return;
+    }
+
+    if (docActivaVencida) {
+      alert('⚠️ Tienes documentación vencida en tu vehículo activo. Actualízala en "Mi Vehículo" para poder tomar pedidos.');
+      return;
+    }
+
     try {
       setAceptandoId(ordenId);
       await aceptarPedidoRepartidor(ordenId);
@@ -159,7 +177,6 @@ export const PanelRepartidor = () => {
     (vehiculo) => vehiculo.estado === 'APROBADO' && Number(vehiculo.activo) === 1
   );
 
-  // 🟢 Manejo del Select de Vehículos con estado de carga visual
   const handleSeleccionarVehiculo = async (e) => {
     const IDvehiculo = e.target.value;
     if (!IDvehiculo) return;
@@ -312,9 +329,25 @@ export const PanelRepartidor = () => {
         texto: urlDoc ? 'Registrado (Sin fecha)' : 'No registra'
       };
     }
+
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
-    const fecha = new Date(fechaStr);
+
+    const formatoIso = fechaStr.includes('T') ? fechaStr.split('T')[0] : fechaStr.split(' ')[0];
+    const partes = formatoIso.split('-');
+
+    if (partes.length !== 3) {
+      console.error("Formato de fecha no reconocido:", fechaStr);
+      return { vencido: true, texto: 'Fecha Inválida' };
+    }
+
+    const [anio, mes, dia] = partes.map(Number);
+    const fecha = new Date(anio, mes - 1, dia);
+    fecha.setHours(0, 0, 0, 0);
+
+    if (isNaN(fecha.getTime())) {
+      return { vencido: true, texto: 'Fecha Inválida' };
+    }
 
     const vencido = fecha < hoy;
     return {
@@ -324,11 +357,43 @@ export const PanelRepartidor = () => {
   };
 
   const esBicicletaActiva = vehiculoActivo && Number(vehiculoActivo.IDtipo_vehiculo) === 2;
-  const docActivaVencida = vehiculoActivo && !esBicicletaActiva && (
-    evaluarDocumento(vehiculoActivo.fecha_vencimiento_licencia, vehiculoActivo.licencia).vencido ||
-    evaluarDocumento(vehiculoActivo.fecha_vencimiento_seguro, vehiculoActivo.seguro).vencido ||
-    evaluarDocumento(vehiculoActivo.fecha_vencimiento_cedula, vehiculoActivo.cedula).vencido
+
+  const docActivaVencida = Boolean(
+    vehiculoActivo &&
+    !esBicicletaActiva &&
+    (
+      evaluarDocumento(vehiculoActivo.fecha_vencimiento_licencia, vehiculoActivo.licencia_url || vehiculoActivo.licencia).vencido ||
+      evaluarDocumento(vehiculoActivo.fecha_vencimiento_seguro, vehiculoActivo.seguro_url || vehiculoActivo.seguro).vencido ||
+      evaluarDocumento(vehiculoActivo.fecha_vencimiento_cedula, vehiculoActivo.cedula_url || vehiculoActivo.cedula).vencido
+    )
   );
+
+  // 🟡 Evaluación de vehículos NO ACTIVOS con documentación vencida
+  const otrosVehiculosConDocVencida = vehiculos.filter((vehiculo) => {
+    const esElActivo = vehiculoActivo && Number(vehiculo.IDvehiculo) === Number(vehiculoActivo.IDvehiculo);
+    if (esElActivo) return false;
+
+    const esBici = Number(vehiculo.IDtipo_vehiculo) === 2;
+    if (esBici) return false;
+
+    const estaActivo = Number(vehiculo.activo) === 1;
+    const esRechazadoTotal = vehiculo.estado === 'RECHAZADO';
+    const esRechazadoDoc = vehiculo.estado === 'RECHAZADO_DOCUMENTACION';
+    const esBajaReal = vehiculo.estado === 'BAJA';
+    const esPendienteGeneral = String(vehiculo.estado).includes('PENDIENTE');
+
+    if (!estaActivo || esRechazadoTotal || esRechazadoDoc || esBajaReal || esPendienteGeneral) {
+      return false;
+    }
+
+    const lic = evaluarDocumento(vehiculo.fecha_vencimiento_licencia, vehiculo.licencia_url || vehiculo.licencia);
+    const seg = evaluarDocumento(vehiculo.fecha_vencimiento_seguro, vehiculo.seguro_url || vehiculo.seguro);
+    const ced = evaluarDocumento(vehiculo.fecha_vencimiento_cedula, vehiculo.cedula_url || vehiculo.cedula);
+
+    return lic.vencido || seg.vencido || ced.vencido;
+  });
+
+  const tieneOtrosVehiculosVencidos = otrosVehiculosConDocVencida.length > 0;
 
   const renderCardPedido = (pedido, tipo, mostrarDetalle = false) => {
     const ordenId = pedido.IDorden || pedido.id;
@@ -457,23 +522,25 @@ export const PanelRepartidor = () => {
         {tipo === 'disponible' && (
           <button
             onClick={() => handleAceptarPedido(ordenId)}
-            disabled={aceptandoId === ordenId || docActivaVencida}
+            disabled={aceptandoId === ordenId || docActivaVencida || !vehiculoActivo}
             style={{
               width: '100%',
               padding: '0.8rem 1rem',
               border: 'none',
               borderRadius: '8px',
-              backgroundColor: (aceptandoId === ordenId || docActivaVencida) ? '#868e96' : '#2b8a3e',
+              backgroundColor: (aceptandoId === ordenId || docActivaVencida || !vehiculoActivo) ? '#868e96' : '#2b8a3e',
               color: '#fff',
               fontWeight: 'bold',
-              cursor: (aceptandoId === ordenId || docActivaVencida) ? 'not-allowed' : 'pointer'
+              cursor: (aceptandoId === ordenId || docActivaVencida || !vehiculoActivo) ? 'not-allowed' : 'pointer'
             }}
           >
-            {docActivaVencida
-              ? '🚫 Doc. Vencida en vehículo actual'
-              : aceptandoId === ordenId
-                ? '⏳ Aceptando...'
-                : 'Aceptar pedido'}
+            {!vehiculoActivo
+              ? '🚫 Sin vehículo activo'
+              : docActivaVencida
+                ? '🚫 Doc. Vencida en vehículo actual'
+                : aceptandoId === ordenId
+                  ? '⏳ Aceptando...'
+                  : 'Aceptar pedido'}
           </button>
         )}
 
@@ -510,9 +577,17 @@ export const PanelRepartidor = () => {
   return (
     <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
 
+      {/* 🔴 Alerta cuando el vehículo ACTIVO tiene documentación vencida */}
       {docActivaVencida && (
         <div style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', color: '#c92a2a', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>
           ⚠️ Posees documentación vencida en tu vehículo activo. No podrás ponerte en línea ni aceptar pedidos hasta actualizar tus documentos en <strong>"Mi Vehículo"</strong>.
+        </div>
+      )}
+
+      {/* 🟡 Alerta cuando hay documentación vencida en vehículos SECUNDARIOS / NO ACTIVOS */}
+      {tieneOtrosVehiculosVencidos && !docActivaVencida && (
+        <div style={{ padding: '1rem', backgroundColor: '#fff9db', border: '1px solid #ffe066', color: '#856404', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>
+          ⚠️ Tienes documentación vencida en uno o más vehículos de tu lista (no activo/s). Puedes seguir trabajando con tu vehículo actual, pero recuerda actualizar los documentos vencidos en <strong>"Mi Vehículo"</strong> antes de cambiar de vehículo.
         </div>
       )}
 
@@ -562,15 +637,15 @@ export const PanelRepartidor = () => {
             onClick={() => setMostrarVehiculos(true)}
             style={{
               padding: '0.6rem 1rem',
-              backgroundColor: docActivaVencida ? '#ffe3e3' : '#fff3bf',
-              border: `1px solid ${docActivaVencida ? '#ffa8a8' : '#ffe066'}`,
+              backgroundColor: docActivaVencida ? '#ffe3e3' : (tieneOtrosVehiculosVencidos ? '#fff9db' : '#fff3bf'),
+              border: `1px solid ${docActivaVencida ? '#ffa8a8' : (tieneOtrosVehiculosVencidos ? '#ffe066' : '#ffe066')}`,
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 'bold',
-              color: docActivaVencida ? '#c92a2a' : '#795000'
+              color: docActivaVencida ? '#c92a2a' : (tieneOtrosVehiculosVencidos ? '#856404' : '#795000')
             }}
           >
-            🚘 Mi Vehículo {docActivaVencida && '❌'}
+            🚘 Mi Vehículo {docActivaVencida ? '❌' : (tieneOtrosVehiculosVencidos ? '⚠️' : '')}
           </button>
 
           <button
@@ -816,25 +891,21 @@ export const PanelRepartidor = () => {
                   vehiculos.map((vehiculo) => {
                     const estaActivo = Number(vehiculo.activo) === 1;
 
-                    // Banderas claras y excluyentes para la interfaz
                     const esRechazadoTotal = vehiculo.estado === 'RECHAZADO';
                     const esRechazadoDoc = vehiculo.estado === 'RECHAZADO_DOCUMENTACION';
                     const esBajaReal = vehiculo.estado === 'BAJA';
-
-                    // Cualquier estado que contenga 'PENDIENTE' debe considerarse pendiente (amarillo)
                     const esPendienteGeneral = String(vehiculo.estado).includes('PENDIENTE');
 
-                    // Una baja solo es real si su estado es BAJA, o si está inactivo y NO fue rechazado ni pendiente
                     const esBaja = esBajaReal || (!estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral);
 
                     const estilo = esBaja || (!esPendienteGeneral && (esRechazadoDoc || esRechazadoTotal))
-                      ? { color: '#c92a2a', backgroundColor: '#fff5f5' } // 🔴 Rojo para rechazados o dados de baja
+                      ? { color: '#c92a2a', backgroundColor: '#fff5f5' }
                       : (esPendienteGeneral
-                        ? { color: '#f59f00', backgroundColor: '#fff9db' } // 🟡 Amarillo para cualquier pendiente
+                        ? { color: '#f59f00', backgroundColor: '#fff9db' }
                         : (estaActivo && !esBaja
                           ? (estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE)
                           : {
-                            color: '#c92a2a', // 🔴 Rojo por defecto para inactivos
+                            color: '#c92a2a',
                             backgroundColor: '#fff5f5'
                           }));
 
@@ -933,7 +1004,6 @@ export const PanelRepartidor = () => {
                           )}
                         </div>
 
-                        {/* Estado visual del vehículo */}
                         <div
                           style={{
                             color: estilo.color,
@@ -1007,7 +1077,6 @@ export const PanelRepartidor = () => {
                             </div>
                           )}
 
-                        {/* 🛑 Mensaje de motivo de rechazo de documentación */}
                         {esRechazadoDoc && vehiculo.motivo_rechazo_documentacion && (
                           <div
                             style={{
@@ -1025,7 +1094,6 @@ export const PanelRepartidor = () => {
                           </div>
                         )}
 
-                        {/* 🚫 Motivo de rechazo general del vehículo */}
                         {esRechazadoTotal && vehiculo.motivo_rechazo && (
                           <div
                             style={{
@@ -1043,7 +1111,6 @@ export const PanelRepartidor = () => {
                           </div>
                         )}
 
-                        {/* 🔄 Botón único para actualizar documentación */}
                         {estaActivo && ((vehiculo.estado === 'APROBADO' && tieneVencidos) || esRechazadoDoc) && (
                           <button
                             type="button"
@@ -1075,7 +1142,6 @@ export const PanelRepartidor = () => {
                           </button>
                         )}
 
-                        {/* Si el vehículo fue completamente rechazado */}
                         {estaActivo && esRechazadoTotal && (
                           <div style={{ color: '#c92a2a', fontSize: '0.85rem', marginTop: '0.4rem', fontStyle: 'italic' }}>
                             🚫 Vehículo rechazado por el administrador. No se puede utilizar.

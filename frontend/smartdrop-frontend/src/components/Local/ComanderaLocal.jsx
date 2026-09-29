@@ -6,7 +6,7 @@ import { ComprobanteModal } from './ComprobanteModal';
 export const ComanderaLocal = () => {
   const [pedidos, setPedidos] = useState([]);
   const [subvista, setSubvista] = useState('activos'); // 'activos' | 'historial'
-  
+
   // Filtros Avanzados
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [busquedaTexto, setBusquedaTexto] = useState('');
@@ -369,10 +369,11 @@ export const ComanderaLocal = () => {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
                     <h3 style={{ margin: 0, color: '#2c3e50' }}>Pedido #{orden.IDorden || orden.id}</h3>
-                    
+
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       {/* 🛵 Badge visual de Repartidor Asignado solo para pedidos en curso */}
-                      {esPedidoEnCurso && tieneRepartidorAsignado && (
+                      {/* 🛵 Badge visual de Repartidor Asignado solo para pedidos en curso cuando hayan avanzado a estados posteriores */}
+                      {esPedidoEnCurso && tieneRepartidorAsignado && estadoActual !== ESTADOS_ORDEN.REPARTIDOR_ASIGNADO && (
                         <span style={{
                           backgroundColor: '#d0ebff',
                           color: '#1864ab',
@@ -447,7 +448,7 @@ export const ComanderaLocal = () => {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ textDecoration: esItemCancelado ? 'line-through' : 'none' }}>
-                              <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre} — ${ (Number(prod.cantidad || 1) * Number(prod.precio_unitario || prod.precio || 0)).toFixed(2) }
+                              <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre} — ${(Number(prod.cantidad || 1) * Number(prod.precio_unitario || prod.precio || 0)).toFixed(2)}
                             </div>
                           </div>
 
