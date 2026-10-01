@@ -1036,14 +1036,19 @@ export const getGananciasHoyService = async (IDusuario) => {
     `
     SELECT 
       COUNT(o.id) AS total_pedidos_hoy,
-      COALESCE(SUM(o.costo_envio), 0.00) AS ganancias_envio_hoy,
-      -- Efectivo total que entró al bolsillo (Productos + Envío)
+      
+      -- 1. Ganancias netas del repartidor (85% del costo de envío de todos los pedidos entregados)
+      COALESCE(SUM(o.ganancia_repartidor), 0.00) AS ganancias_envio_hoy,
+      
+      -- 2. Efectivo total recibido físicamente en mano (Subtotal + Costo de Envío Bruto)
       COALESCE(SUM(CASE WHEN o.IDmetodo_pago = 1 THEN o.total ELSE 0.00 END), 0.00) AS efectivo_recaudado_hoy,
-      -- Deuda real a rendir a la plataforma/locales (Solo Subtotal de productos en efectivo)
-      COALESCE(SUM(CASE WHEN o.IDmetodo_pago = 1 THEN o.precio ELSE 0.00 END), 0.00) AS efectivo_a_rendir_hoy
+      
+      -- 3. Efectivo a Rendir: Total cobrado en efectivo MENOS la comisión neta (85%) que el repartidor ya se cobró de ese billete
+      COALESCE(SUM(CASE WHEN o.IDmetodo_pago = 1 THEN (o.total - o.ganancia_repartidor) ELSE 0.00 END), 0.00) AS efectivo_a_rendir_hoy
+
     FROM ordenes o
     WHERE o.IDrepartidor = ? 
-      AND o.IDestado = 3
+      AND o.IDestado = 3 -- Estado 3: Entregado[cite: 29]
       AND DATE(o.creado_en) = CURDATE()
     `,
     [repartidor.id]

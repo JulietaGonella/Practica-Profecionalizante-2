@@ -9,6 +9,7 @@ import {
 } from '../../api/productService';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const COMISION_PORCENTAJE = 0.10; // 10% de comisión del sistema
 
 const parseDisponible = (val) => {
   if (val === null || val === undefined) return 1;
@@ -29,13 +30,13 @@ export const GestionMenuLocal = ({ localId }) => {
   const [crearNuevaCategoria, setCrearNuevaCategoria] = useState(false);
   const [nuevaCategoriaTexto, setNuevaCategoriaTexto] = useState('');
 
-  // 1. Estado para almacenar el archivo seleccionado y la vista previa
+  // Estado para el archivo de imagen seleccionado y la vista previa
   const [imagenArchivo, setImagenArchivo] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
 
   const formInicial = {
     nombre: '',
-    precio: '',
+    precio: '', // Representa el precio neto deseado por el local
     tiempo_preparacion_min: 15,
     IDcategoria: 1,
     IDcategoria_comercial: '',
@@ -166,7 +167,6 @@ export const GestionMenuLocal = ({ localId }) => {
     setForm({ ...form, grupos_opciones: newGrupos });
   };
 
-  // 2. Controlar la selección del archivo de imagen
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -187,16 +187,20 @@ export const GestionMenuLocal = ({ localId }) => {
     setNuevaCategoriaTexto('');
     setImagenArchivo(null);
 
-    // Prepara la URL completa para la vista previa
     const fullImagenUrl = prod.imagen_url
       ? (prod.imagen_url.startsWith('http') ? prod.imagen_url : `${API_BASE_URL}${prod.imagen_url}`)
       : '';
 
     setPreviewUrl(fullImagenUrl);
 
+    // Priorizar precio_local si existe, de lo contrario obtener el valor equivalente dividiendo el precio público por 1.10
+    const valorPrecioLocal = prod.precio_local !== undefined && prod.precio_local !== null
+      ? prod.precio_local
+      : (prod.precio ? (Number(prod.precio) / (1 + COMISION_PORCENTAJE)).toFixed(2) : '');
+
     setForm({
       nombre: prod.nombre || '',
-      precio: prod.precio || '',
+      precio: valorPrecioLocal,
       disponible: parseDisponible(prod.disponible),
       tiempo_preparacion_min: prod.tiempo_preparacion_min || 15,
       IDcategoria: prod.IDcategoria || 1,
@@ -232,7 +236,6 @@ export const GestionMenuLocal = ({ localId }) => {
     setForm(formInicial);
   };
 
-  // 3. Envío adaptado a FormData
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -246,6 +249,7 @@ export const GestionMenuLocal = ({ localId }) => {
 
       const formData = new FormData();
       formData.append('nombre', form.nombre);
+      // 'precio' enviado al backend es el monto neto que desea recibir el local
       formData.append('precio', Number(form.precio));
       formData.append('disponible', form.disponible !== undefined ? parseDisponible(form.disponible) : 1);
       formData.append('tiempo_preparacion_min', Number(form.tiempo_preparacion_min));
@@ -255,15 +259,12 @@ export const GestionMenuLocal = ({ localId }) => {
         formData.append('IDcategoria_comercial', idCategoriaComercialFinal);
       }
 
-      // Convertir estructuras complejas a JSON string para enviarlas con FormData
       formData.append('ingredientes', JSON.stringify(form.ingredientes));
       formData.append('grupos_opciones', JSON.stringify(form.grupos_opciones));
 
-      // Adjuntar la imagen con la clave 'imagen' coincidente con multer (upload.single('imagen'))
       if (imagenArchivo) {
         formData.append('imagen', imagenArchivo);
       } else {
-        // Si no hay archivo cargado y el estado imagen_url está vacío, enviar vacío para limpiar en BD
         formData.append('imagen_url', form.imagen_url || '');
       }
 
@@ -282,6 +283,11 @@ export const GestionMenuLocal = ({ localId }) => {
       setIsSaving(false);
     }
   };
+
+  // Cálculo de la vista previa del desglose financiero
+  const precioLocalNum = Number(form.precio) || 0;
+  const montoComision = precioLocalNum * COMISION_PORCENTAJE;
+  const precioFinalCalculado = precioLocalNum + montoComision;
 
   return (
     <div style={{ marginTop: '2rem' }}>
@@ -368,12 +374,15 @@ export const GestionMenuLocal = ({ localId }) => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}><strong>Precio Base ($):</strong></label>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
+                    <strong>Precio Carta / Mostrador ($):</strong>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     disabled={isSaving}
+                    placeholder="Ej: 1000"
                     value={form.precio}
                     onChange={(e) => setForm({ ...form, precio: e.target.value })}
                     style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
@@ -381,7 +390,38 @@ export const GestionMenuLocal = ({ localId }) => {
                 </div>
               </div>
 
-              {/* Imagen del Producto mediante archivo local */}
+              {/* 📊 Tarjeta informativa de cálculo de la comisión del 10% */}
+              {precioLocalNum > 0 && (
+                <div
+                  style={{
+                    backgroundColor: '#e7f5ff',
+                    border: '1px solid #74c0fc',
+                    borderRadius: '8px',
+                    padding: '0.8rem 1rem',
+                    marginBottom: '1.2rem',
+                    fontSize: '0.88rem',
+                    color: '#1864ab'
+                  }}
+                >
+                  <div style={{ fontWeight: 'bold', marginBottom: '0.3rem', borderBottom: '1px solid #a5d8ff', paddingBottom: '0.2rem' }}>
+                    💡 Desglose de Comisión (+10% Plataforma)
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
+                    <span>Ganancia Neta para tu Local:</span>
+                    <strong>${precioLocalNum.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', color: '#495057' }}>
+                    <span>Comisión Plataforma (10%):</span>
+                    <span>+${montoComision.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', paddingTop: '0.3rem', borderTop: '1px dashed #74c0fc', fontWeight: 'bold', fontSize: '0.95rem', color: '#0b7285' }}>
+                    <span>Precio Final al Cliente en App:</span>
+                    <span>${precioFinalCalculado.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Imagen del Producto */}
               <div style={{ marginBottom: '1.2rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
                   <strong>📷 Imagen del Producto:</strong>
@@ -394,7 +434,6 @@ export const GestionMenuLocal = ({ localId }) => {
                   style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
                 />
 
-                {/* Vista previa de la imagen actual o nueva */}
                 {previewUrl && (
                   <div style={{ marginTop: '0.8rem', textAlign: 'center', position: 'relative', display: 'inline-block' }}>
                     <img
@@ -450,10 +489,11 @@ export const GestionMenuLocal = ({ localId }) => {
                     onChange={(e) => setForm({ ...form, IDcategoria: e.target.value })}
                     style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box', backgroundColor: '#fff' }}
                   >
-                    <option value={1}>📦 Normal / Ambiente</option>
-                    <option value={2}>🔥 Caliente (Pizzas, Pastas)</option>
-                    <option value={3}>🍟 Frito / Sensible</option>
-                    <option value={4}>🍦 Frío / Congelado (Helados)</option>
+                    <option value={1}>📦 Panadería y Secos</option>
+                    <option value={2}>🥤 Bebidas</option>
+                    <option value={3}>🔥 Comida Caliente</option>
+                    <option value={4}>🍟 Fritos y Crujientes</option>
+                    <option value={5}>🍦 Helados y Postres Fríos</option>
                   </select>
                 </div>
 
@@ -650,7 +690,7 @@ export const GestionMenuLocal = ({ localId }) => {
             <tr style={{ backgroundColor: '#e9ecef', textAlign: 'left' }}>
               <th style={{ padding: '0.8rem' }}>Imagen</th>
               <th>Producto</th>
-              <th>Precio</th>
+              <th>Precio Venta (Neto Local)</th>
               <th>Prep.</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -661,6 +701,10 @@ export const GestionMenuLocal = ({ localId }) => {
               const estaEditandoEste = editingId === prod.id;
               const estaCambiandoEste = isTogglingId === prod.id;
               const estaDisponible = parseDisponible(prod.disponible) === 1;
+
+              const precioLocalVal = prod.precio_local !== undefined && prod.precio_local !== null
+                ? Number(prod.precio_local)
+                : Number(prod.precio) / 1.10;
 
               return (
                 <tr key={prod.id} style={{ borderBottom: '1px solid #ddd', backgroundColor: estaEditandoEste ? '#e7f5ff' : 'transparent' }}>
@@ -682,7 +726,12 @@ export const GestionMenuLocal = ({ localId }) => {
                     />
                   </td>
                   <td><strong>{prod.nombre}</strong></td>
-                  <td>${Number(prod.precio).toFixed(2)}</td>
+                  <td>
+                    <strong>${Number(prod.precio).toFixed(2)}</strong>
+                    <div style={{ fontSize: '0.78rem', color: '#6c757d' }}>
+                      (Neto local: ${precioLocalVal.toFixed(2)})
+                    </div>
+                  </td>
                   <td>⏱️ {prod.tiempo_preparacion_min || 15}m</td>
                   <td>
                     <span style={{ color: estaDisponible ? 'green' : 'red', fontWeight: 'bold' }}>

@@ -26,8 +26,6 @@ Pídele a **ChatGPT** o **Claude** que defina los colores principales de tu app 
 * **Ejemplo de Prompt para usar:**
 > *"Estoy desarrollando mi tesis sobre [Nombre o tema de la app, ej: un sistema de gestión para repartidores y locales]. Actúa como un Diseñador UI/UX senior y propón una paleta de colores profesional. Necesito: Color Primario, Secundario, Colores de Estado (éxito, alerta, error) con sus códigos Hexadecimales (#HEX), fuente tipográfica recomendada y la justificación del diseño para la memoria de mi tesis."*
 
-
-
 #### Paso 2: Generar la pantalla visualmente en v0.dev
 
 Una vez que tienes los colores e idea general, ve a [v0.dev](https://v0.dev).
@@ -55,3 +53,14 @@ Para que tu profesor apruebe la sección de UI/UX, documenta el resultado mencio
 1. **Tokens de Diseño / Paleta:** Muestra la muestra de colores (Hexadecimales) y explica qué transmite cada uno (ej. *Azul `#1c7ed6` para transmitir confianza en el seguimiento, Naranja `#fd7e14` para llamar la atención en la siguiente parada*).
 2. **Jerarquía Visual:** Explica cómo los botones principales (Confirmar, Entregar) destacan sobre los secundarios mediante contraste.
 3. **Diseño Responsivo e Inclusivo:** Menciona que la interfaz fue generada bajo estándares de usabilidad, con contraste de color suficiente (WCAG) y tamaños de toque óptimos para dispositivos móviles.
+
+
+
+
+
+
+
+
+
+
+2. Reparto de los Fondos (¿Quién se queda con qué?)De acuerdo con las reglas de negocio y los archivos del sistema:   Repartidor:Recibe la mayor parte del costo de envío. Según la configuración de la plataforma, el repartidor obtiene habitualmente el 85% del costo de envío.Local / Comercio:Recibe el valor de los productos vendidos menos la comisión de la plataforma. Si la plataforma cobra, por ejemplo, un 10% de comisión, el local se queda con el 90% del subtotal de sus productos.La Plataforma / Sistema (Tus verdaderos ingresos netos):Comisión por Venta al Local: porcentaje retenido del subtotal de productos (ej. 10%).Margen/Comisión sobre el Envío: porcentaje retenido del costo de envío (ej. 15%).$$\text{Ingreso Neto Sistema} = (\text{Subtotal Productos} \times \% \text{Comisión Local}) + (\text{Costo de Envío} \times \% \text{Margen Envío})$$

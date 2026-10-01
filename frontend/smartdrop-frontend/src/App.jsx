@@ -31,6 +31,7 @@ import { ActualizarPasswordInicialPage } from './pages/ActualizarPasswordInicial
 import { SolicitarRecuperacionPage } from './pages/SolicitarRecuperacionPage';
 import { RestablecerPasswordPage } from './pages/RestablecerPasswordPage';
 import { ClienteGuard } from './components/Cliente/ClienteGuard';
+import { TableroAdministrador } from './components/Admin/TableroAdministrador';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -727,7 +728,7 @@ export default function App() {
               <Route path="/admin/inicio" element={<PanelAdministrador />} />
               <Route path="/admin/crear-cuenta" element={<CrearCuentaPerfilAdmin />} />
               <Route path="/admin/crear-admin" element={<CrearAdminForm />} />
-              <Route path="/admin/tablero" element={<TableroEstadisticas rol="Administrador" />} />
+              <Route path="/admin/tablero" element={<TableroAdministrador />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />

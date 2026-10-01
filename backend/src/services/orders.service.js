@@ -18,6 +18,10 @@ export const createOrderService = async (data) => {
   // Validar método de pago predeterminado (1: Efectivo)
   const metodoPagoId = IDmetodo_pago ? Number(IDmetodo_pago) : 1;
 
+  // 💰 Configuración de porcentajes financieros del sistema
+  const COMISION_LOCAL_PCT = 10.00; // 10% de comisión cobrada al local
+  const MARGEN_ENVIO_PCT = 15.00;   // 15% retenido del envío (el repartidor percibe el 85%)
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -111,7 +115,9 @@ export const createOrderService = async (data) => {
     const localesAtendidosMap = new Map();
     const productosDetalleRespuesta = [];
 
-    // 5️⃣ Procesar ítems, calcular adicionales, tiempo máximo y guardar en detalle_orden
+    const comisionLocalFactor = COMISION_LOCAL_PCT / 100;
+
+    // 5️⃣ Procesar ítems, calcular adicionales, reparto por producto y guardar en detalle_orden
     for (const item of productos) {
       const [rows] = await conn.query(
         `
@@ -166,6 +172,10 @@ export const createOrderService = async (data) => {
       const precioUnitarioFinal = precioBase + montoAdicionalesItem;
       const subtotalItem = precioUnitarioFinal * item.cantidad;
 
+      // Cálculo del reparto financiero por ítem/producto
+      const gananciaLocalItem = subtotalItem * (1 - comisionLocalFactor);
+      const comisionPlataformaItem = subtotalItem * comisionLocalFactor;
+
       const tiempoTotalItem = item.cantidad > 1
         ? tiempoBase + ((item.cantidad - 1) * 3)
         : tiempoBase;
@@ -188,10 +198,10 @@ export const createOrderService = async (data) => {
       const [detalleResult] = await conn.query(
         `
           INSERT INTO detalle_orden
-          (IDorden, IDproducto, IDlocal, cantidad, precio_unitario, comentario, IDestado)
-          VALUES (?, ?, ?, ?, ?, ?, 1)
+          (IDorden, IDproducto, IDlocal, cantidad, precio_unitario, ganancia_local_item, comision_plataforma_item, comentario, IDestado)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
         `,
-        [IDorden, item.IDproducto, IDlocal, item.cantidad, precioUnitarioFinal, comentarioItem]
+        [IDorden, item.IDproducto, IDlocal, item.cantidad, precioUnitarioFinal, gananciaLocalItem, comisionPlataformaItem, comentarioItem]
       );
 
       const IDdetalle = detalleResult.insertId;
@@ -212,6 +222,8 @@ export const createOrderService = async (data) => {
         montoAdicionales: montoAdicionalesItem,
         precioUnitarioFinal,
         subtotalItem,
+        gananciaLocalItem,
+        comisionPlataformaItem,
         opciones: opcionesDetalle
       });
     }
@@ -226,19 +238,42 @@ export const createOrderService = async (data) => {
     const tiempoEstimadoViajeMin = Math.round((distanciaTotalKM * 2.5) + 5);
     const tiempoTotalEstimadoMin = maxTiempoPreparacion + tiempoEstimadoViajeMin;
 
-    // 7️⃣ Actualizar precios, tiempos, DISTANCIA KM y MÉTODO DE PAGO en la orden
+    // 💰 Cálculo global del reparto financiero de la orden
+    const gananciaRepartidor = costoEnvio * (1 - (MARGEN_ENVIO_PCT / 100));
+    const gananciaLocalTotal = subtotalProductos * (1 - comisionLocalFactor);
+    const ingresoNetoPlataforma = (subtotalProductos * comisionLocalFactor) + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
+
+    // 7️⃣ Actualizar precios, métricas financieras, tiempos, DISTANCIA KM y MÉTODO DE PAGO en la orden
     await conn.query(
       `
       UPDATE ordenes 
       SET precio = ?, 
           costo_envio = ?, 
           total = ?, 
+          comision_local_pct = ?,
+          margen_envio_pct = ?,
+          ganancia_local_total = ?,
+          ganancia_repartidor = ?,
+          ingreso_neto_plataforma = ?,
           tiempo_estimado_min = ?, 
           distancia_km = ?, 
           IDmetodo_pago = ?
       WHERE id = ?
       `,
-      [subtotalProductos, costoEnvio, totalFinal, tiempoTotalEstimadoMin, distanciaTotalKM, metodoPagoId, IDorden]
+      [
+        subtotalProductos,
+        costoEnvio,
+        totalFinal,
+        COMISION_LOCAL_PCT,
+        MARGEN_ENVIO_PCT,
+        gananciaLocalTotal,
+        gananciaRepartidor,
+        ingresoNetoPlataforma,
+        tiempoTotalEstimadoMin,
+        distanciaTotalKM,
+        metodoPagoId,
+        IDorden
+      ]
     );
 
     // Confirmar cambios en la BD antes de llamar a servicios externos
@@ -258,7 +293,7 @@ export const createOrderService = async (data) => {
       checkoutUrl = mpRes.init_point || mpRes.sandbox_init_point;
     }
 
-    // 9️⃣ Retornar respuesta estructurada
+    // 9️⃣ Retornar respuesta estructurada con desglose financiero
     return {
       IDorden,
       codigoOTP,
@@ -266,6 +301,13 @@ export const createOrderService = async (data) => {
       subtotalProductos,
       costoEnvio,
       totalFinal,
+      desgloseFinanciero: {
+        gananciaLocalTotal,
+        gananciaRepartidor,
+        ingresoNetoPlataforma,
+        comisionLocalPct: COMISION_LOCAL_PCT,
+        margenEnvioPct: MARGEN_ENVIO_PCT
+      },
       distanciaEstimadaKM: distanciaTotalKM,
       IDmetodo_pago: metodoPagoId,
       checkoutUrl,
@@ -321,7 +363,14 @@ export const cancelOrderService = async (IDorden, IDcliente, motivo) => {
     await conn.query(
       `
       UPDATE ordenes 
-      SET IDestado = ?, motivo_cancelacion = ? 
+        SET IDestado = ?,
+          precio = 0,
+          costo_envio = 0,
+          total = 0,
+          ganancia_local_total = 0,
+          ganancia_repartidor = 0,
+          ingreso_neto_plataforma = 0,
+          motivo_cancelacion = ?
       WHERE id = ?
       `,
       [ESTADO_CANCELADO_ID, motivoCancelacion, IDorden]
@@ -329,7 +378,9 @@ export const cancelOrderService = async (IDorden, IDcliente, motivo) => {
 
     // 3️⃣ Actualizar estado de los productos en detalle_orden
     await conn.query(
-      `UPDATE detalle_orden SET IDestado = ? WHERE IDorden = ?`,
+      `UPDATE detalle_orden
+       SET IDestado = ?, ganancia_local_item = 0, comision_plataforma_item = 0
+       WHERE IDorden = ?`,
       [ESTADO_CANCELADO_ID, IDorden]
     );
 
@@ -580,7 +631,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 
     const localId = local.id;
 
-    // ✅ CORRECCIÓN: Usar o.direccion_entrega y los detalles de direcciones_cliente
+    // 🎯 Se agregan subtotal (precio), comision_local_pct y ganancia_local_total
     let queryOrders = `
       SELECT DISTINCT
         o.id AS IDorden,
@@ -598,9 +649,11 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         o.longitud_entrega AS cliente_longitud,
         o.IDestado,
         e.nombre AS estado_orden,
-        o.total,
-        o.precio AS subtotal,
+        o.precio AS subtotal,                   -- 👈 Subtotal de la orden
+        o.comision_local_pct,                   -- 👈 % de comisión cobrado al local
+        o.ganancia_local_total,                 -- 👈 Monto neto que cobrará el comercio
         o.costo_envio,
+        o.total,
         o.tiempo_estimado_min,
         mp.nombre AS metodo_pago,
         ep.nombre AS estado_pago,
@@ -640,6 +693,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 
     const orderIds = ordenes.map((o) => o.IDorden);
 
+    // 🎯 Se agrega ganancia_local_item a nivel de ítem
     const [detalles] = await conn.query(
       `
       SELECT
@@ -649,6 +703,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         p.nombre AS producto,
         d.cantidad,
         d.precio_unitario,
+        d.ganancia_local_item,                  -- 👈 Ganancia neta por ítem
         d.comentario,
         d.motivo_cancelacion AS motivo_rechazo,
         d.IDestado AS IDestado_detalle,
@@ -720,6 +775,11 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
   try {
     await conn.beginTransaction();
 
+    // 💰 Configuración de porcentajes financieros del sistema
+    const COMISION_LOCAL_PCT = 10.00; // 10%
+    const MARGEN_ENVIO_PCT = 15.00;   // 15% (El repartidor se queda con el 85%)
+    const comisionLocalFactor = COMISION_LOCAL_PCT / 100;
+
     // 1️⃣ Obtener el local asociado al usuario autenticado
     const [[local]] = await conn.query(
       `SELECT id FROM locales WHERE IDusuario = ?`,
@@ -757,7 +817,10 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
     if (Number(nuevoEstadoId) === 6) {
       await conn.query(
         `UPDATE detalle_orden 
-         SET IDestado = ?, motivo_cancelacion = ? 
+         SET IDestado = ?,
+           ganancia_local_item = 0,
+           comision_plataforma_item = 0,
+           motivo_cancelacion = ?
          WHERE IDorden = ? AND IDlocal = ? AND id IN (?)`,
         [nuevoEstadoId, motivo ? String(motivo).trim() : 'Rechazado por el local', IDorden, local.id, targetDetallesIds]
       );
@@ -780,9 +843,18 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
     const todosCancelados = todosDetalles.every(d => Number(d.IDestado) === 6);
 
     if (todosCancelados) {
-      // Si el 100% de los ítems fueron rechazados, la orden se cancela globalmente
+      // Si el 100% de los ítems fueron rechazados, la orden se cancela globalmente y se resetean valores financieros
       await conn.query(
-        `UPDATE ordenes SET IDestado = 6, precio = 0, costo_envio = 0, total = 0, motivo_cancelacion = ? WHERE id = ?`,
+        `UPDATE ordenes 
+         SET IDestado = 6, 
+             precio = 0, 
+             costo_envio = 0, 
+             total = 0, 
+             ganancia_local_total = 0,
+             ganancia_repartidor = 0,
+             ingreso_neto_plataforma = 0,
+             motivo_cancelacion = ? 
+         WHERE id = ?`,
         [motivo || 'Todos los ítems fueron rechazados por los locales', IDorden]
       );
       await conn.query(
@@ -815,6 +887,11 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       const { distanciaTotalKM, costoEnvio } = calcularCostoEnvioMultiorigen(puntosRuta);
       const nuevoTotal = nuevoSubtotal + costoEnvio;
 
+      // 💵 Recalcular reparto financiero en base a los ítems activos
+      const gananciaRepartidor = costoEnvio * (1 - (MARGEN_ENVIO_PCT / 100));
+      const gananciaLocalTotal = nuevoSubtotal * (1 - comisionLocalFactor);
+      const ingresoNetoPlataforma = (nuevoSubtotal * comisionLocalFactor) + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
+
       // 6️⃣ REGLA DE NEGOCIO: Evaluación e Invariabilidad del Estado Global
       let nuevoEstadoOrden = Number(ordenActual.IDestado);
 
@@ -833,23 +910,44 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         } else {
           const [[estadoMenorAvance]] = await conn.query(
             `SELECT e.id AS IDestado
-       FROM detalle_orden do
-       JOIN estados e ON do.IDestado = e.id
-       WHERE do.IDorden = ? AND do.IDestado != 6
-       ORDER BY e.orden ASC
-       LIMIT 1`,
+             FROM detalle_orden do
+             JOIN estados e ON do.IDestado = e.id
+             WHERE do.IDorden = ? AND do.IDestado != 6
+             ORDER BY e.orden ASC
+             LIMIT 1`,
             [IDorden]
           );
           nuevoEstadoOrden = estadoMenorAvance ? Number(estadoMenorAvance.IDestado) : nuevoEstadoOrden;
         }
       }
 
-      // 7️⃣ Persistir cambios en la tabla 'ordenes'
+      // 7️⃣ Persistir cambios en la tabla 'ordenes' incluyendo reparto financiero actualizado
       await conn.query(
         `UPDATE ordenes 
-         SET IDestado = ?, precio = ?, costo_envio = ?, distancia_km = ?, total = ? 
+         SET IDestado = ?, 
+             precio = ?, 
+             costo_envio = ?, 
+             distancia_km = ?, 
+             total = ?,
+             comision_local_pct = ?,
+             margen_envio_pct = ?,
+             ganancia_local_total = ?,
+             ganancia_repartidor = ?,
+             ingreso_neto_plataforma = ?
          WHERE id = ?`,
-        [nuevoEstadoOrden, nuevoSubtotal, costoEnvio, distanciaTotalKM, nuevoTotal, IDorden]
+        [
+          nuevoEstadoOrden, 
+          nuevoSubtotal, 
+          costoEnvio, 
+          distanciaTotalKM, 
+          nuevoTotal,
+          COMISION_LOCAL_PCT,
+          MARGEN_ENVIO_PCT,
+          gananciaLocalTotal,
+          gananciaRepartidor,
+          ingresoNetoPlataforma,
+          IDorden
+        ]
       );
 
       // Registrar en el historial únicamente si hubo un cambio real en la cabecera
@@ -951,8 +1049,9 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
       throw new Error('El usuario autenticado no está registrado como repartidor');
     }
 
+    // 1️⃣ Consultar IDmetodo_pago además de los datos de control
     const [[orden]] = await conn.query(
-      `SELECT IDestado, IDrepartidor, codigo_otp FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT IDestado, IDrepartidor, codigo_otp, IDmetodo_pago FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
@@ -983,7 +1082,17 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
       throw new Error('El código OTP ingresado es incorrecto.');
     }
 
-    // Marcar orden completa como Entregada (ID 3)
+    // 2️⃣ Si el método de pago es EFECTIVO (ID 1), actualizamos el estado de pago a 2 (Aprobado)
+    const esEfectivo = Number(orden.IDmetodo_pago) === 1;
+
+    if (esEfectivo) {
+      await conn.query(
+        `UPDATE ordenes SET IDestado_pago = 2 WHERE id = ?`,
+        [IDorden]
+      );
+    }
+
+    // 3️⃣ Marcar la orden como ENTREGADA (ID 3) y sus detalles activos
     await conn.query(`UPDATE ordenes SET IDestado = 3 WHERE id = ?`, [IDorden]);
     await conn.query(`UPDATE detalle_orden SET IDestado = 3 WHERE IDorden = ? AND IDestado != 6`, [IDorden]);
     await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 3)`, [IDorden]);
@@ -993,7 +1102,8 @@ export const setOrderEntregadoService = async (IDorden, IDusuario, codigoOTP) =>
     return {
       message: 'La orden ha sido confirmada y marcada como ENTREGADA exitosamente',
       IDorden,
-      nuevoEstado: 3
+      nuevoEstado: 3,
+      pagoAprobado: esEfectivo
     };
   } catch (error) {
     await conn.rollback();
@@ -1392,7 +1502,6 @@ export const getOrderByIdService = async (IDorden, IDcliente) => {
   return orden;
 };
 
-// src/services/orders.service.js
 export const getMisPedidosAsignadosService = async (IDusuario) => {
   const [[repartidor]] = await pool.query(
     `SELECT id FROM repartidores WHERE IDusuario = ?`,
@@ -1412,7 +1521,10 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
       o.IDestado,
       e.nombre AS estado_orden,
       o.precio AS subtotal,
+      -- 🚴 Desglose de ingresos netos para el repartidor
       o.costo_envio,
+      o.margen_envio_pct,
+      o.ganancia_repartidor,
       o.total,
       o.codigo_otp,
       -- 🟢 Snapshot exacto de la orden con doble alias
@@ -1531,17 +1643,26 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       o.IDrepartidor,
       o.IDestado,
       e.nombre AS estado_orden,
-      o.precio AS subtotal,
+      
+      -- Datos de pago relacionales
+      o.IDmetodo_pago,
+      mp.nombre AS metodo_pago,
+      o.IDestado_pago,
+      ep.nombre AS estado_pago,
+
+      -- Montos relevantes para el Repartidor
+      o.precio AS subtotal_productos,
       o.costo_envio,
-      o.total,
+      o.ganancia_repartidor,
+      o.ganancia_local_total,
+      o.total AS total_orden,
+
+      -- Datos de entrega y cliente
       o.codigo_otp,
-      o.direccion_entrega AS direccion_entrega,
-      o.direccion_entrega AS direccion_cliente,
+      o.direccion_entrega,
       c.telefono AS telefono_cliente,
-      o.latitud_entrega AS latitud_entrega,
-      o.latitud_entrega AS cliente_latitud,
-      o.longitud_entrega AS longitud_entrega,
-      o.longitud_entrega AS cliente_longitud,
+      o.latitud_entrega,
+      o.longitud_entrega,
       d.alias AS alias_direccion,
       d.piso,
       d.departamento,
@@ -1554,8 +1675,9 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     JOIN clientes c ON c.IDusuario = o.IDcliente
     LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
     LEFT JOIN repartidores r ON r.id = o.IDrepartidor
-    WHERE o.id = ?
-      AND o.IDrepartidor = ?
+    LEFT JOIN metodos_pago mp ON mp.id = o.IDmetodo_pago
+    LEFT JOIN estados_pago ep ON ep.id = o.IDestado_pago
+    WHERE o.id = ? AND o.IDrepartidor = ?
     `,
     [IDorden, repartidor.id]
   );
@@ -1564,7 +1686,35 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     throw new Error('El pedido no existe o no está asignado a este repartidor');
   }
 
-  // 1️⃣ Obtener productos con datos completos del local y sensibilidad
+  // Lógica de pagos ajustada
+  const esEfectivo = Number(orden.IDmetodo_pago) === 1; // 1 = Efectivo
+
+  // 1️⃣ Lo que el cliente debe pagar (Si es en efectivo, se cobra el total independientemente del estado de pago actual)
+  const montoACobrarCliente = esEfectivo ? Number(orden.total_orden) : 0.00;
+
+  // 2️⃣ Lo que se le entrega/corresponde al local (según modelo comercial o valor total de los productos)[cite: 35, 36]
+  // Si en tu modelo en efectivo el repartidor le paga al local el subtotal neto del local:
+  const montoAPagarLocal = esEfectivo ? Number(orden.ganancia_local_total) : 0.00; 
+
+  const detallePagoRepartidor = {
+    metodo_pago: orden.metodo_pago,
+    estado_pago: orden.estado_pago,
+    es_pago_efectivo: esEfectivo,
+    pago_completado: Number(orden.IDestado_pago) === 2, // 2 = Aprobado[cite: 35]
+    
+    // Muestra el total de la orden a cobrar al cliente
+    monto_a_cobrar_cliente: esEfectivo ? Number(orden.total_orden) : 0.00,
+    
+    // Muestra el valor que se debe abonar/abonó al local[cite: 35, 36]
+    monto_a_pagar_local: Number(orden.ganancia_local_total), 
+    
+    ganancia_envio: Number(orden.ganancia_repartidor),
+    indicaciones_pago: esEfectivo
+      ? `Cobrar $${Number(orden.total_orden).toFixed(2)} en EFECTIVO al entregar.`
+      : `PAGO ONLINE REGISTRADO (${orden.estado_pago.toUpperCase()}). NO cobrar al cliente.`
+  };
+
+  // Obtener productos y locales como habitualmente
   const [productos] = await pool.query(
     `
     SELECT
@@ -1591,7 +1741,6 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     [orden.IDorden]
   );
 
-  // 2️⃣ Obtener resumen de locales en ruta (Alias maxSensibilidad en camelCase)
   const [localesConsulta] = await pool.query(
     `
     SELECT 
@@ -1614,26 +1763,14 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     [orden.IDorden]
   );
 
-  // 3️⃣ Obtener lista de IDs de retiros ya realizados
   const [retirosRows] = await pool.query(
     `SELECT IDlocal FROM retiros_locales_orden WHERE IDorden = ?`,
     [orden.IDorden]
   );
 
-  // 4️⃣ Calcular la ruta optimizada
-  const ESTADOS_RUTA_OPTIMA = [4, 5, 7, 8];
-  let localesRuta = localesConsulta;
-
-  if (ESTADOS_RUTA_OPTIMA.includes(Number(orden.IDestado))) {
-    localesRuta = ordenarLocalesPorDistanciaYSensibilidad(
-      { latitud: orden.repartidor_latitud, longitud: orden.repartidor_longitud },
-      localesConsulta
-    );
-  }
-
-  // 5️⃣ Estructurar respuesta final
   return {
     ...orden,
+    detalle_pago: detallePagoRepartidor,
     ubicacion_repartidor: {
       latitud: orden.repartidor_latitud,
       longitud: orden.repartidor_longitud,
@@ -1645,7 +1782,7 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       longitud: orden.longitud_entrega
     },
     productos,
-    localesRuta, // Devuelve los locales en el orden optimizado
+    localesRuta: localesConsulta,
     retiros_realizados: retirosRows.map(row => row.IDlocal)
   };
 };
@@ -1689,7 +1826,7 @@ export const simularPagoExitosoService = async (IDorden) => {
   }
 };
 
-// Añadir al final de src/services/orders.service.js
+// 🏪 Buscar / Filtrar órdenes para el Dashboard del Local
 export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
   const conn = await pool.getConnection();
   try {
@@ -1717,7 +1854,9 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
         o.IDestado,
         e.nombre AS estado_orden,
         o.total,
-        o.precio AS subtotal,
+        o.precio AS subtotal,                   -- 👈 Subtotal de la orden
+        o.comision_local_pct,                   -- 👈 % de comisión cobrado al local
+        o.ganancia_local_total,                 -- 👈 Monto neto que cobrará el comercio
         o.costo_envio,
         o.tiempo_estimado_min,
         mp.nombre AS metodo_pago,
@@ -1737,7 +1876,7 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
 
     const params = [local.id];
 
-    // Filtro por término (ID exacto o Nombre parcial)
+    // Filtro por término (ID exacto o Nombre/Username parcial)
     if (busqueda && busqueda.trim() !== '') {
       const term = busqueda.trim();
       if (!isNaN(term)) {
@@ -1789,6 +1928,7 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
 
     const orderIds = ordenes.map((o) => o.IDorden);
 
+    // Consulta de detalles sumando ganancia_local_item por producto
     const [detalles] = await conn.query(
       `
       SELECT
@@ -1798,6 +1938,7 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
         p.nombre AS producto,
         d.cantidad,
         d.precio_unitario,
+        d.ganancia_local_item,                  -- 👈 Ganancia neta por ítem
         d.comentario,
         d.motivo_cancelacion AS motivo_rechazo,
         d.IDestado AS IDestado_detalle,

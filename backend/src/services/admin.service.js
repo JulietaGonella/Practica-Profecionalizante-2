@@ -334,59 +334,139 @@ export const getLocalesAdminService = async () => {
 // SERVICIOS DE DASHBOARD Y MÉTRICAS
 // ==========================================
 
-export const getDashboardMetricsService = async ({ desde, hasta, local_id, repartidor_id }) => {
-  // --- 1. Resumen Global de KPIs ---
-  const [kpis] = await pool.query(`
-    SELECT 
-      COUNT(o.id) AS total_pedidos,
-      SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) AS entregados,
-      SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END) AS cancelados,
-      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN o.total ELSE 0 END), 0) AS ingresos_totales
-    FROM ordenes o
+export const getDashboardMetricsService = async (filtros = {}) => {
+  const { fechaInicio, fechaFin, categoria, estado, tipoPago } = filtros;
+
+  const whereClauses = [];
+  const params = [];
+
+  // Filtro por fecha inicial
+  if (fechaInicio) {
+    whereClauses.push("o.creado_en >= ?");
+    params.push(`${fechaInicio} 00:00:00`);
+  }
+
+  // Filtro por fecha final
+  if (fechaFin) {
+    whereClauses.push("o.creado_en <= ?");
+    params.push(`${fechaFin} 23:59:59`);
+  }
+
+  if (estado && estado !== 'todos') {
+    whereClauses.push("e.nombre = ?");
+    params.push(estado);
+  }
+
+  if (tipoPago && tipoPago !== 'todos') {
+    whereClauses.push("mp.nombre = ?");
+    params.push(tipoPago);
+  }
+
+  if (categoria && categoria !== 'todas') {
+    whereClauses.push(`
+      EXISTS (
+        SELECT 1 
+        FROM detalle_orden do_cat
+        JOIN productos p_cat ON do_cat.IDproducto = p_cat.id
+        LEFT JOIN categorias_productos cp_cat ON p_cat.IDcategoria = cp_cat.id
+        WHERE do_cat.IDorden = o.id 
+          AND LOWER(cp_cat.nombre) = LOWER(?)
+      )
+    `);
+    params.push(categoria);
+  }
+
+  const whereSQL = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  // 0. Obtener catálogo dinámico de la tabla categorias_productos para el filtro
+  const [categoriasList] = await pool.query(`
+    SELECT id, nombre 
+    FROM categorias_productos 
+    ORDER BY nombre ASC
   `);
 
-  // --- 2. Demanda por Categoría (JOIN ordenes -> detalle_orden -> productos -> categorias_productos) ---
-  const [categorias] = await pool.query(`
+  // 1. KPIs Principales
+  const [[kpis]] = await pool.query(`
+    SELECT 
+      COUNT(DISTINCT o.id) AS totalPedidos,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS entregados,
+      COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS cancelados,
+      COALESCE(SUM(
+        CASE
+          WHEN o.IDestado = 3 AND o.IDestado_pago = 2
+          THEN o.ingreso_neto_plataforma
+          ELSE 0
+        END
+      ), 0) AS ingresosPlataforma
+    FROM ordenes o
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
+  `, params);
+
+  // 2. Pedidos por Categoría (únicamente asociadas a categorias_productos)
+  const [pedidosPorCategoriaRaw] = await pool.query(`
     SELECT 
       COALESCE(cp.nombre, 'Sin Categoría') AS categoria,
-      SUM(do.cantidad) AS total_vendido
+      COALESCE(SUM(do.cantidad), 0) AS cantidad
     FROM detalle_orden do
     JOIN productos p ON do.IDproducto = p.id
     LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
     JOIN ordenes o ON do.IDorden = o.id
-    WHERE o.IDestado = 3 -- Entregados
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
     GROUP BY cp.id, cp.nombre
-    ORDER BY total_vendido DESC
-  `);
+    ORDER BY cantidad DESC
+  `, params);
 
-  // --- 3. Desglose Por Métodos de Pago ---
-  const [metodosPago] = await pool.query(`
+  // Mapear la cantidad a número explícito para que Recharts renderice las barras correctamente
+  const pedidosPorCategoria = pedidosPorCategoriaRaw.map((item) => ({
+    categoria: item.categoria,
+    cantidad: Number(item.cantidad) || 0
+  }));
+
+  // 3. Pedidos por Fecha y Estado
+  const [pedidosPorFechaEstado] = await pool.query(`
     SELECT 
-      mp.nombre AS metodo,
-      COUNT(o.id) AS cantidad,
-      ROUND((COUNT(o.id) * 100.0 / (SELECT COUNT(*) FROM ordenes)), 2) AS porcentaje
+      DATE_FORMAT(o.creado_en, '%d %b %Y') AS fecha,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS Entregado,
+      COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS Cancelado
+    FROM ordenes o
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
+    GROUP BY DATE(o.creado_en), DATE_FORMAT(o.creado_en, '%d %b %Y')
+    ORDER BY DATE(o.creado_en) ASC
+  `, params);
+
+  // 4. Métodos de Pago
+  const [metodosPagoRaw] = await pool.query(`
+    SELECT 
+      mp.nombre AS name,
+      COUNT(DISTINCT o.id) AS cantidad
     FROM ordenes o
     JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    LEFT JOIN estados e ON o.IDestado = e.id
+    ${whereSQL}
     GROUP BY mp.id, mp.nombre
-  `);
+  `, params);
 
-  // --- 4. Evolución Temporal (Evolución diaria) ---
-  const [evolucionTemporal] = await pool.query(`
-    SELECT 
-      DATE(h.creado_en) AS fecha,
-      SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) AS entregados,
-      SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END) AS cancelados
-    FROM ordenes o
-    JOIN hitorial_estado_orden h ON o.id = h.IDorden AND h.IDestado = o.IDestado
-    GROUP BY DATE(h.creado_en)
-    ORDER BY fecha ASC
-  `);
+  const totalOrdenesFiltro = metodosPagoRaw.reduce((sum, item) => sum + Number(item.cantidad), 0);
+
+  const metodosPago = metodosPagoRaw.map((item) => ({
+    name: item.name,
+    value: totalOrdenesFiltro > 0 
+      ? Number(((Number(item.cantidad) * 100) / totalOrdenesFiltro).toFixed(1)) 
+      : 0
+  }));
 
   return {
-    kpis: kpis[0],
-    distribucion_categorias: categorias,
-    metodos_pago: metodosPago,
-    evolucion_temporal: evolucionTemporal
+    kpisGeneral: kpis || { totalPedidos: 0, entregados: 0, cancelados: 0, ingresosPlataforma: 0 },
+    pedidosPorCategoria,
+    pedidosPorFechaEstado,
+    metodosPago,
+    categorias: categoriasList // 👈 Devuelve las categorías para llenar el selector
   };
 };
 

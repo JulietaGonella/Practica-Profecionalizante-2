@@ -22,6 +22,7 @@ import {
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
 import { CambiarPasswordModal } from '../CambiarPasswordModal'
+import { TableroAdministrador } from './TableroAdministrador';
 
 const DIAS_SEMANA = [
   'Domingo',
@@ -753,6 +754,21 @@ export const PanelAdministrador = () => {
         }}
       >
         <button
+          onClick={() => setSeccion('tablero')}
+          style={{
+            padding: '0.8rem 1.2rem',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            backgroundColor: seccion === 'tablero' ? '#0b7285' : '#e9ecef',
+            color: seccion === 'tablero' ? '#fff' : '#333'
+          }}
+        >
+          📊 Tablero General
+        </button>
+
+        <button
           onClick={() => setSeccion('usuarios')}
           style={{
             padding: '0.8rem 1.2rem',
@@ -830,6 +846,8 @@ export const PanelAdministrador = () => {
         <p style={{ color: '#e03131' }}>{error}</p>
       ) : (
         <>
+          {seccion === 'tablero' && <TableroAdministrador />}
+
           {seccion === 'usuarios' && (
             <section>
               <h2>👥 Gestión de usuarios</h2>

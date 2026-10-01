@@ -196,12 +196,12 @@ const obtenerOpcionesProducto = async (productoId) => {
 export const createProductService = async (data, userId) => {
   const {
     nombre,
-    precio,
+    precio, // Corresponde al monto neto que el local desea recibir (precioLocal)
     disponible,
     tiempo_preparacion_min,
     IDcategoria,
     IDcategoria_comercial,
-    imagen_url, // 👈 Nuevo campo
+    imagen_url,
     ingredientes,
     grupos_opciones
   } = data;
@@ -209,6 +209,15 @@ export const createProductService = async (data, userId) => {
   if (!nombre || precio === undefined || !IDcategoria) {
     throw new Error('Faltan campos obligatorios (nombre, precio, IDcategoria)');
   }
+
+  const precioLocalNum = Number(precio);
+  if (isNaN(precioLocalNum) || precioLocalNum <= 0) {
+    throw new Error('El precio pretendido por el local debe ser mayor a 0');
+  }
+
+  // 🧮 CÁLCULO DE COMISIÓN DEL SISTEMA (+10%)
+  const COMISION_PORCENTAJE = 0.10;
+  const precioFinalCalculado = Number((precioLocalNum * (1 + COMISION_PORCENTAJE)).toFixed(2));
 
   const [categoriaExiste] = await pool.query(
     `SELECT id FROM categorias_productos WHERE id = ?`,
@@ -227,10 +236,6 @@ export const createProductService = async (data, userId) => {
     if (categoriaComercialExiste.length === 0) {
       throw new Error('La categoría comercial especificada no existe en el sistema');
     }
-  }
-
-  if (isNaN(precio) || Number(precio) <= 0) {
-    throw new Error('El precio del producto debe ser mayor a 0');
   }
 
   if (tiempo_preparacion_min !== undefined && (isNaN(tiempo_preparacion_min) || Number(tiempo_preparacion_min) <= 0)) {
@@ -272,19 +277,21 @@ export const createProductService = async (data, userId) => {
   try {
     await connection.beginTransaction();
 
+    // 💾 INSERTAR PRECIO LOCAL Y PRECIO FINAL CALCULADO CON 10% DE COMISIÓN
     const [result] = await connection.query(
       `INSERT INTO productos
-     (IDlocal, nombre, precio, disponible, tiempo_preparacion_min, IDcategoria, IDcategoria_comercial, imagen_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     (IDlocal, nombre, precio_local, precio, disponible, tiempo_preparacion_min, IDcategoria, IDcategoria_comercial, imagen_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         IDlocal,
         nombre.trim(),
-        Number(precio),
+        precioLocalNum,
+        precioFinalCalculado, // Guardado como precio público para el catálogo
         valDisponible,
         tiempo_preparacion_min ? Number(tiempo_preparacion_min) : 15,
         IDcategoria || null,
         IDcategoria_comercial || null,
-        imagen_url || null // 👈 Guardar imagen_url
+        imagen_url || null
       ]
     );
     const productId = result.insertId;
@@ -348,7 +355,6 @@ export const createProductService = async (data, userId) => {
           for (const opcion of grupo.opciones) {
             if (!opcion.nombre) continue;
 
-            // Integración de la validación de opciones con disponibilidad
             if (opcion.id) {
               await connection.query(
                 `UPDATE opciones_producto 
@@ -385,7 +391,8 @@ export const createProductService = async (data, userId) => {
       id: productId,
       IDlocal,
       nombre: nombre.trim(),
-      precio: Number(precio),
+      precio_local: precioLocalNum,
+      precio: precioFinalCalculado,
       disponible: valDisponible,
       tiempo_preparacion_min: tiempo_preparacion_min || 15,
       IDcategoria: IDcategoria || null,
@@ -409,6 +416,7 @@ export const getProductsService = async () => {
        p.id, 
        p.IDlocal,
        p.nombre, 
+       p.precio_local,
        p.precio, 
        p.disponible, 
        p.tiempo_preparacion_min, 
@@ -446,6 +454,7 @@ export const getProductByIdService = async (id) => {
        p.id, 
        p.IDlocal,
        p.nombre, 
+       p.precio_local,
        p.precio, 
        p.disponible, 
        p.tiempo_preparacion_min, 
@@ -501,7 +510,7 @@ export const getProductByIdService = async (id) => {
 
 export const updateProductService = async (id, data, userId) => {
   const [[producto]] = await pool.query(
-    `SELECT IDlocal FROM productos WHERE id = ?`,
+    `SELECT IDlocal, precio_local, precio FROM productos WHERE id = ?`,
     [id]
   );
 
@@ -518,18 +527,26 @@ export const updateProductService = async (id, data, userId) => {
 
   const {
     nombre,
-    precio,
+    precio, // Monto neto pretendido por el local
     disponible,
     tiempo_preparacion_min,
     IDcategoria,
     IDcategoria_comercial,
-    imagen_url, // 👈 AGREGAR ESTA LÍNEA AQUÍ
+    imagen_url,
     ingredientes,
     grupos_opciones
   } = data;
 
-  if (precio !== undefined && (isNaN(precio) || Number(precio) <= 0)) {
-    throw new Error('El precio del producto debe ser mayor a 0');
+  let nuevoPrecioLocal = producto.precio_local;
+  let nuevoPrecioFinal = producto.precio;
+
+  if (precio !== undefined) {
+    const precioLocalNum = Number(precio);
+    if (isNaN(precioLocalNum) || precioLocalNum <= 0) {
+      throw new Error('El precio del producto debe ser mayor a 0');
+    }
+    nuevoPrecioLocal = precioLocalNum;
+    nuevoPrecioFinal = Number((precioLocalNum * 1.10).toFixed(2));
   }
 
   if (tiempo_preparacion_min !== undefined && (isNaN(tiempo_preparacion_min) || Number(tiempo_preparacion_min) <= 0)) {
@@ -567,11 +584,11 @@ export const updateProductService = async (id, data, userId) => {
     }
   }
 
-  let nuevaImagenUrl = producto.imagen_url; // Mantener la existente por defecto
+  let nuevaImagenUrl = producto.imagen_url;
   if (imagen_url !== undefined && imagen_url !== '') {
     nuevaImagenUrl = imagen_url;
   } else if (imagen_url === '') {
-    nuevaImagenUrl = null; // Si se envía vacío intencionalmente, limpia la imagen
+    nuevaImagenUrl = null;
   }
 
   const connection = await pool.getConnection();
@@ -579,12 +596,13 @@ export const updateProductService = async (id, data, userId) => {
   try {
     await connection.beginTransaction();
 
-    // 1️⃣ Actualizar los datos del producto
+    // 1️⃣ Actualizar los datos del producto calculando la nueva comisión si varió el precio
     await connection.query(
       `UPDATE productos
    SET
      nombre = COALESCE(?, nombre),
-     precio = COALESCE(?, precio),
+     precio_local = ?,
+     precio = ?,
      disponible = IF(? IS NOT NULL, ?, disponible),
      tiempo_preparacion_min = COALESCE(?, tiempo_preparacion_min),
      IDcategoria = COALESCE(?, IDcategoria),
@@ -593,7 +611,8 @@ export const updateProductService = async (id, data, userId) => {
    WHERE id = ?`,
       [
         nombre ? nombre.trim() : null,
-        precio !== undefined ? precio : null,
+        nuevoPrecioLocal,
+        nuevoPrecioFinal,
         disponible !== undefined ? disponible : null,
         disponible !== undefined ? (disponible ? 1 : 0) : null,
         tiempo_preparacion_min !== undefined ? tiempo_preparacion_min : null,
@@ -717,6 +736,8 @@ export const updateProductService = async (id, data, userId) => {
 
     return {
       id,
+      precio_local: nuevoPrecioLocal,
+      precio: nuevoPrecioFinal,
       message: 'Producto actualizado correctamente'
     };
 

@@ -446,10 +446,26 @@ export const ComanderaLocal = () => {
                             opacity: esItemCancelado ? 0.65 : 1
                           }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ textDecoration: esItemCancelado ? 'line-through' : 'none' }}>
-                              <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre} — ${(Number(prod.cantidad || 1) * Number(prod.precio_unitario || prod.precio || 0)).toFixed(2)}
-                            </div>
+                          <div style={{ textDecoration: esItemCancelado ? 'line-through' : 'none' }}>
+                            <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre}
+
+                            {!esItemCancelado && (() => {
+                              const cantidad = Number(prod.cantidad || 1);
+                              const precio = Number(prod.precio_unitario || prod.precio || 0);
+                              const totalBruto = cantidad * precio;
+                              const netoLocal = prod.ganancia_local_item !== undefined
+                                ? Number(prod.ganancia_local_item)
+                                : totalBruto * 0.90;
+
+                              return (
+                                <span style={{ fontSize: '0.85rem', marginLeft: '6px' }}>
+                                  — Total: <strong>${totalBruto.toFixed(2)}</strong>
+                                  <span style={{ color: '#2b8a3e', marginLeft: '4px' }}>
+                                    (Neto: ${netoLocal.toFixed(2)})
+                                  </span>
+                                </span>
+                              );
+                            })()}
                           </div>
 
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '0.5rem', justifyContent: 'space-between' }}>

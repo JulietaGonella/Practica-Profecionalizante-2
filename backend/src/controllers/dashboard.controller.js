@@ -1,3 +1,4 @@
+// src/controllers/dashboard.controller.js
 import { getDashboardMetricsService } from '../services/admin.service.js';
 import { getFlotaDashboardService, getRepartidorIndividualDashboardService } from '../services/repartidoresDashboard.service.js';
 import { getClienteMeDashboardService } from '../services/clientesDashboard.service.js';
@@ -13,7 +14,7 @@ export const getAdminDashboard = async (req, res) => {
 
 export const getFlotaDashboard = async (req, res) => {
   try {
-    const data = await getFlotaDashboardService();
+    const data = await getFlotaDashboardService(req.query);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -32,7 +33,7 @@ export const getRepartidorIndividualDashboard = async (req, res) => {
 
 export const getClienteMeDashboard = async (req, res) => {
   try {
-    const IDusuario = req.user.id; // Extraído por authMiddleware
+    const IDusuario = req.user.id;
     const data = await getClienteMeDashboardService(IDusuario);
     res.json(data);
   } catch (error) {

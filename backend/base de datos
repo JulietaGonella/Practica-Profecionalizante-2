@@ -598,3 +598,24 @@ ALTER TABLE vehiculos_repartidor
   ADD COLUMN nueva_fecha_vencimiento_seguro DATE NULL AFTER nuevo_seguro_url,
   ADD COLUMN nueva_licencia_url VARCHAR(255) NULL AFTER nueva_fecha_vencimiento_seguro,
   ADD COLUMN nueva_fecha_vencimiento_licencia DATE NULL AFTER nueva_licencia_url;
+
+  USE BD_SmartDrop;
+
+-- 1. Porcentajes aplicados y distribución a nivel de Orden General
+ALTER TABLE ordenes
+  ADD COLUMN comision_local_pct DECIMAL(5,2) NOT NULL DEFAULT 10.00 AFTER total,
+  ADD COLUMN margen_envio_pct DECIMAL(5,2) NOT NULL DEFAULT 15.00 AFTER comision_local_pct,
+  ADD COLUMN ganancia_local_total DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER margen_envio_pct,
+  ADD COLUMN ganancia_repartidor DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER ganancia_local_total,
+  ADD COLUMN ingreso_neto_plataforma DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER ganancia_repartidor;
+
+-- 2. Desglose de ganancia local a nivel de ítem/detalle
+ALTER TABLE detalle_orden
+  ADD COLUMN ganancia_local_item DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER precio_unitario,
+  ADD COLUMN comision_plataforma_item DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER ganancia_local_item;
+
+   USE BD_SmartDrop;
+
+-- Agregar la columna para almacenar el precio neto pretendido por el local
+ALTER TABLE productos
+ADD COLUMN precio_local DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER nombre;

@@ -3,11 +3,11 @@ import bcrypt from 'bcrypt';
 import { pool } from '../config/db.js';
 import { COMMISSIONS } from '../config/commissions.js';
 
-// ==========================================
+// ========================================== 
 // FUNCIONES AUXILIARES Y SERVICIOS DE CREACIÓN
 // ==========================================
 
-const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
+const crearUsuarioEnTransaccion = async (conn, data, rolNombre, debeCambiarPass = 1) => {
   const { username, email, password } = data;
 
   if (!username || !email || !password) {
@@ -53,10 +53,10 @@ const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
   const [resultado] = await conn.query(
     `
     INSERT INTO usuarios
-      (username, email, password_hash, rol_id)
-    VALUES (?, ?, ?, ?)
+      (username, email, password_hash, rol_id, debe_cambiar_pass)
+    VALUES (?, ?, ?, ?, ?)
     `,
-    [cleanUsername, cleanEmail, passwordHash, rol.id]
+    [cleanUsername, cleanEmail, passwordHash, rol.id, debeCambiarPass ? 1 : 0]
   );
 
   return {
@@ -64,7 +64,8 @@ const crearUsuarioEnTransaccion = async (conn, data, rolNombre) => {
     username: cleanUsername,
     email: cleanEmail,
     rol_id: rol.id,
-    rol: rol.nombre
+    rol: rol.nombre,
+    debe_cambiar_pass: Boolean(debeCambiarPass)
   };
 };
 
@@ -175,7 +176,8 @@ export const crearLocalCompletoService = async (data) => {
   }
 };
 
-export const crearRepartidorCompletoService = async (data) => {
+// services/admin.service.js
+export const crearRepartidorCompletoService = async (data, archivos = {}) => {
   const {
     username,
     email,
@@ -184,11 +186,11 @@ export const crearRepartidorCompletoService = async (data) => {
     vehiculo
   } = data;
 
-  if (!dni) {
-    throw new Error('El DNI es obligatorio.');
-  }
+  if (!dni) throw new Error('El DNI es obligatorio.');
 
-  if (!vehiculo?.IDtipo_vehiculo) {
+  const datosVehiculo = typeof vehiculo === 'string' ? JSON.parse(vehiculo) : vehiculo;
+
+  if (!datosVehiculo?.IDtipo_vehiculo) {
     throw new Error('El tipo de vehículo es obligatorio.');
   }
 
@@ -212,33 +214,66 @@ export const crearRepartidorCompletoService = async (data) => {
       [usuario.id, String(dni).trim()]
     );
 
-    await conn.query(
+    const IDrepartidor = repartidorResult.insertId;
+
+    const cedulaUrl = archivos.cedula?.[0] ? `/uploads/${archivos.cedula[0].filename}` : null;
+    const seguroUrl = archivos.seguro?.[0] ? `/uploads/${archivos.seguro[0].filename}` : null;
+    const licenciaUrl = archivos.licencia?.[0] ? `/uploads/${archivos.licencia[0].filename}` : null;
+
+    // 👈 Actualización de la consulta SQL insertando las fechas de vencimiento
+    const [vehiculoResult] = await conn.query(
       `
       INSERT INTO vehiculos_repartidor
-        (IDrepartidor, IDtipo_vehiculo, marca, modelo, patente, activo)
-      VALUES (?, ?, ?, ?, ?, 1)
+        (IDrepartidor, IDtipo_vehiculo, marca, modelo, anio, patente,
+         seguro_vigente, licencia_vigente, bici_propia,
+         cedula_url, seguro_url, licencia_url,
+         fecha_vencimiento_licencia, fecha_vencimiento_seguro, fecha_vencimiento_cedula,
+         activo, estado)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'APROBADO')
       `,
       [
-        repartidorResult.insertId,
-        vehiculo.IDtipo_vehiculo,
-        vehiculo.marca || null,
-        vehiculo.modelo || null,
-        vehiculo.patente || null
+        IDrepartidor,
+        datosVehiculo.IDtipo_vehiculo,
+        datosVehiculo.marca || null,
+        datosVehiculo.modelo || null,
+        datosVehiculo.anio || null,
+        datosVehiculo.patente || null,
+        datosVehiculo.seguro_vigente ? 1 : 0,
+        datosVehiculo.licencia_vigente ? 1 : 0,
+        datosVehiculo.bici_propia ? 1 : 0,
+        cedulaUrl,
+        seguroUrl,
+        licenciaUrl,
+        datosVehiculo.fecha_vencimiento_licencia || null, // 👈
+        datosVehiculo.fecha_vencimiento_seguro || null,   // 👈
+        datosVehiculo.fecha_vencimiento_cedula || null,   // 👈
       ]
+    );
+
+    await conn.query(
+      `UPDATE repartidores SET IDvehiculo_activo = ? WHERE id = ?`,
+      [vehiculoResult.insertId, IDrepartidor]
     );
 
     await conn.commit();
 
     return {
-      message:
-        'Repartidor y usuario creados correctamente. Pendiente de validación.',
+      message: 'Repartidor creado en estado PENDIENTE/INVALIDADO. Vehículo APROBADO correctamente.',
       usuario,
       repartidor: {
-        id: repartidorResult.insertId,
+        id: IDrepartidor,
         IDusuario: usuario.id,
         dni,
         validado: 0,
-        disponible: 1
+        disponible: 1,
+        IDvehiculo_activo: vehiculoResult.insertId
+      },
+      vehiculo: {
+        id: vehiculoResult.insertId,
+        estado: 'APROBADO',
+        cedula_url: cedulaUrl,
+        seguro_url: seguroUrl,
+        licencia_url: licenciaUrl
       }
     };
   } catch (error) {
@@ -249,64 +284,441 @@ export const crearRepartidorCompletoService = async (data) => {
   }
 };
 
+// Obtener todos los locales (habilitados y deshabilitados) para el admin
+export const getLocalesAdminService = async () => {
+  const [locales] = await pool.query(`
+    SELECT 
+      l.id,
+      l.nombre,
+      l.direccion,
+      l.telefono,
+      l.latitud,
+      l.longitud,
+      l.es_activo,
+      l.esta_operativo,
+      l.logo_url,
+      l.banner_url,
+      l.foto_url,
+      l.costo_envio_base,
+      l.tiempo_preparacion_promedio,
+      l.IDusuario,
+      u.username AS usuario_admin,
+      u.email AS email_admin
+    FROM locales l
+    LEFT JOIN usuarios u ON l.IDusuario = u.id
+    ORDER BY l.id DESC
+  `);
+
+  for (const local of locales) {
+    // Obtener todos los horarios asociados al local
+    const [horarios] = await pool.query(
+      `
+      SELECT
+        id,
+        dia_semana,
+        hora_apertura,
+        hora_cierre,
+        es_activo
+      FROM horarios_local
+      WHERE IDlocal = ?
+      `,
+      [local.id]
+    );
+
+    local.horarios = horarios;
+  }
+
+  return locales;
+}; 
+
 // ==========================================
 // SERVICIOS DE DASHBOARD Y MÉTRICAS
 // ==========================================
 
-export const getDashboardMetricsService = async ({ desde, hasta, local_id, repartidor_id }) => {
-  // --- 1. Resumen Global de KPIs ---
-  const [kpis] = await pool.query(`
-    SELECT 
-      COUNT(o.id) AS total_pedidos,
-      SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) AS entregados,
-      SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END) AS cancelados,
-      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN o.total ELSE 0 END), 0) AS ingresos_totales
-    FROM ordenes o
+export const getDashboardMetricsService = async (filtros = {}) => {
+  const { fechaInicio, fechaFin, categoria, estado, tipoPago } = filtros;
+
+  const whereClauses = [];
+  const params = [];
+
+  // Filtro por fecha inicial
+  if (fechaInicio) {
+    whereClauses.push("o.creado_en >= ?");
+    params.push(`${fechaInicio} 00:00:00`);
+  }
+
+  // Filtro por fecha final
+  if (fechaFin) {
+    whereClauses.push("o.creado_en <= ?");
+    params.push(`${fechaFin} 23:59:59`);
+  }
+
+  if (estado && estado !== 'todos') {
+    whereClauses.push("e.nombre = ?");
+    params.push(estado);
+  }
+
+  if (tipoPago && tipoPago !== 'todos') {
+    whereClauses.push("mp.nombre = ?");
+    params.push(tipoPago);
+  }
+
+  if (categoria && categoria !== 'todas') {
+    whereClauses.push(`
+      EXISTS (
+        SELECT 1 
+        FROM detalle_orden do_cat
+        JOIN productos p_cat ON do_cat.IDproducto = p_cat.id
+        LEFT JOIN categorias_productos cp_cat ON p_cat.IDcategoria = cp_cat.id
+        WHERE do_cat.IDorden = o.id 
+          AND LOWER(cp_cat.nombre) = LOWER(?)
+      )
+    `);
+    params.push(categoria);
+  }
+
+  const whereSQL = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  // 0. Obtener catálogo dinámico de la tabla categorias_productos para el filtro
+  const [categoriasList] = await pool.query(`
+    SELECT id, nombre 
+    FROM categorias_productos 
+    ORDER BY nombre ASC
   `);
 
-  // --- 2. Demanda por Categoría (JOIN ordenes -> detalle_orden -> productos -> categorias_productos) ---
-  const [categorias] = await pool.query(`
+  // 1. KPIs Principales
+  const [[kpis]] = await pool.query(`
+    SELECT 
+      COUNT(DISTINCT o.id) AS totalPedidos,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS entregados,
+      COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS cancelados,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN o.total ELSE 0 END), 0) AS ingresosTotales
+    FROM ordenes o
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
+  `, params);
+
+  // 2. Pedidos por Categoría (únicamente asociadas a categorias_productos)
+  const [pedidosPorCategoriaRaw] = await pool.query(`
     SELECT 
       COALESCE(cp.nombre, 'Sin Categoría') AS categoria,
-      SUM(do.cantidad) AS total_vendido
+      COALESCE(SUM(do.cantidad), 0) AS cantidad
     FROM detalle_orden do
     JOIN productos p ON do.IDproducto = p.id
     LEFT JOIN categorias_productos cp ON p.IDcategoria = cp.id
     JOIN ordenes o ON do.IDorden = o.id
-    WHERE o.IDestado = 3 -- Entregados
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
     GROUP BY cp.id, cp.nombre
-    ORDER BY total_vendido DESC
-  `);
+    ORDER BY cantidad DESC
+  `, params);
 
-  // --- 3. Desglose Por Métodos de Pago ---
-  const [metodosPago] = await pool.query(`
+  // Mapear la cantidad a número explícito para que Recharts renderice las barras correctamente
+  const pedidosPorCategoria = pedidosPorCategoriaRaw.map((item) => ({
+    categoria: item.categoria,
+    cantidad: Number(item.cantidad) || 0
+  }));
+
+  // 3. Pedidos por Fecha y Estado
+  const [pedidosPorFechaEstado] = await pool.query(`
     SELECT 
-      mp.nombre AS metodo,
-      COUNT(o.id) AS cantidad,
-      ROUND((COUNT(o.id) * 100.0 / (SELECT COUNT(*) FROM ordenes)), 2) AS porcentaje
+      DATE_FORMAT(o.creado_en, '%d %b %Y') AS fecha,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS Entregado,
+      COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS Cancelado
+    FROM ordenes o
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    ${whereSQL}
+    GROUP BY DATE(o.creado_en), DATE_FORMAT(o.creado_en, '%d %b %Y')
+    ORDER BY DATE(o.creado_en) ASC
+  `, params);
+
+  // 4. Métodos de Pago
+  const [metodosPagoRaw] = await pool.query(`
+    SELECT 
+      mp.nombre AS name,
+      COUNT(DISTINCT o.id) AS cantidad
     FROM ordenes o
     JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
+    LEFT JOIN estados e ON o.IDestado = e.id
+    ${whereSQL}
     GROUP BY mp.id, mp.nombre
-  `);
+  `, params);
 
-  // --- 4. Evolución Temporal (Evolución diaria) ---
-  const [evolucionTemporal] = await pool.query(`
-    SELECT 
-      DATE(h.creado_en) AS fecha,
-      SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) AS entregados,
-      SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END) AS cancelados
-    FROM ordenes o
-    JOIN hitorial_estado_orden h ON o.id = h.IDorden AND h.IDestado = o.IDestado
-    GROUP BY DATE(h.creado_en)
-    ORDER BY fecha ASC
-  `);
+  const totalOrdenesFiltro = metodosPagoRaw.reduce((sum, item) => sum + Number(item.cantidad), 0);
+
+  const metodosPago = metodosPagoRaw.map((item) => ({
+    name: item.name,
+    value: totalOrdenesFiltro > 0 
+      ? Number(((Number(item.cantidad) * 100) / totalOrdenesFiltro).toFixed(1)) 
+      : 0
+  }));
 
   return {
-    kpis: kpis[0],
-    distribucion_categorias: categorias,
-    metodos_pago: metodosPago,
-    evolucion_temporal: evolucionTemporal
+    kpisGeneral: kpis || { totalPedidos: 0, entregados: 0, cancelados: 0, ingresosTotales: 0 },
+    pedidosPorCategoria,
+    pedidosPorFechaEstado,
+    metodosPago,
+    categorias: categoriasList // 👈 Devuelve las categorías para llenar el selector
   };
+};
+
+// admin.service.js
+
+// Helper para formatear objeto Date a 'YYYY-MM-DD'
+const formatearFechaSQL = (fecha) => {
+  if (!fecha) return null;
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+};
+
+export const evaluarEstadoDocumentación = (vehiculo) => {
+  // Ajustamos la comparación a la medianoche de hoy
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const fechaLicencia = vehiculo.fecha_vencimiento_licencia ? new Date(vehiculo.fecha_vencimiento_licencia) : null;
+  const fechaSeguro = vehiculo.fecha_vencimiento_seguro ? new Date(vehiculo.fecha_vencimiento_seguro) : null;
+  const fechaCedula = vehiculo.fecha_vencimiento_cedula ? new Date(vehiculo.fecha_vencimiento_cedula) : null;
+
+  const licenciaVencida = fechaLicencia ? fechaLicencia < hoy : false;
+  const seguroVencido = fechaSeguro ? fechaSeguro < hoy : false;
+  const cedulaVencida = fechaCedula ? fechaCedula < hoy : false;
+
+  const tieneDocumentosVencidos = licenciaVencida || seguroVencido || cedulaVencida;
+
+  return {
+    fecha_vencimiento_licencia: formatearFechaSQL(vehiculo.fecha_vencimiento_licencia),
+    fecha_vencimiento_seguro: formatearFechaSQL(vehiculo.fecha_vencimiento_seguro),
+    fecha_vencimiento_cedula: formatearFechaSQL(vehiculo.fecha_vencimiento_cedula),
+    licenciaVencida,
+    seguroVencido,
+    cedulaVencida,
+    documentacionValida: !tieneDocumentosVencidos
+  };
+};
+
+export const actualizarVencimientosVehiculoService = async (vehiculoId, datos) => {
+  const { fecha_vencimiento_licencia, fecha_vencimiento_seguro, fecha_vencimiento_cedula } = datos;
+
+  await pool.query(
+    `UPDATE vehiculos_repartidor 
+     SET fecha_vencimiento_licencia = ?, 
+         fecha_vencimiento_seguro = ?, 
+         fecha_vencimiento_cedula = ? 
+     WHERE id = ?`,
+    [
+      fecha_vencimiento_licencia || null,
+      fecha_vencimiento_seguro || null,
+      fecha_vencimiento_cedula || null,
+      vehiculoId
+    ]
+  );
+
+  return { message: 'Fechas de vencimiento actualizadas correctamente.' };
+};
+
+// Obtener alertas de documentación vencida o a vencer hoy
+export const getAlertasDocumentacionVencidaService = async () => {
+  const query = `
+    SELECT 
+      r.id AS repartidor_id,
+      u.username,
+      u.nombre,
+      u.apellido,
+      u.email,
+      v.id AS vehiculo_id,
+      tv.nombre AS tipo_vehiculo,
+      v.patente,
+      
+      -- Verificación de Licencia
+      CASE 
+        WHEN v.fecha_vencimiento_licencia IS NOT NULL AND v.fecha_vencimiento_licencia <= CURDATE() 
+        THEN v.fecha_vencimiento_licencia 
+        ELSE NULL 
+      END AS licencia_vencida_fecha,
+      
+      -- Verificación de Seguro
+      CASE 
+        WHEN v.fecha_vencimiento_seguro IS NOT NULL AND v.fecha_vencimiento_seguro <= CURDATE() 
+        THEN v.fecha_vencimiento_seguro 
+        ELSE NULL 
+      END AS seguro_vencido_fecha,
+      
+      -- Verificación de Cédula
+      CASE 
+        WHEN v.fecha_vencimiento_cedula IS NOT NULL AND v.fecha_vencimiento_cedula <= CURDATE() 
+        THEN v.fecha_vencimiento_cedula 
+        ELSE NULL 
+      END AS cedula_vencida_fecha
+
+    FROM vehiculos_repartidor v
+    JOIN repartidores r ON v.IDrepartidor = r.id
+    JOIN usuarios u ON r.IDusuario = u.id
+    JOIN tipos_vehiculo tv ON v.IDtipo_vehiculo = tv.id
+    WHERE 
+      (v.fecha_vencimiento_licencia IS NOT NULL AND v.fecha_vencimiento_licencia <= CURDATE())
+      OR (v.fecha_vencimiento_seguro IS NOT NULL AND v.fecha_vencimiento_seguro <= CURDATE())
+      OR (v.fecha_vencimiento_cedula IS NOT NULL AND v.fecha_vencimiento_cedula <= CURDATE());
+  `;
+
+  const [rows] = await pool.query(query);
+
+  const alertas = [];
+
+  rows.forEach((row) => {
+    const repartidorNombre = [row.nombre, row.apellido].filter(Boolean).join(' ') || row.username;
+
+    const agregarAlerta = (documento, fecha) => {
+      if (!fecha) return;
+      
+      const hoy = new Date().toISOString().split('T')[0];
+      const fechaDoc = new Date(fecha).toISOString().split('T')[0];
+      const estado = fechaDoc === hoy ? 'VENCE_HOY' : 'VENCIDO';
+
+      alertas.push({
+        repartidor_id: row.repartidor_id,
+        repartidor: repartidorNombre,
+        email: row.email,
+        vehiculo: `${row.tipo_vehiculo} ${row.patente ? `(${row.patente})` : ''}`,
+        documento,
+        fecha_vencimiento: fechaDoc,
+        estado
+      });
+    };
+
+    agregarAlerta('Licencia de Conducir', row.licencia_vencida_fecha);
+    agregarAlerta('Seguro Obligatorio', row.seguro_vencido_fecha);
+    agregarAlerta('Cédula', row.cedula_vencida_fecha);
+  });
+
+  return alertas;
+};
+
+// ==========================================
+// SERVICIOS DE GESTIÓN DE BAJAS DE VEHÍCULOS (ADMIN)
+// ==========================================
+
+// Listar vehículos con solicitud de baja pendiente
+export const getVehiculosPendientesBajaService = async () => {
+  const [rows] = await pool.query(`
+    SELECT 
+      v.id AS IDvehiculo,
+      v.IDrepartidor,
+      v.marca,
+      v.modelo,
+      v.patente,
+      v.estado,
+      tv.nombre AS tipo_vehiculo,
+      r.IDusuario,
+      u.username,
+      u.nombre,
+      u.apellido,
+      u.email
+    FROM vehiculos_repartidor v
+    JOIN repartidores r ON v.IDrepartidor = r.id
+    JOIN usuarios u ON r.IDusuario = u.id
+    JOIN tipos_vehiculo tv ON v.IDtipo_vehiculo = tv.id
+    WHERE v.estado = 'PENDIENTE_BAJA' AND v.activo = 1
+    ORDER BY v.id DESC
+  `);
+  return rows;
+};
+
+// Aprobar la baja definitiva del vehículo
+export const aprobarBajaVehiculoService = async (IDvehiculo) => {
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // 1. Verificar que el vehículo exista y esté en estado PENDIENTE_BAJA
+    const [[vehiculo]] = await conn.query(
+      `
+      SELECT v.id, v.IDrepartidor, r.IDvehiculo_activo
+      FROM vehiculos_repartidor v
+      JOIN repartidores r ON r.id = v.IDrepartidor
+      WHERE v.id = ? AND v.estado = 'PENDIENTE_BAJA'
+      `,
+      [IDvehiculo]
+    );
+
+    if (!vehiculo) {
+      throw new Error('El vehículo no existe o no tiene una solicitud de baja pendiente.');
+    }
+
+    // 2. Dar de baja lógica (activo = 0) y actualizar estado
+    await conn.query(
+      `UPDATE vehiculos_repartidor SET activo = 0, estado = 'BAJA' WHERE id = ?`,
+      [IDvehiculo]
+    );
+
+    // 3. Si era el vehículo activo del repartidor, desvincularlo
+    if (Number(vehiculo.IDvehiculo_activo) === Number(IDvehiculo)) {
+      await conn.query(
+        `UPDATE repartidores SET IDvehiculo_activo = NULL WHERE id = ?`,
+        [vehiculo.IDrepartidor]
+      );
+    }
+
+    await conn.commit();
+
+    return {
+      message: 'Baja de vehículo aprobada y procesada definitivamente.',
+      IDvehiculo: Number(IDvehiculo)
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+};
+
+// Rechazar la solicitud de baja de un vehículo (vuelve a estado APROBADO)
+export const rechazarBajaVehiculoService = async (IDvehiculo, motivoRechazo = null) => {
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // 1. Verificar que el vehículo exista y esté en estado PENDIENTE_BAJA
+    const [[vehiculo]] = await conn.query(
+      `
+      SELECT id, estado
+      FROM vehiculos_repartidor
+      WHERE id = ? AND estado = 'PENDIENTE_BAJA'
+      `,
+      [IDvehiculo]
+    );
+
+    if (!vehiculo) {
+      throw new Error('El vehículo no existe o no tiene una solicitud de baja pendiente.');
+    }
+
+    // 2. Revertir el estado a 'APROBADO' y registrar opcionalmente el motivo del rechazo
+    await conn.query(
+      `UPDATE vehiculos_repartidor 
+       SET estado = 'APROBADO', motivo_rechazo = ? 
+       WHERE id = ?`,
+      [motivoRechazo ? String(motivoRechazo).trim() : null, IDvehiculo]
+    );
+
+    await conn.commit();
+
+    return {
+      message: 'Solicitud de baja rechazada. El vehículo vuelve a estar aprobado.',
+      IDvehiculo: Number(IDvehiculo)
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 };
 */
 
@@ -371,53 +783,136 @@ export const crearRepartidorCompleto = async (req, res) => {
 */
 
 /*repartidoresDashboard.service.js:
+// src/services/repartidoresDashboard.service.js
 import { pool } from '../config/db.js';
 
-// Tablero General de la Flota
-export const getFlotaDashboardService = async () => {
-  // KPIs Globales de Repartidores
-  const [[kpis]] = await pool.query(`
-    SELECT 
-      COUNT(DISTINCT r.id) AS total_repartidores,
-      COALESCE(SUM(o.distancia_km), 0) AS total_km_recorridos,
-      ROUND(AVG(TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en)), 2) AS tiempo_promedio_entrega_min,
-      ROUND((SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) * 100.0 / COUNT(o.id)), 2) AS porcentaje_entregados
-    FROM repartidores r
-    LEFT JOIN ordenes o ON r.id = o.IDrepartidor
-    LEFT JOIN hitorial_estado_orden h_inicio ON o.id = h_inicio.IDorden AND h_inicio.IDestado = 1
-    LEFT JOIN hitorial_estado_orden h_fin ON o.id = h_fin.IDorden AND h_fin.IDestado = 3
-  `);
+export const getFlotaDashboardService = async (filtros = {}) => {
+  const { fechaInicio, fechaFin, repartidorFiltro, estado } = filtros;
 
-  // Repartidores con cantidad de pedidos asignados (para el gráfico de barras)
-  [barrasRepartidores] = await pool.query(`
-    SELECT 
-      u.username AS repartidor,
-      COUNT(o.id) AS pedidos_asignados
+  // 1. Cláusulas BASE (Solo fechas, estado de pedido y restricción Entregados/Cancelados)
+  const whereClausesBase = [
+    "o.IDestado IN (3, 6)" // 👈 Filtra solo pedidos Entregados (3) o Cancelados (6)
+  ];
+  const paramsBase = [];
+
+  if (fechaInicio) {
+    whereClausesBase.push("o.creado_en >= ?");
+    paramsBase.push(`${fechaInicio} 00:00:00`);
+  }
+
+  if (fechaFin) {
+    whereClausesBase.push("o.creado_en <= ?");
+    paramsBase.push(`${fechaFin} 23:59:59`);
+  }
+
+  if (estado && estado !== 'todos') {
+    whereClausesBase.push("e.nombre = ?");
+    paramsBase.push(estado);
+  }
+
+  const whereSQLBase = `WHERE ${whereClausesBase.join(' AND ')}`;
+
+  // 2. Cláusulas COMPLETAS (Incluye el repartidor seleccionado si existe)
+  const whereClauses = [...whereClausesBase];
+  const params = [...paramsBase];
+
+  if (repartidorFiltro && repartidorFiltro !== 'todos') {
+    whereClauses.push("r.id = ?");
+    params.push(repartidorFiltro);
+  }
+
+  const whereSQL = `WHERE ${whereClauses.join(' AND ')}`;
+
+  // 3. Catálogo de Repartidores con Pedidos Finalizados (Para poblar el selector dinámicamente)
+  const [listaRepartidores] = await pool.query(`
+    SELECT DISTINCT 
+      r.id,
+      CONCAT_WS(', ', COALESCE(NULLIF(TRIM(u.apellido), ''), u.username), u.nombre) AS nombre
     FROM repartidores r
     JOIN usuarios u ON r.IDusuario = u.id
-    LEFT JOIN ordenes o ON r.id = o.IDrepartidor
-    GROUP BY r.id, u.username
-    ORDER BY pedidos_asignados DESC
-  `);
+    INNER JOIN ordenes o ON r.id = o.IDrepartidor
+    LEFT JOIN estados e ON o.IDestado = e.id
+    ${whereSQLBase}
+    ORDER BY nombre ASC
+  `, paramsBase);
 
-  // Ubicación GPS actual de repartidores activos (Mapa interactivo)
+  // KPIs Globales de la Flota
+  const [[kpisRepartidores]] = await pool.query(`
+    SELECT 
+      COUNT(DISTINCT r.id) AS cantidadRepartidores,
+      COALESCE(ROUND(AVG(TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en)), 2), 0) AS tiempoPromedio,
+      COALESCE(ROUND((SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(o.id), 0)), 2), 0) AS porcentajeEntregados,
+      COALESCE(SUM(o.distancia_km), 0) AS kmRecorridos
+    FROM repartidores r
+    INNER JOIN ordenes o ON r.id = o.IDrepartidor
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN hitorial_estado_orden h_inicio ON o.id = h_inicio.IDorden AND h_inicio.IDestado = 1
+    LEFT JOIN hitorial_estado_orden h_fin ON o.id = h_fin.IDorden AND h_fin.IDestado = 3
+    ${whereSQL}
+  `, params);
+
+  // Tabla Detallada por Repartidor
+  const [tablaRepartidores] = await pool.query(`
+    SELECT 
+      r.id,
+      CONCAT_WS(', ', COALESCE(NULLIF(TRIM(u.apellido), ''), u.username), u.nombre) AS nombre,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS entregados,
+      COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS cancelados,
+      COALESCE(ROUND(AVG(TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en)), 2), 0) AS tiempoPromedio,
+      COUNT(o.id) AS asignados
+    FROM repartidores r
+    JOIN usuarios u ON r.IDusuario = u.id
+    INNER JOIN ordenes o ON r.id = o.IDrepartidor
+    LEFT JOIN estados e ON o.IDestado = e.id
+    LEFT JOIN hitorial_estado_orden h_inicio ON o.id = h_inicio.IDorden AND h_inicio.IDestado = 1
+    LEFT JOIN hitorial_estado_orden h_fin ON o.id = h_fin.IDorden AND h_fin.IDestado = 3
+    ${whereSQL}
+    GROUP BY r.id, u.id, u.apellido, u.nombre, u.username
+    ORDER BY entregados DESC
+  `, params);
+
+  // Cantidad de Pedidos Asignados por Repartidor
+  const [pedidosAsignadosPorRepartidor] = await pool.query(`
+    SELECT 
+      COALESCE(NULLIF(TRIM(u.nombre), ''), u.username) AS nombre,
+      COUNT(o.id) AS cantidad
+    FROM repartidores r
+    JOIN usuarios u ON r.IDusuario = u.id
+    INNER JOIN ordenes o ON r.id = o.IDrepartidor
+    LEFT JOIN estados e ON o.IDestado = e.id
+    ${whereSQL}
+    GROUP BY r.id, u.id, u.nombre, u.username
+    ORDER BY cantidad DESC
+  `, params);
+
+  // Mapa de Pedidos y Ubicaciones por Repartidor
   const [mapaFlota] = await pool.query(`
     SELECT 
       r.id AS repartidor_id,
-      u.username,
-      r.latitud,
-      r.longitud,
-      r.disponible,
-      r.ultima_ubicacion
-    FROM repartidores r
+      COALESCE(
+        NULLIF(TRIM(CONCAT_WS(' ', u.nombre, u.apellido)), ''), 
+        NULLIF(u.username, ''),
+        CONCAT('Repartidor #', r.id)
+      ) AS nombre,
+      o.latitud_entrega AS latitud,
+      o.longitud_entrega AS longitud,
+      COUNT(o.id) AS cantidad_pedidos
+    FROM ordenes o
+    JOIN repartidores r ON o.IDrepartidor = r.id
     JOIN usuarios u ON r.IDusuario = u.id
-    WHERE r.latitud IS NOT NULL AND r.longitud IS NOT NULL
-  `);
+    LEFT JOIN estados e ON o.IDestado = e.id
+    ${whereSQL}
+    AND o.latitud_entrega IS NOT NULL 
+    AND o.longitud_entrega IS NOT NULL
+    GROUP BY r.id, u.id, u.nombre, u.apellido, u.username, o.latitud_entrega, o.longitud_entrega
+  `, params);
 
   return {
-    kpis,
-    pedidos_por_repartidor: barrasRepartidores,
-    mapa_cobertura_flota: mapaFlota
+    kpisRepartidores: kpisRepartidores || { cantidadRepartidores: 0, tiempoPromedio: 0, porcentajeEntregados: 0, kmRecorridos: 0 },
+    tablaRepartidores,
+    pedidosAsignadosPorRepartidor,
+    mapaFlota,
+    listaRepartidores
   };
 };
 
@@ -439,12 +934,11 @@ export const getRepartidorIndividualDashboardService = async (repartidorId) => {
 
   if (!driverInfo) throw new Error('Repartidor no encontrado');
 
-  // Historial detallado con cálculo de ganancias e índice de puntuación
   const [historialPedidos] = await pool.query(`
     SELECT 
       o.id AS orden_id,
       o.total,
-      (o.costo_envio * 0.85) AS ganancia_estimada_repartidor, -- 85% para el driver
+      (o.costo_envio * 0.85) AS ganancia_estimada_repartidor,
       o.distancia_km,
       o.puntaje_cliente,
       e.nombre AS estado,
@@ -517,6 +1011,7 @@ export const getClienteMeDashboardService = async (IDusuario) => {
 */
 
 /*dashboard.controller.js:
+// src/controllers/dashboard.controller.js
 import { getDashboardMetricsService } from '../services/admin.service.js';
 import { getFlotaDashboardService, getRepartidorIndividualDashboardService } from '../services/repartidoresDashboard.service.js';
 import { getClienteMeDashboardService } from '../services/clientesDashboard.service.js';
@@ -532,7 +1027,7 @@ export const getAdminDashboard = async (req, res) => {
 
 export const getFlotaDashboard = async (req, res) => {
   try {
-    const data = await getFlotaDashboardService();
+    const data = await getFlotaDashboardService(req.query);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -551,7 +1046,7 @@ export const getRepartidorIndividualDashboard = async (req, res) => {
 
 export const getClienteMeDashboard = async (req, res) => {
   try {
-    const IDusuario = req.user.id; // Extraído por authMiddleware
+    const IDusuario = req.user.id;
     const data = await getClienteMeDashboardService(IDusuario);
     res.json(data);
   } catch (error) {
