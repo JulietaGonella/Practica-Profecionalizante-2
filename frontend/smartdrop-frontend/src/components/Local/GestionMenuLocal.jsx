@@ -193,10 +193,10 @@ export const GestionMenuLocal = ({ localId }) => {
 
     setPreviewUrl(fullImagenUrl);
 
-    // Priorizar precio_local si existe, de lo contrario obtener el valor equivalente dividiendo el precio público por 1.10
+    // Priorizar precio_local si existe, de lo contrario recuperar el neto del 90% del precio público.
     const valorPrecioLocal = prod.precio_local !== undefined && prod.precio_local !== null
       ? prod.precio_local
-      : (prod.precio ? (Number(prod.precio) / (1 + COMISION_PORCENTAJE)).toFixed(2) : '');
+      : (prod.precio ? (Number(prod.precio) * (1 - COMISION_PORCENTAJE)).toFixed(2) : '');
 
     setForm({
       nombre: prod.nombre || '',
@@ -286,8 +286,8 @@ export const GestionMenuLocal = ({ localId }) => {
 
   // Cálculo de la vista previa del desglose financiero
   const precioLocalNum = Number(form.precio) || 0;
-  const montoComision = precioLocalNum * COMISION_PORCENTAJE;
-  const precioFinalCalculado = precioLocalNum + montoComision;
+  const precioFinalCalculado = Number((precioLocalNum / (1 - COMISION_PORCENTAJE)).toFixed(2));
+  const montoComision = Number((precioFinalCalculado - precioLocalNum).toFixed(2));
 
   return (
     <div style={{ marginTop: '2rem' }}>
@@ -375,7 +375,7 @@ export const GestionMenuLocal = ({ localId }) => {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
-                    <strong>Precio Carta / Mostrador ($):</strong>
+                    <strong>Precio que querés recibir por producto ($):</strong>
                   </label>
                   <input
                     type="number"
@@ -404,7 +404,7 @@ export const GestionMenuLocal = ({ localId }) => {
                   }}
                 >
                   <div style={{ fontWeight: 'bold', marginBottom: '0.3rem', borderBottom: '1px solid #a5d8ff', paddingBottom: '0.2rem' }}>
-                    💡 Desglose de Comisión (+10% Plataforma)
+                    💡 Desglose del precio (10% del precio cobrado)
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
                     <span>Ganancia Neta para tu Local:</span>
@@ -704,7 +704,7 @@ export const GestionMenuLocal = ({ localId }) => {
 
               const precioLocalVal = prod.precio_local !== undefined && prod.precio_local !== null
                 ? Number(prod.precio_local)
-                : Number(prod.precio) / 1.10;
+                : Number((Number(prod.precio) * (1 - COMISION_PORCENTAJE)).toFixed(2));
 
               return (
                 <tr key={prod.id} style={{ borderBottom: '1px solid #ddd', backgroundColor: estaEditandoEste ? '#e7f5ff' : 'transparent' }}>

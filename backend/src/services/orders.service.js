@@ -3,9 +3,21 @@ import { pool } from '../config/db.js';
 import { calcularCostoEnvioMultiorigen, calcularDistanciaKM } from './ai.service.js';
 import { validarLocalDisponibleParaPedido } from './locales.service.js';
 import { crearPreferenciaMercadoPago } from './mercadopago.service.js';
+import { createNotificationService } from './notifications.service.js';
 import { evaluarEstadoDocumentación } from './admin.service.js';
 
 const RADIO_MAXIMO_COBERTURA_KM = 5.0; // 📏 Cobertura máxima configurable (5 km)
+const FECHA_CORTE_HISTORIAL_COMISION = '2026-10-01 14:54:50';
+
+const calcularImportesProducto = (importeBruto, comisionFactor) => {
+  const bruto = Number(importeBruto || 0);
+  const netoLocal = Number((bruto * (1 - comisionFactor)).toFixed(2));
+
+  return {
+    netoLocal,
+    comisionPlataforma: Number((bruto - netoLocal).toFixed(2))
+  };
+};
 
 export const createOrderService = async (data) => {
   // 1️⃣ Recibir datos de la petición (incluyendo IDdireccion y ubicacionPersonalizada)
@@ -111,6 +123,8 @@ export const createOrderService = async (data) => {
     );
 
     let subtotalProductos = 0;
+    let gananciaLocalTotal = 0;
+    let comisionLocalTotal = 0;
     let maxTiempoPreparacion = 0;
     const localesAtendidosMap = new Map();
     const productosDetalleRespuesta = [];
@@ -173,8 +187,10 @@ export const createOrderService = async (data) => {
       const subtotalItem = precioUnitarioFinal * item.cantidad;
 
       // Cálculo del reparto financiero por ítem/producto
-      const gananciaLocalItem = subtotalItem * (1 - comisionLocalFactor);
-      const comisionPlataformaItem = subtotalItem * comisionLocalFactor;
+      const { netoLocal: gananciaLocalItem, comisionPlataforma: comisionPlataformaItem } =
+        calcularImportesProducto(subtotalItem, comisionLocalFactor);
+      gananciaLocalTotal += gananciaLocalItem;
+      comisionLocalTotal += comisionPlataformaItem;
 
       const tiempoTotalItem = item.cantidad > 1
         ? tiempoBase + ((item.cantidad - 1) * 3)
@@ -240,8 +256,7 @@ export const createOrderService = async (data) => {
 
     // 💰 Cálculo global del reparto financiero de la orden
     const gananciaRepartidor = costoEnvio * (1 - (MARGEN_ENVIO_PCT / 100));
-    const gananciaLocalTotal = subtotalProductos * (1 - comisionLocalFactor);
-    const ingresoNetoPlataforma = (subtotalProductos * comisionLocalFactor) + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
+    const ingresoNetoPlataforma = comisionLocalTotal + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
 
     // 7️⃣ Actualizar precios, métricas financieras, tiempos, DISTANCIA KM y MÉTODO DE PAGO en la orden
     await conn.query(
@@ -479,7 +494,6 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
     const IDrepartidor = repartidor.id;
 
     // ⛔ NUEVA VALIDACIÓN: Límite de 1 pedido activo por repartidor
-    // Verificamos si tiene ordenes asignadas en estados intermedios/activos (ej: ID 4: Asignado, ID 5: En camino)
     const [ordenesActivas] = await conn.query(
       `
       SELECT id FROM ordenes 
@@ -495,10 +509,10 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       );
     }
 
-    // 2️⃣ Bloquear la orden objetivo en la BD (FOR UPDATE)
+    // 2️⃣ Bloquear la orden objetivo en la BD (FOR UPDATE) e incluir IDcliente
     const [[ordenActual]] = await conn.query(
       `
-      SELECT o.IDestado, o.IDrepartidor, e.orden AS ordenEstado
+      SELECT o.IDestado, o.IDrepartidor, e.orden AS ordenEstado, o.IDcliente
       FROM ordenes o
       JOIN estados e ON o.IDestado = e.id
       WHERE o.id = ?
@@ -516,7 +530,7 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       throw new Error('Esta orden ya fue aceptada por otro repartidor y no está disponible');
     }
 
-    // ⛔ VALIDACIÓN: La orden debe estar en "En progreso" (2) o "Listo para retiro" (3)
+    // ⛔ VALIDACIÓN: La orden debe estar en "En progreso" (2) o "Listo para retiro" (7)
     if (ordenActual.ordenEstado !== 2 && ordenActual.ordenEstado !== 7) {
       throw new Error('La orden no se encuentra en el estado adecuado para ser tomada');
     }
@@ -549,7 +563,22 @@ export const assignRepartidorService = async (IDorden, IDusuario) => {
       [IDorden, estadoAsignado.id]
     );
 
+    // Confirmar cambios
     await conn.commit();
+
+    // 🔔 6️⃣ Notificar al cliente (fuera de la transacción)
+    try {
+      if (ordenActual?.IDcliente) {
+        await createNotificationService(
+          ordenActual.IDcliente,
+          IDorden,
+          '¡Repartidor asignado!',
+          `Se asignó un repartidor a tu pedido #${IDorden}.`
+        );
+      }
+    } catch (notifError) {
+      console.error('⚠️ Error no bloqueante al enviar notificación de repartidor asignado:', notifError.message);
+    }
 
     return {
       message: 'Orden aceptada con éxito',
@@ -617,7 +646,7 @@ export const getAvailableOrdersService = async (IDusuario) => {
 };
 
 // 🏪 Obtener pedidos asociados al local autenticado
-export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
+export const getLocalOrdersService = async (IDusuario, estadoFilter = null, soloActivos = false) => {
   const conn = await pool.getConnection();
   try {
     const [[local]] = await conn.query(
@@ -659,7 +688,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         ep.nombre AS estado_pago,
         o.codigo_otp,
         o.motivo_cancelacion,
-        h.creado_en AS fecha_creacion
+        o.creado_en AS fecha_creacion
       FROM ordenes o
       JOIN detalle_orden d_ord ON o.id = d_ord.IDorden
       JOIN usuarios u ON o.IDcliente = u.id
@@ -668,15 +697,15 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
       JOIN estados e ON o.IDestado = e.id
       LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
       LEFT JOIN estados_pago ep ON o.IDestado_pago = ep.id
-      LEFT JOIN (
-        SELECT IDorden, MIN(creado_en) AS creado_en
-        FROM hitorial_estado_orden
-        GROUP BY IDorden
-      ) h ON o.id = h.IDorden
       WHERE d_ord.IDlocal = ?
     `;
 
     const params = [localId];
+
+    if (soloActivos) {
+      queryOrders += ` AND o.creado_en >= ?`;
+      params.push(FECHA_CORTE_HISTORIAL_COMISION);
+    }
 
     if (estadoFilter) {
       queryOrders += ` AND o.IDestado = ?`;
@@ -704,6 +733,7 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
         d.cantidad,
         d.precio_unitario,
         d.ganancia_local_item,                  -- 👈 Ganancia neta por ítem
+        d.comision_plataforma_item,
         d.comentario,
         d.motivo_cancelacion AS motivo_rechazo,
         d.IDestado AS IDestado_detalle,
@@ -772,24 +802,37 @@ export const getLocalOrdersService = async (IDusuario, estadoFilter = null) => {
 export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEstadoId, detallesIds = [], motivo = null) => {
   const conn = await pool.getConnection();
 
+  // Variables para las notificaciones fuera del scope de la transacción
+  let notificarPedidoConfirmado = false;
+  let idClienteNotificacion = null;
+  
+  // 🔔 Variables para la notificación de producto cancelado por local
+  let notificarCancelacionParcial = false;
+  let infoCancelacion = {
+    localNombre: '',
+    productosNombres: []
+  };
+
   try {
     await conn.beginTransaction();
 
-    // 💰 Configuración de porcentajes financieros del sistema
-    const COMISION_LOCAL_PCT = 10.00; // 10%
-    const MARGEN_ENVIO_PCT = 15.00;   // 15% (El repartidor se queda con el 85%)
+    const COMISION_LOCAL_PCT = 10.00;
+    const MARGEN_ENVIO_PCT = 15.00;
     const comisionLocalFactor = COMISION_LOCAL_PCT / 100;
 
     // 1️⃣ Obtener el local asociado al usuario autenticado
     const [[local]] = await conn.query(
-      `SELECT id FROM locales WHERE IDusuario = ?`,
+      `SELECT id, nombre FROM locales WHERE IDusuario = ?`,
       [IDusuario]
     );
     if (!local) throw new Error('No existe un local asociado a este usuario');
 
     // 2️⃣ Obtener los ítems del detalle pertenecientes a este local
     const [detalles] = await conn.query(
-      `SELECT id, IDestado FROM detalle_orden WHERE IDorden = ? AND IDlocal = ?`,
+      `SELECT d.id, d.IDestado, p.nombre AS producto_nombre 
+       FROM detalle_orden d
+       JOIN productos p ON d.IDproducto = p.id
+       WHERE d.IDorden = ? AND d.IDlocal = ?`,
       [IDorden, local.id]
     );
     if (detalles.length === 0) {
@@ -804,7 +847,7 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
 
     // Bloquear la cabecera del pedido para actualización concurrente
     const [[ordenActual]] = await conn.query(
-      `SELECT IDestado, IDrepartidor, latitud_entrega, longitud_entrega FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT IDestado, IDrepartidor, latitud_entrega, longitud_entrega, IDcliente FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
     if (!ordenActual) throw new Error('La orden no existe');
@@ -815,6 +858,11 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
 
     // 3️⃣ Actualizar los ítems en `detalle_orden`
     if (Number(nuevoEstadoId) === 6) {
+      // Guardar información de los productos cancelados para el mensaje
+      const canceladosInfo = detalles.filter(d => targetDetallesIds.map(Number).includes(Number(d.id)));
+      infoCancelacion.localNombre = local.nombre;
+      infoCancelacion.productosNombres = canceladosInfo.map(d => d.producto_nombre);
+
       await conn.query(
         `UPDATE detalle_orden 
          SET IDestado = ?,
@@ -842,8 +890,10 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
 
     const todosCancelados = todosDetalles.every(d => Number(d.IDestado) === 6);
 
+    let estadoGlobalFinal = Number(ordenActual.IDestado);
+
     if (todosCancelados) {
-      // Si el 100% de los ítems fueron rechazados, la orden se cancela globalmente y se resetean valores financieros
+      estadoGlobalFinal = 6;
       await conn.query(
         `UPDATE ordenes 
          SET IDestado = 6, 
@@ -862,14 +912,26 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         [IDorden]
       );
     } else {
+      // Si se rechazaron ítems en este evento pero el pedido general continúa con otros locales:
+      if (Number(nuevoEstadoId) === 6) {
+        notificarCancelacionParcial = true;
+        idClienteNotificacion = ordenActual.IDcliente;
+      }
+
       // 5️⃣ Recalcular Subtotal, Coordenadas y Costo de Envío con los ítems activos
       const detallesActivos = todosDetalles.filter(d => Number(d.IDestado) !== 6);
 
       let nuevoSubtotal = 0;
+      let gananciaLocalTotal = 0;
+      let comisionLocalTotal = 0;
       const localesActivosMap = new Map();
 
       detallesActivos.forEach(item => {
-        nuevoSubtotal += Number(item.precio_unitario) * Number(item.cantidad);
+        const importeBrutoItem = Number(item.precio_unitario) * Number(item.cantidad);
+        nuevoSubtotal += importeBrutoItem;
+        const importesProducto = calcularImportesProducto(importeBrutoItem, comisionLocalFactor);
+        gananciaLocalTotal += importesProducto.netoLocal;
+        comisionLocalTotal += importesProducto.comisionPlataforma;
         if (!localesActivosMap.has(item.IDlocal)) {
           localesActivosMap.set(item.IDlocal, {
             latitud: Number(item.latitud),
@@ -887,20 +949,16 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
       const { distanciaTotalKM, costoEnvio } = calcularCostoEnvioMultiorigen(puntosRuta);
       const nuevoTotal = nuevoSubtotal + costoEnvio;
 
-      // 💵 Recalcular reparto financiero en base a los ítems activos
       const gananciaRepartidor = costoEnvio * (1 - (MARGEN_ENVIO_PCT / 100));
-      const gananciaLocalTotal = nuevoSubtotal * (1 - comisionLocalFactor);
-      const ingresoNetoPlataforma = (nuevoSubtotal * comisionLocalFactor) + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
+      const ingresoNetoPlataforma = comisionLocalTotal + (costoEnvio * (MARGEN_ENVIO_PCT / 100));
 
-      // 6️⃣ REGLA DE NEGOCIO: Evaluación e Invariabilidad del Estado Global
+      // 6️⃣ REGLA DE NEGOCIO: Evaluación de transición de estado
       let nuevoEstadoOrden = Number(ordenActual.IDestado);
+      const estadoAnteriorOrden = Number(ordenActual.IDestado);
 
-      // 🔒 SI EL PEDIDO YA INICIÓ EL RECORRIDO / RETIRO (5: En camino, 8: Retirado en local, 3: Entregado), 
-      // SE CONSERVA EL ESTADO GLOBAL Y NO SE VUELVE A ESTADOS ANTERIORES.
       if (nuevoEstadoOrden === 5 || nuevoEstadoOrden === 8 || nuevoEstadoOrden === 3) {
-        // Se mantiene el estado global sin cambios
+        // Se conserva el estado en recorrido/entrega
       } else {
-        // Evaluación estándar previa a "En camino"
         const todosItemsListos = detallesActivos.every(d => Number(d.IDestado) === 7);
 
         if (todosItemsListos) {
@@ -921,7 +979,9 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         }
       }
 
-      // 7️⃣ Persistir cambios en la tabla 'ordenes' incluyendo reparto financiero actualizado
+      estadoGlobalFinal = nuevoEstadoOrden;
+
+      // 7️⃣ Persistir cambios en la tabla 'ordenes'
       await conn.query(
         `UPDATE ordenes 
          SET IDestado = ?, 
@@ -936,10 +996,10 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
              ingreso_neto_plataforma = ?
          WHERE id = ?`,
         [
-          nuevoEstadoOrden, 
-          nuevoSubtotal, 
-          costoEnvio, 
-          distanciaTotalKM, 
+          nuevoEstadoOrden,
+          nuevoSubtotal,
+          costoEnvio,
+          distanciaTotalKM,
           nuevoTotal,
           COMISION_LOCAL_PCT,
           MARGEN_ENVIO_PCT,
@@ -950,21 +1010,63 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
         ]
       );
 
-      // Registrar en el historial únicamente si hubo un cambio real en la cabecera
-      if (nuevoEstadoOrden !== Number(ordenActual.IDestado)) {
+      // Registrar en el historial únicamente si hubo un cambio real de estado global
+      if (nuevoEstadoOrden !== estadoAnteriorOrden) {
         await conn.query(
           `INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`,
           [IDorden, nuevoEstadoOrden]
         );
       }
+
+      // Evaluar flag para envío de notificación posterior al commit
+      const ESTADO_EN_PREPARACION = 2;
+      const ESTADO_CREADO = 1;
+
+      if (estadoAnteriorOrden === ESTADO_CREADO && nuevoEstadoOrden === ESTADO_EN_PREPARACION) {
+        notificarPedidoConfirmado = true;
+        idClienteNotificacion = ordenActual.IDcliente;
+      }
     }
 
+    // Confirmar cambios en la base de datos
     await conn.commit();
+
+    // 8️⃣ 🔔 DISPARO DE NOTIFICACIONES (Fuera de la transacción)
+
+    // A) Notificación cuando se cancela solo un producto o local
+    if (notificarCancelacionParcial && idClienteNotificacion) {
+      try {
+        const listaProds = infoCancelacion.productosNombres.join(', ');
+        await createNotificationService(
+          idClienteNotificacion,
+          IDorden,
+          'Producto no disponible',
+          `El local "${infoCancelacion.localNombre}" no pudo preparar: ${listaProds}. El resto de tu pedido sigue en marcha.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error al enviar notificación de producto cancelado:', notifError.message);
+      }
+    }
+
+    // B) Notificación de confirmación de pedido
+    if (notificarPedidoConfirmado && idClienteNotificacion) {
+      try {
+        await createNotificationService(
+          idClienteNotificacion,
+          IDorden,
+          '¡Pedido Confirmado!',
+          `Tu pedido #${IDorden} ha sido aceptado por los locales y ya se encuentra en preparación.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error no bloqueante al enviar notificación:', notifError.message);
+      }
+    }
+
     return {
       message: 'Detalle de la orden actualizado correctamente.',
       IDorden,
       nuevoEstadoIdDetalle: nuevoEstadoId,
-      estadoGlobalOrden: todosCancelados ? 6 : Number(ordenActual.IDestado)
+      estadoGlobalOrden: estadoGlobalFinal
     };
   } catch (error) {
     await conn.rollback();
@@ -975,9 +1077,11 @@ export const updateLocalItemStatusService = async (IDorden, IDusuario, nuevoEsta
 };
 
 // 🚴 Repartidor cambia manualmente el estado a "En camino" (ID: 5)
-// src/services/orders.service.js
 export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
   const conn = await pool.getConnection();
+
+  // Variable auxiliar para obtener el ID del cliente fuera de la transacción
+  let idClienteNotificacion = null;
 
   try {
     await conn.beginTransaction();
@@ -991,8 +1095,9 @@ export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
       throw new Error('El usuario autenticado no está registrado como repartidor');
     }
 
+    // 1️⃣ Consultar la orden, incluyendo el IDcliente para notificarlo
     const [[orden]] = await conn.query(
-      `SELECT IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT IDestado, IDrepartidor, IDcliente FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
@@ -1014,7 +1119,24 @@ export const setOrderEnCaminoService = async (IDorden, IDusuario) => {
     await conn.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
     await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, 5)`, [IDorden]);
 
+    // Guardar IDcliente para la notificación
+    idClienteNotificacion = orden.IDcliente;
+
     await conn.commit();
+
+    // 🔔 2️⃣ Enviar notificación al cliente (fuera de la transacción)
+    if (idClienteNotificacion) {
+      try {
+        await createNotificationService(
+          idClienteNotificacion,
+          IDorden,
+          '¡Tu pedido está en camino!',
+          `El repartidor ya lleva tu pedido #${IDorden} hacia tu ubicación.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error no bloqueante al enviar notificación de pedido en camino:', notifError.message);
+      }
+    }
 
     return {
       message: 'La orden se encuentra EN CAMINO y la simulación/recorrido está iniciada.',
@@ -1140,13 +1262,14 @@ export const getMyOrdersService = async (IDcliente) => {
      LEFT JOIN usuarios u_rep ON r.IDusuario = u_rep.id
      LEFT JOIN clientes c_rep ON u_rep.id = c_rep.IDusuario
      WHERE o.IDcliente = ?
+       AND (o.IDestado NOT IN (3, 6) OR o.creado_en >= ?)
      ORDER BY 
        CASE 
          WHEN o.IDestado IN (3, 6) THEN 1 
          ELSE 0 
        END ASC,
        o.id DESC`,
-    [IDcliente]
+    [IDcliente, FECHA_CORTE_HISTORIAL_COMISION]
   );
 
   if (ordenes.length === 0) return [];
@@ -1548,9 +1671,10 @@ export const getMisPedidosAsignadosService = async (IDusuario) => {
     LEFT JOIN direcciones_cliente d ON o.IDdireccion = d.id
     LEFT JOIN repartidores r ON r.id = o.IDrepartidor
     WHERE o.IDrepartidor = ?
+      AND (o.IDestado NOT IN (3, 6) OR o.creado_en >= ?)
     ORDER BY IDorden DESC;
     `,
-    [repartidor.id]
+    [repartidor.id, FECHA_CORTE_HISTORIAL_COMISION]
   );
 
   for (const orden of orders) {
@@ -1655,7 +1779,9 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       o.costo_envio,
       o.ganancia_repartidor,
       o.ganancia_local_total,
+      o.ingreso_neto_plataforma,
       o.total AS total_orden,
+      o.creado_en,
 
       -- Datos de entrega y cliente
       o.codigo_otp,
@@ -1694,20 +1820,20 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
 
   // 2️⃣ Lo que se le entrega/corresponde al local (según modelo comercial o valor total de los productos)[cite: 35, 36]
   // Si en tu modelo en efectivo el repartidor le paga al local el subtotal neto del local:
-  const montoAPagarLocal = esEfectivo ? Number(orden.ganancia_local_total) : 0.00; 
+  const montoAPagarLocal = esEfectivo ? Number(orden.ganancia_local_total) : 0.00;
 
   const detallePagoRepartidor = {
     metodo_pago: orden.metodo_pago,
     estado_pago: orden.estado_pago,
     es_pago_efectivo: esEfectivo,
     pago_completado: Number(orden.IDestado_pago) === 2, // 2 = Aprobado[cite: 35]
-    
+
     // Muestra el total de la orden a cobrar al cliente
     monto_a_cobrar_cliente: esEfectivo ? Number(orden.total_orden) : 0.00,
-    
+
     // Muestra el valor que se debe abonar/abonó al local[cite: 35, 36]
-    monto_a_pagar_local: Number(orden.ganancia_local_total), 
-    
+    monto_a_pagar_local: Number(orden.ganancia_local_total),
+
     ganancia_envio: Number(orden.ganancia_repartidor),
     indicaciones_pago: esEfectivo
       ? `Cobrar $${Number(orden.total_orden).toFixed(2)} en EFECTIVO al entregar.`
@@ -1719,8 +1845,11 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     `
     SELECT
       do.id AS IDdetalle,
+      do.IDlocal,
       p.nombre AS producto,
       do.cantidad,
+      do.precio_unitario,
+      do.ganancia_local_item,
       do.IDestado AS IDestado_detalle,
       do.motivo_cancelacion AS motivo_rechazo,
       e2.nombre AS estado_detalle,
@@ -1763,14 +1892,50 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
     [orden.IDorden]
   );
 
+  // 📍 Aplicar el ordenamiento por distancia y sensibilidad idéntico al simulador
+  const ubicacionRepartidor = {
+    latitud: orden.repartidor_latitud,
+    longitud: orden.repartidor_longitud
+  };
+
+  const localesRutaOrdenados = ordenarLocalesPorDistanciaYSensibilidad(
+    ubicacionRepartidor,
+    localesConsulta
+  );
+
   const [retirosRows] = await pool.query(
     `SELECT IDlocal FROM retiros_locales_orden WHERE IDorden = ?`,
     [orden.IDorden]
   );
 
+  const liquidacionLocalMap = new Map();
+  for (const producto of productos) {
+    if (Number(producto.IDestado_detalle) === 6) continue;
+
+    const IDlocal = Number(producto.IDlocal);
+    const importeBruto = Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0);
+    const importeLocal = calcularImportesProducto(importeBruto, 0.1).netoLocal;
+    const liquidacion = liquidacionLocalMap.get(IDlocal) || {
+      IDlocal,
+      nombre: producto.local,
+      direccion: producto.direccion_local,
+      importe_bruto: 0,
+      importe_a_pagar: 0
+    };
+
+    liquidacion.importe_bruto += importeBruto;
+    liquidacion.importe_a_pagar += importeLocal;
+    liquidacionLocalMap.set(IDlocal, liquidacion);
+  }
+
+  const gananciaRepartidor = Number(orden.ganancia_repartidor || 0);
+  const totalOrden = Number(orden.total_orden || 0);
+
   return {
     ...orden,
     detalle_pago: detallePagoRepartidor,
+    liquidacion_locales: Array.from(liquidacionLocalMap.values()),
+    efectivo_a_rendir: esEfectivo ? Math.max(0, totalOrden - gananciaRepartidor) : 0,
     ubicacion_repartidor: {
       latitud: orden.repartidor_latitud,
       longitud: orden.repartidor_longitud,
@@ -1782,7 +1947,8 @@ export const getPedidoAsignadoService = async (IDorden, IDusuario) => {
       longitud: orden.longitud_entrega
     },
     productos,
-    localesRuta: localesConsulta,
+    localesRuta: localesRutaOrdenados,       // 👈 Lista ordenada según sensibilidad/distancia
+    localesOrdenados: localesRutaOrdenados,  // 👈 Alias para compatibilidad con el Frontend
     retiros_realizados: retirosRows.map(row => row.IDlocal)
   };
 };
@@ -1839,7 +2005,7 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
       throw new Error('No existe un local asignado a este usuario');
     }
 
-    const { busqueda, fechaInicio, fechaFin, estado } = filtros;
+    const { busqueda, fechaInicio, fechaFin, estado, soloHistorial } = filtros;
 
     let queryOrders = `
       SELECT DISTINCT
@@ -1875,6 +2041,11 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
     `;
 
     const params = [local.id];
+
+    if (soloHistorial || soloActivos) {
+      queryOrders += ` AND o.creado_en >= ?`;
+      params.push(FECHA_CORTE_HISTORIAL_COMISION);
+    }
 
     // Filtro por término (ID exacto o Nombre/Username parcial)
     if (busqueda && busqueda.trim() !== '') {
@@ -1939,6 +2110,7 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
         d.cantidad,
         d.precio_unitario,
         d.ganancia_local_item,                  -- 👈 Ganancia neta por ítem
+        d.comision_plataforma_item,
         d.comentario,
         d.motivo_cancelacion AS motivo_rechazo,
         d.IDestado AS IDestado_detalle,
@@ -1970,6 +2142,9 @@ export const searchLocalOrdersService = async (IDusuario, filtros = {}) => {
 export const liberarPedidoRepartidorService = async (IDorden, IDusuario, motivo) => {
   const conn = await pool.getConnection();
 
+  // Variable para guardar el ID del cliente fuera de la transacción
+  let idClienteNotificacion = null;
+
   try {
     await conn.beginTransaction();
 
@@ -1983,9 +2158,9 @@ export const liberarPedidoRepartidorService = async (IDorden, IDusuario, motivo)
       throw new Error('El usuario autenticado no está registrado como repartidor.');
     }
 
-    // 2️⃣ Obtener la orden y validar
+    // 2️⃣ Obtener la orden, validar asignación y extraer IDcliente
     const [[orden]] = await conn.query(
-      `SELECT id, IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT id, IDestado, IDrepartidor, IDcliente FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
@@ -2001,6 +2176,8 @@ export const liberarPedidoRepartidorService = async (IDorden, IDusuario, motivo)
     if (Number(orden.IDestado) === 5) {
       throw new Error('No se puede cancelar la asignación cuando el pedido ya está "En camino".');
     }
+
+    idClienteNotificacion = orden.IDcliente;
 
     // 3️⃣ Determinar el estado anterior al que debe retornar la orden
     // Buscamos en el historial el último estado distinto a "Repartidor asignado" (4)
@@ -2030,6 +2207,20 @@ export const liberarPedidoRepartidorService = async (IDorden, IDusuario, motivo)
     );
 
     await conn.commit();
+
+    // 🔔 6️⃣ Notificar al cliente (fuera de la transacción de forma no bloqueante)
+    if (idClienteNotificacion) {
+      try {
+        await createNotificationService(
+          idClienteNotificacion,
+          IDorden,
+          'Actualización sobre tu envío',
+          `Tu repartidor tuvo un imprevisto y no podrá realizar la entrega del pedido #${IDorden}. No te preocupes, tu pedido ya está disponible nuevamente para que otro repartidor lo tome de inmediato.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error no bloqueante al enviar notificación de cancelación de repartidor:', notifError.message);
+      }
+    }
 
     return {
       message: 'Pedido liberado con éxito. El pedido volvió a la lista de disponibles.',
@@ -2086,9 +2277,9 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       );
     }
 
-    // 4️⃣ Bloquear la orden y verificar asignación
+    // 4️⃣ Bloquear la orden y verificar asignación (Se incluye IDcliente)
     const [[orden]] = await conn.query(
-      `SELECT IDestado, IDrepartidor FROM ordenes WHERE id = ? FOR UPDATE`,
+      `SELECT IDestado, IDrepartidor, IDcliente FROM ordenes WHERE id = ? FOR UPDATE`,
       [IDorden]
     );
 
@@ -2163,6 +2354,9 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
       [IDorden, IDlocal, repartidor.id]
     );
 
+    // Variable auxiliar para enviar la notificación fuera de la transacción si corresponde
+    let notificarRutaCliente = false;
+
     // 9️⃣ Verificar si se completaron todos los retiros de la orden
     const [[pendientesGlobales]] = await conn.query(
       `SELECT COUNT(*) AS sinRetirar 
@@ -2177,9 +2371,25 @@ export const confirmarRetiroLocalService = async (IDorden, IDusuario, IDlocal) =
         await conn.query(`UPDATE ordenes SET IDestado = ? WHERE id = ?`, [ESTADO_RETIRADO_ID, IDorden]);
         await conn.query(`INSERT INTO hitorial_estado_orden (IDorden, IDestado) VALUES (?, ?)`, [IDorden, ESTADO_RETIRADO_ID]);
       }
+      // Marcar flag para notificar al cliente que el repartidor se dirige a su domicilio
+      notificarRutaCliente = true;
     }
 
     await conn.commit();
+
+    // 🔔 Send notification to the client after successful transaction commit
+    if (notificarRutaCliente && orden?.IDcliente) {
+      try {
+        await createNotificationService(
+          orden.IDcliente,
+          IDorden,
+          '¡El repartidor va hacia tu domicilio!',
+          `Se confirmaron los retiros de todos los productos de tu pedido #${IDorden}. El repartidor ya está en camino a tu ubicación.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error no bloqueante al enviar notificación de camino al cliente:', notifError.message);
+      }
+    }
 
     return {
       message: `¡Producto retirado con éxito de "${local.nombre}"!`,

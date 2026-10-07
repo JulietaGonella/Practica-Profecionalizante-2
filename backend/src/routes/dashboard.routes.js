@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { 
   getAdminDashboard, 
   getFlotaDashboard, 
-  getRepartidorIndividualDashboard, 
+  getMiTableroRepartidor, 
   getClienteMeDashboard 
 } from '../controllers/dashboard.controller.js';
 import { authMiddleware } from '../auth/auth.middleware.js';
@@ -16,8 +16,8 @@ router.get('/admin', authMiddleware, requireRole('administrador'), getAdminDashb
 // 2. Gestión General de Repartidores
 router.get('/repartidores', authMiddleware, requireRole('administrador'), getFlotaDashboard);
 
-// 3. Vista Individual del Repartidor
-router.get('/repartidores/:id', authMiddleware, requireAnyRole('administrador', 'repartidor'), getRepartidorIndividualDashboard);
+// 3. Vista Individual del Repartidor (SE AGREGA authMiddleware)
+router.get('/mi-tablero', authMiddleware, requireRole('repartidor'), getMiTableroRepartidor);
 
 // 4. Vista de Perfil e Historial del Cliente Logueado
 router.get('/clientes/me', authMiddleware, requireRole('cliente'), getClienteMeDashboard);

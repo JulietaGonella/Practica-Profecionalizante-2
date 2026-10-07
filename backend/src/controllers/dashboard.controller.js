@@ -1,6 +1,6 @@
 // src/controllers/dashboard.controller.js
 import { getDashboardMetricsService } from '../services/admin.service.js';
-import { getFlotaDashboardService, getRepartidorIndividualDashboardService } from '../services/repartidoresDashboard.service.js';
+import { getFlotaDashboardService, getMiTableroRepartidorService } from '../services/repartidoresDashboard.service.js';
 import { getClienteMeDashboardService } from '../services/clientesDashboard.service.js';
 
 export const getAdminDashboard = async (req, res) => {
@@ -21,22 +21,24 @@ export const getFlotaDashboard = async (req, res) => {
   }
 };
 
-export const getRepartidorIndividualDashboard = async (req, res) => {
+export const getMiTableroRepartidor = async (req, res) => {
   try {
-    const { id } = req.params;
-    const data = await getRepartidorIndividualDashboardService(id);
-    res.json(data);
+    const IDusuario = req.user.id; // O según tu middleware de autenticación (req.usuario.id)
+    const { fechaInicio, fechaFin } = req.query;
+
+    const data = await getMiTableroRepartidorService(IDusuario, { fechaInicio, fechaFin });
+    return res.status(200).json(data);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    return res.status(500).json({ error: error.message || 'Error al obtener el tablero del repartidor' });
   }
 };
 
 export const getClienteMeDashboard = async (req, res) => {
   try {
     const IDusuario = req.user.id;
-    const data = await getClienteMeDashboardService(IDusuario);
+    const data = await getClienteMeDashboardService(IDusuario, req.query);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'Error al obtener el tablero del cliente' });
   }
 };

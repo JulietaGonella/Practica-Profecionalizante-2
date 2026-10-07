@@ -20,7 +20,6 @@ const COLORES_ESTADO = { Entregado: '#2b8a3e', Cancelado: '#e03131' };
 
 export const TableroAdministrador = () => {
     const [subVista, setSubVista] = useState('general');
-    const [cargando, setCargando] = useState(false);
     const [error, setError] = useState(null);
 
     // Estados para el rango de fechas
@@ -46,9 +45,10 @@ export const TableroAdministrador = () => {
     const [mapaFlota, setMapaFlota] = useState([]);
 
     useEffect(() => {
+        let activo = true;
+        let temporizador;
+
         const cargarDatos = async () => {
-            setCargando(true);
-            setError(null);
             try {
                 if (subVista === 'general') {
                     const params = {
@@ -59,6 +59,8 @@ export const TableroAdministrador = () => {
                         tipoPago
                     };
                     const data = await getAdminDashboardApi(params);
+                    if (!activo) return;
+                    setError(null);
                     setKpisGeneral(data.kpisGeneral || { totalPedidos: 0, entregados: 0, cancelados: 0, ingresosPlataforma: 0 });
                     setPedidosPorCategoria(data.pedidosPorCategoria || []);
                     setPedidosPorFechaEstado(data.pedidosPorFechaEstado || []);
@@ -74,6 +76,8 @@ export const TableroAdministrador = () => {
                         estado: estadoPedido
                     };
                     const data = await getFlotaDashboardApi(params);
+                    if (!activo) return;
+                    setError(null);
                     setKpisRepartidores(data.kpisRepartidores || { cantidadRepartidores: 0, tiempoPromedio: 0, porcentajeEntregados: 0, kmRecorridos: 0 });
                     setTablaRepartidores(data.tablaRepartidores || []);
                     setPedidosAsignadosPorRepartidor(data.pedidosAsignadosPorRepartidor || []);
@@ -83,14 +87,22 @@ export const TableroAdministrador = () => {
                     }
                 }
             } catch (err) {
-                console.error('Error al cargar datos del tablero:', err);
-                setError('No se pudieron obtener las métricas del servidor.');
+                if (activo) {
+                    console.error('Error al cargar datos del tablero:', err);
+                    setError('No se pudieron obtener las métricas del servidor.');
+                }
             } finally {
-                setCargando(false);
+                if (activo) {
+                    temporizador = setTimeout(cargarDatos, 30000);
+                }
             }
         };
 
         cargarDatos();
+        return () => {
+            activo = false;
+            clearTimeout(temporizador);
+        };
     }, [subVista, fechaInicio, fechaFin, categoria, estadoPedido, tipoPago, repartidorFiltro]);
 
     const estiloContenedorFiltros = {
@@ -168,7 +180,6 @@ export const TableroAdministrador = () => {
                 <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h2 style={{ margin: 0 }}>Tablero General - Administrador</h2>
-                        {cargando && <span style={{ color: '#0b7285', fontWeight: 'bold' }}>Cargando métricas...</span>}
                     </div>
 
                     {/* Filtros */}
@@ -225,6 +236,10 @@ export const TableroAdministrador = () => {
                         </div>
                     </div>
 
+                    <p style={{ margin: '-0.8rem 0 0', color: '#6c757d', fontSize: '0.82rem' }}>
+                        Los indicadores consideran pedidos creados desde el 01/10/2026 a las 14:54, cuando comenzó el registro de comisiones por producto.
+                    </p>
+
                     {/* Tarjetas de KPIs */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                         <div style={{ padding: '1.2rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
@@ -247,7 +262,9 @@ export const TableroAdministrador = () => {
                         </div>
 
                         <div style={{ padding: '1.2rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                            <span style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>Ingresos netos de la plataforma</span>
+                            <span style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                {categoria === 'todas' ? 'Ingresos netos de la plataforma' : 'Comisiones de productos de la categoría'}
+                            </span>
                             <h2 style={{ margin: '0.5rem 0 0', color: '#2b8a3e', fontSize: '1.8rem' }}>
                                 $ {Number(kpisGeneral.ingresosPlataforma).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </h2>
@@ -332,7 +349,6 @@ export const TableroAdministrador = () => {
                 <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h2 style={{ margin: 0 }}>Tablero General - Gestión de Repartidores</h2>
-                        {cargando && <span style={{ color: '#0b7285', fontWeight: 'bold' }}>Cargando métricas...</span>}
                     </div>
 
                     {/* Filtros */}

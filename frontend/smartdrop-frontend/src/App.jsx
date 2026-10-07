@@ -32,6 +32,8 @@ import { SolicitarRecuperacionPage } from './pages/SolicitarRecuperacionPage';
 import { RestablecerPasswordPage } from './pages/RestablecerPasswordPage';
 import { ClienteGuard } from './components/Cliente/ClienteGuard';
 import { TableroAdministrador } from './components/Admin/TableroAdministrador';
+import { TableroRepartidor } from './components/Repartidor/TableroRepartidor'; // Ajusta la ruta según la ubicación exacta de tus componentes
+import { TableroCliente } from './components/Cliente/TableroCliente';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -45,7 +47,6 @@ const ScrollToTop = () => {
 
   return null;
 };
-
 
 // 🛒 INICIO CLIENTE
 const ClienteInicio = () => {
@@ -208,6 +209,22 @@ const ClienteInicio = () => {
             }}
           >
             👤 Configurar Mi Perfil
+          </button>
+
+          <button
+            onClick={() => navigate('/cliente/tablero')}
+            style={{
+              padding: '0.7rem 1.4rem',
+              cursor: 'pointer',
+              borderRadius: '6px',
+              border: '1px solid #ccc',
+              fontWeight: 'bold',
+              backgroundColor: '#e7f5ff',
+              color: '#1c7ed6',
+              borderColor: '#74c0fc'
+            }}
+          >
+            📊 Mi Tablero
           </button>
         </div>
       </section>
@@ -700,7 +717,7 @@ export default function App() {
                   <Route path="/cliente/carrito" element={<CarritoPage />} />
                   {/* CatalogoCliente consume useCart() internamente */}
                   <Route path="/cliente/locales/*" element={<CatalogoCliente />} />
-                  <Route path="/cliente/tablero" element={<TableroEstadisticas rol="Cliente" />} />
+                  <Route path="/cliente/tablero" element={<TableroCliente />} />
                   <Route path="/cliente/seguimiento/:ordenId" element={<SeguimientoPedido />} />
                 </Route>
               </Route>
@@ -720,7 +737,7 @@ export default function App() {
             <Route element={<ProtectedRoute allowedRoles={['repartidor']} />}>
               <Route path="/repartidor/inicio" element={<PanelRepartidor />} />
               <Route path="/repartidor/orden/:ordenId" element={<DetallePedidoRepartidor />} />
-              <Route path="/repartidor/tablero" element={<TableroEstadisticas rol="Repartidor" />} />
+              <Route path="/repartidor/tablero" element={<TableroRepartidor />} />
             </Route>
 
             {/* 🛡️ RUTAS DEL ADMINISTRADOR */}

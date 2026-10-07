@@ -61,13 +61,15 @@ export const ComanderaLocal = () => {
           busqueda: busquedaTexto,
           estado: filtroEstado,
           fechaInicio,
-          fechaFin
+          fechaFin,
+          soloHistorial: subvista === 'historial',
+          soloActivos: subvista === 'activos'
         };
         const data = await searchPedidosHistorial(filtros);
         setPedidos(Array.isArray(data) ? data : []);
       } else {
         // Consulta estándar de pedidos del local
-        const data = await getMisPedidosLocal(null);
+        const data = await getMisPedidosLocal(null, true);
         setPedidos(Array.isArray(data) ? data : []);
       }
     } catch (err) {
@@ -455,13 +457,19 @@ export const ComanderaLocal = () => {
                               const totalBruto = cantidad * precio;
                               const netoLocal = prod.ganancia_local_item !== undefined
                                 ? Number(prod.ganancia_local_item)
-                                : totalBruto * 0.90;
+                                : Number((totalBruto * 0.90).toFixed(2));
+                              const comisionSistema = prod.comision_plataforma_item !== undefined
+                                ? Number(prod.comision_plataforma_item)
+                                : Number((totalBruto - netoLocal).toFixed(2));
 
                               return (
                                 <span style={{ fontSize: '0.85rem', marginLeft: '6px' }}>
                                   — Total: <strong>${totalBruto.toFixed(2)}</strong>
                                   <span style={{ color: '#2b8a3e', marginLeft: '4px' }}>
                                     (Neto: ${netoLocal.toFixed(2)})
+                                  </span>
+                                  <span style={{ color: '#6c757d', marginLeft: '4px' }}>
+                                    (Sistema: ${comisionSistema.toFixed(2)})
                                   </span>
                                 </span>
                               );

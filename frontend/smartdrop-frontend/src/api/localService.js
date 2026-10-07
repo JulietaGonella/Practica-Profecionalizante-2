@@ -20,8 +20,11 @@ export const toggleOperativoLocal = async (localId) => {
 };
 
 // Obtener las órdenes del local (permite filtrar por estado en la query string)
-export const getMisPedidosLocal = async (estado) => {
-  const params = estado ? { estado } : {};
+export const getMisPedidosLocal = async (estado, soloActivos = false) => {
+  const params = {
+    ...(estado ? { estado } : {}),
+    ...(soloActivos ? { soloActivos: true } : {})
+  };
   const { data } = await api.get('/orders/mis-pedidos-local', { params });
   return data;
 };

@@ -1,5 +1,7 @@
 import { pool } from '../config/db.js';
 
+const COMISION_PORCENTAJE = 0.10;
+
 // Helper para obtener las opciones y grupos de un producto
 const obtenerOpcionesProducto = async (productoId) => {
   const [grupos] = await pool.query(
@@ -45,8 +47,7 @@ export const createProductService = async (data, userId) => {
   }
 
   // 🧮 CÁLCULO DE COMISIÓN DEL SISTEMA (+10%)
-  const COMISION_PORCENTAJE = 0.10;
-  const precioFinalCalculado = Number((precioLocalNum * (1 + COMISION_PORCENTAJE)).toFixed(2));
+  const precioFinalCalculado = Number((precioLocalNum / (1 - COMISION_PORCENTAJE)).toFixed(2));
 
   const [categoriaExiste] = await pool.query(
     `SELECT id FROM categorias_productos WHERE id = ?`,
@@ -375,7 +376,7 @@ export const updateProductService = async (id, data, userId) => {
       throw new Error('El precio del producto debe ser mayor a 0');
     }
     nuevoPrecioLocal = precioLocalNum;
-    nuevoPrecioFinal = Number((precioLocalNum * 1.10).toFixed(2));
+    nuevoPrecioFinal = Number((precioLocalNum / (1 - COMISION_PORCENTAJE)).toFixed(2));
   }
 
   if (tiempo_preparacion_min !== undefined && (isNaN(tiempo_preparacion_min) || Number(tiempo_preparacion_min) <= 0)) {

@@ -160,6 +160,7 @@ export const DetallePedidoRepartidor = () => {
 
   // 🗺️ Estado para almacenar los puntos por calle obtenidos de OSRM
   const [rutaCalles, setRutaCalles] = useState([]);
+  const esPedidoEntregado = Number(pedido?.IDestado) === 3;
 
   const cargarPedido = async () => {
     try {
@@ -189,9 +190,14 @@ export const DetallePedidoRepartidor = () => {
 
   useEffect(() => {
     cargarPedido();
+  }, [ordenId]);
+
+  useEffect(() => {
+    if (Number(pedido?.IDestado) === 3) return undefined;
+
     const intervalo = setInterval(actualizarPedido, 5000);
     return () => clearInterval(intervalo);
-  }, [ordenId]);
+  }, [ordenId, pedido?.IDestado]);
 
   const handleSimularRecorrido = async () => {
     if (!pedido?.IDrepartidor) {
@@ -269,7 +275,8 @@ export const DetallePedidoRepartidor = () => {
 
     try {
       setAccionProcesando('liberar');
-      await liberarPedidoRepartidor(Number(ordenId));
+      // 👈 Se añade {} o { motivo: null } como body de la petición
+      await liberarPedidoRepartidor(Number(ordenId), {});
       alert('Pedido liberado correctamente. Volviendo al listado.');
       navigate('/repartidor/inicio');
     } catch (err) {
@@ -311,7 +318,7 @@ export const DetallePedidoRepartidor = () => {
     const esRechazado = estadoDetalleId === 6;
 
     const yaRetirado =
-      !esRechazado && (
+      !esRechazado && (esPedidoEntregado ||
         localRutaInfo?.retirado === 1 ||
         localRutaInfo?.retirado === true ||
         pedido?.retiros_realizados?.includes(idLocal) ||
@@ -354,10 +361,12 @@ export const DetallePedidoRepartidor = () => {
   });
 
   const getOrdenRutaBackend = (idLocal) => {
-    const listaRuta = pedido?.localesRuta || pedido?.localesOrdenados || [];
-    if (!Array.isArray(listaRuta)) return -1;
+    // Buscar en todas las posibles estructuras que devuelve el endpoint de la orden
+    const listaRuta = pedido?.localesRuta || pedido?.localesOrdenados || pedido?.locales_ruta || [];
+    if (!Array.isArray(listaRuta) || listaRuta.length === 0) return -1;
+
     return listaRuta.findIndex(
-      (l) => Number(l.IDlocal ?? l.id ?? l.localId) === Number(idLocal)
+      (l) => Number(l.IDlocal ?? l.id ?? l.localId ?? l.IDlocal_orden) === Number(idLocal)
     );
   };
 
@@ -365,10 +374,12 @@ export const DetallePedidoRepartidor = () => {
     const aFinalizado = a.retirado || a.todosRechazados;
     const bFinalizado = b.retirado || b.todosRechazados;
 
+    // Colocar al final los locales ya retirados o totalmente rechazados
     if (aFinalizado !== bFinalizado) {
       return aFinalizado ? 1 : -1;
     }
 
+    // 1️⃣ Prioridad Absoluta: El orden exacto definido en el Backend / Algoritmo de Ruta
     const idxA = getOrdenRutaBackend(a.id);
     const idxB = getOrdenRutaBackend(b.id);
 
@@ -376,11 +387,12 @@ export const DetallePedidoRepartidor = () => {
       return idxA - idxB;
     }
 
+    // 2️⃣ Fallback si no hay secuencia asignada: Orden por Sensibilidad asignada
     if (a.maxSensibilidad !== b.maxSensibilidad) {
       return a.maxSensibilidad - b.maxSensibilidad;
     }
 
-    return 0;
+    return a.id - b.id;
   });
 
   const repLat = pedido?.repartidor_latitud != null ? Number(pedido.repartidor_latitud) : null;
@@ -458,7 +470,7 @@ export const DetallePedidoRepartidor = () => {
   }, [rutaCalles, repLat, repLng]);
 
   useEffect(() => {
-    if (repLat == null || repLng == null || destinoLat == null || destinoLng == null || !etapaId) {
+    if (esPedidoEntregado || repLat == null || repLng == null || destinoLat == null || destinoLng == null || !etapaId) {
       setRutaCalles([]);
       return;
     }
@@ -482,7 +494,7 @@ export const DetallePedidoRepartidor = () => {
     };
 
     consultarRutaOSRM();
-  }, [etapaId, destinoLat, destinoLng]);
+  }, [etapaId, destinoLat, destinoLng, esPedidoEntregado]);
 
   if (loading) {
     return (
@@ -521,7 +533,6 @@ export const DetallePedidoRepartidor = () => {
 
   // 💳 Banderas y variables de Estado de Pago
   const esPagoEfectivo = Number(pedido.IDmetodo_pago) === 1 || String(pedido.metodo_pago).toLowerCase().includes('efectivo');
-  const pagoAprobado = Number(pedido.IDestado_pago) === 2 || String(pedido.estado_pago).toLowerCase().includes('aprobado');
 
   // Definir una constante auxiliar arriba del return si se prefiere, o de forma inline:
   const subtotalPedido = Number(
@@ -532,14 +543,16 @@ export const DetallePedidoRepartidor = () => {
     pedido.total_orden ?? pedido.total ?? subtotalPedido + costoEnvio
   );
 
-  const gananciaLocal = Number(
-    pedido.ganancia_local_total ?? subtotalPedido * 0.9
-  );
   const gananciaRepartidor = Number(
     pedido.ganancia_repartidor ?? costoEnvio * 0.85
   );
-  const retencionPlataforma =
-    (subtotalPedido - gananciaLocal) + (costoEnvio - gananciaRepartidor);
+  const formatoMonto = (monto) => Number(monto || 0).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  const montoARendir = Number(
+    pedido.efectivo_a_rendir ?? (esPagoEfectivo ? totalOrdenCalculado - gananciaRepartidor : 0)
+  );
 
   return (
     <div style={{ maxWidth: '900px', margin: '2rem auto', padding: '1rem' }}>
@@ -578,110 +591,114 @@ export const DetallePedidoRepartidor = () => {
           </span>
         </div>
 
-        {/* 🗺️ MAPA INTERACTIVO PROGRESIVO POR PARADAS */}
-        <section style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
-          <h3>🗺️ Navegación por Paradas en Tiempo Real</h3>
+        {!esPedidoEntregado && (
+          <>
+            {/* 🗺️ MAPA INTERACTIVO PROGRESIVO POR PARADAS */}
+            <section style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+              <h3>🗺️ Navegación por Paradas en Tiempo Real</h3>
 
-          {repLat != null && repLng != null ? (
-            <div style={{ height: '400px', width: '100%', borderRadius: '8px', overflow: 'hidden', marginTop: '1rem' }}>
-              <MapContainer center={[repLat, repLng]} zoom={15} style={{ height: '100%', width: '100%' }}>
-                <AjustarVistaMapa puntos={puntosMapa} />
+              {repLat != null && repLng != null ? (
+                <div style={{ height: '400px', width: '100%', borderRadius: '8px', overflow: 'hidden', marginTop: '1rem' }}>
+                  <MapContainer center={[repLat, repLng]} zoom={15} style={{ height: '100%', width: '100%' }}>
+                    <AjustarVistaMapa puntos={puntosMapa} />
 
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
 
-                <Marker position={[repLat, repLng]} icon={iconoRepartidor}>
-                  <Popup>
-                    <strong>🚴 Repartidor</strong>
-                    <br />
-                    Ubicación actual
-                  </Popup>
-                </Marker>
+                    <Marker position={[repLat, repLng]} icon={iconoRepartidor}>
+                      <Popup>
+                        <strong>🚴 Repartidor</strong>
+                        <br />
+                        Ubicación actual
+                      </Popup>
+                    </Marker>
 
-                {localesInvolucrados.map((local) => {
-                  if (local.latitud == null || local.longitud == null) return null;
+                    {localesInvolucrados.map((local) => {
+                      if (local.latitud == null || local.longitud == null) return null;
 
-                  const esSiguiente = primerLocalPendiente?.id === local.id;
+                      const esSiguiente = primerLocalPendiente?.id === local.id;
 
-                  return (
-                    <Fragment key={`marker-local-${local.id}`}>
+                      return (
+                        <Fragment key={`marker-local-${local.id}`}>
+                          <Marker
+                            position={[Number(local.latitud), Number(local.longitud)]}
+                            icon={iconoLocal(esSiguiente, local.retirado, local.todosRechazados)}
+                          >
+                            <Popup>
+                              <strong>
+                                {esSiguiente
+                                  ? `📍 Siguiente parada: ${local.nombre}`
+                                  : local.todosRechazados
+                                    ? `❌ Rechazado: ${local.nombre}`
+                                    : local.retirado
+                                      ? `✅ Retirado: ${local.nombre}`
+                                      : `🏪 En espera: ${local.nombre}`}
+                              </strong>
+                              <br />
+                              {local.direccion && (
+                                <>
+                                  <span>{local.direccion}</span>
+                                  <br />
+                                </>
+                              )}
+                              {esSiguiente && local.distanciaMetros != null && (
+                                <span>Distancia: {local.distanciaMetros}m</span>
+                              )}
+                            </Popup>
+                          </Marker>
+
+                          {esSiguiente && (
+                            <Circle
+                              center={[Number(local.latitud), Number(local.longitud)]}
+                              radius={UMBRAL_DISTANCIA_METROS}
+                              pathOptions={{
+                                color: local.estaCerca ? '#20c997' : '#fd7e14',
+                                fillColor: local.estaCerca ? '#20c997' : '#fd7e14',
+                                fillOpacity: 0.2
+                              }}
+                            />
+                          )}
+                        </Fragment>
+                      );
+                    })}
+
+                    {pedido.latitud_entrega != null && pedido.longitud_entrega != null && (
                       <Marker
-                        position={[Number(local.latitud), Number(local.longitud)]}
-                        icon={iconoLocal(esSiguiente, local.retirado, local.todosRechazados)}
+                        position={[Number(pedido.latitud_entrega), Number(pedido.longitud_entrega)]}
+                        icon={iconoCliente}
                       >
                         <Popup>
-                          <strong>
-                            {esSiguiente
-                              ? `📍 Siguiente parada: ${local.nombre}`
-                              : local.todosRechazados
-                                ? `❌ Rechazado: ${local.nombre}`
-                                : local.retirado
-                                  ? `✅ Retirado: ${local.nombre}`
-                                  : `🏪 En espera: ${local.nombre}`}
-                          </strong>
+                          <strong>🏠 Destino final del Cliente</strong>
                           <br />
-                          {local.direccion && (
-                            <>
-                              <span>{local.direccion}</span>
-                              <br />
-                            </>
-                          )}
-                          {esSiguiente && local.distanciaMetros != null && (
-                            <span>Distancia: {local.distanciaMetros}m</span>
-                          )}
+                          {pedido.direccion_entrega || pedido.direccion_cliente}
                         </Popup>
                       </Marker>
+                    )}
 
-                      {esSiguiente && (
-                        <Circle
-                          center={[Number(local.latitud), Number(local.longitud)]}
-                          radius={UMBRAL_DISTANCIA_METROS}
-                          pathOptions={{
-                            color: local.estaCerca ? '#20c997' : '#fd7e14',
-                            fillColor: local.estaCerca ? '#20c997' : '#fd7e14',
-                            fillOpacity: 0.2
-                          }}
-                        />
-                      )}
-                    </Fragment>
-                  );
-                })}
-
-                {pedido.latitud_entrega != null && pedido.longitud_entrega != null && (
-                  <Marker
-                    position={[Number(pedido.latitud_entrega), Number(pedido.longitud_entrega)]}
-                    icon={iconoCliente}
-                  >
-                    <Popup>
-                      <strong>🏠 Destino final del Cliente</strong>
-                      <br />
-                      {pedido.direccion_entrega || pedido.direccion_cliente}
-                    </Popup>
-                  </Marker>
-                )}
-
-                {(rutaRestante.length > 0 || trayectoCoords.length >= 2) && (
-                  <Polyline
-                    positions={rutaRestante.length > 0 ? rutaRestante : trayectoCoords}
-                    pathOptions={{
-                      color: '#1c7ed6',
-                      weight: 5,
-                      opacity: 0.85,
-                      dashArray: '8, 12',
-                      lineCap: 'round'
-                    }}
-                  />
-                )}
-              </MapContainer>
-            </div>
-          ) : (
-            <div style={{ padding: '1rem', backgroundColor: '#fff3cd', borderRadius: '8px', color: '#856404', textAlign: 'center' }}>
-              ⏳ Cargando coordenadas guardadas en la base de datos...
-            </div>
-          )}
-        </section>
+                    {(rutaRestante.length > 0 || trayectoCoords.length >= 2) && (
+                      <Polyline
+                        positions={rutaRestante.length > 0 ? rutaRestante : trayectoCoords}
+                        pathOptions={{
+                          color: '#1c7ed6',
+                          weight: 5,
+                          opacity: 0.85,
+                          dashArray: '8, 12',
+                          lineCap: 'round'
+                        }}
+                      />
+                    )}
+                  </MapContainer>
+                </div>
+              ) : (
+                <div style={{ padding: '1rem', backgroundColor: '#fff3cd', borderRadius: '8px', color: '#856404', textAlign: 'center' }}>
+                  ⏳ Cargando coordenadas guardadas en la base de datos...
+                </div>
+              )}
+            </section>
+          </>
+        )}
 
 
 
@@ -692,7 +709,7 @@ export const DetallePedidoRepartidor = () => {
             <strong>Dirección del cliente:</strong> {pedido.direccion_entrega || pedido.direccion_cliente || 'No informada'}
           </p>
 
-          {pedido.telefono_cliente && (
+          {!esPedidoEntregado && pedido.telefono_cliente && (
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
               <a
                 href={`tel:${pedido.telefono_cliente}`}
@@ -903,159 +920,107 @@ export const DetallePedidoRepartidor = () => {
 
 
 
-        {/* ACCIONES Y ENTREGA OTP */}
-        <section style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
-          {(puedeIniciarRecorrido || puedeLiberar) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
-              {puedeIniciarRecorrido && (
-                <button
-                  onClick={handleSimularRecorrido}
-                  disabled={accionProcesando !== ''}
-                  style={{
-                    width: '100%',
-                    padding: '0.9rem',
-                    backgroundColor: accionProcesando === 'recorrido' ? '#868e96' : '#1c7ed6',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {accionProcesando === 'recorrido' ? '⏳ Iniciando recorrido...' : '🚴 Iniciar recorrido simulado'}
-                </button>
+        {!esPedidoEntregado && (
+          <>
+            {/* ACCIONES Y ENTREGA OTP */}
+            <section style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
+              {(puedeIniciarRecorrido || puedeLiberar) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
+                  {puedeIniciarRecorrido && (
+                    <button
+                      onClick={handleSimularRecorrido}
+                      disabled={accionProcesando !== ''}
+                      style={{
+                        width: '100%',
+                        padding: '0.9rem',
+                        backgroundColor: accionProcesando === 'recorrido' ? '#868e96' : '#1c7ed6',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {accionProcesando === 'recorrido' ? '⏳ Iniciando recorrido...' : '🚴 Iniciar recorrido simulado'}
+                    </button>
+                  )}
+
+                  {puedeLiberar && (
+                    <button
+                      onClick={handleLiberarPedido}
+                      disabled={accionProcesando !== ''}
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem',
+                        backgroundColor: accionProcesando === 'liberar' ? '#868e96' : '#e03131',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {accionProcesando === 'liberar' ? '⏳ Liberando...' : '❌ Rechazar / Liberar viaje'}
+                    </button>
+                  )}
+                </div>
               )}
 
-              {puedeLiberar && (
-                <button
-                  onClick={handleLiberarPedido}
-                  disabled={accionProcesando !== ''}
-                  style={{
-                    width: '100%',
-                    padding: '0.8rem',
-                    backgroundColor: accionProcesando === 'liberar' ? '#868e96' : '#e03131',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {accionProcesando === 'liberar' ? '⏳ Liberando...' : '❌ Rechazar / Liberar viaje'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {puedeEntregar && (
-            <div>
-              <h3>✅ Confirmar entrega</h3>
-              <p style={{ color: '#666' }}>Ingresá el código OTP proporcionado por el cliente.</p>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="Código OTP"
-                maxLength={8}
-                disabled={accionProcesando !== ''}
-                style={{ width: '100%', padding: '0.8rem', border: '1px solid #ced4da', borderRadius: '8px', marginBottom: '0.8rem', boxSizing: 'border-box' }}
-              />
-              <button
-                onClick={handleEntregar}
-                disabled={accionProcesando !== ''}
-                style={{
-                  width: '100%',
-                  padding: '0.9rem',
-                  backgroundColor: accionProcesando === 'entrega' ? '#868e96' : '#2b8a3e',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 'bold',
-                  cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {accionProcesando === 'entrega' ? '⏳ Confirmando entrega...' : '✅ Entregar pedido'}
-              </button>
-            </div>
-          )}
-
-          {estadoGlobalId === 3 && (
-            <div
-              style={{
-                padding: '1rem',
-                backgroundColor: '#d4edda',
-                color: '#155724',
-                borderRadius: '8px',
-                textAlign: 'center',
-                fontWeight: 'bold'
-              }}
-            >
-              ✅ Este pedido ya fue entregado.
-            </div>
-          )}
-        </section>
-
-
-
-        {/* 📦 SECCIÓN PRODUCTOS */}
-        <section style={{ marginBottom: '1.5rem' }}>
-          <h3>📦 Productos del pedido</h3>
-
-          {pedido.productos?.length ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-              {pedido.productos.map((producto) => {
-                const estadoDetalleId = Number(producto.IDestado_detalle || producto.IDestado_item || producto.IDestado);
-                const esCancelado = estadoDetalleId === 6;
-
-                return (
-                  <div
-                    key={producto.IDdetalle}
+              {puedeEntregar && (
+                <div>
+                  <h3>✅ Confirmar entrega</h3>
+                  <p style={{ color: '#666' }}>Ingresá el código OTP proporcionado por el cliente.</p>
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="Código OTP"
+                    maxLength={8}
+                    disabled={accionProcesando !== ''}
+                    style={{ width: '100%', padding: '0.8rem', border: '1px solid #ced4da', borderRadius: '8px', marginBottom: '0.8rem', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    onClick={handleEntregar}
+                    disabled={accionProcesando !== ''}
                     style={{
-                      padding: '0.8rem',
-                      backgroundColor: esCancelado ? '#fff5f5' : '#f8f9fa',
+                      width: '100%',
+                      padding: '0.9rem',
+                      backgroundColor: accionProcesando === 'entrega' ? '#868e96' : '#2b8a3e',
+                      color: '#fff',
+                      border: 'none',
                       borderRadius: '8px',
-                      border: esCancelado ? '1px solid #ffa8a8' : '1px solid #dee2e6',
-                      opacity: esCancelado ? 0.75 : 1
+                      fontWeight: 'bold',
+                      cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ textDecoration: esCancelado ? 'line-through' : 'none' }}>
-                        {producto.cantidad}x {producto.producto}
-                      </strong>
+                    {accionProcesando === 'entrega' ? '⏳ Confirmando entrega...' : '✅ Entregar pedido'}
+                  </button>
+                </div>
+              )}
 
-                      <span
-                        style={{
-                          fontSize: '0.85rem',
-                          fontWeight: 'bold',
-                          color: esCancelado ? '#e03131' : '#2b8a3e',
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '4px',
-                          backgroundColor: esCancelado ? '#ffe3e3' : '#e6fcf5'
-                        }}
-                      >
-                        {producto.estado_detalle || (esCancelado ? 'Cancelado / Rechazado' : 'En proceso')}
-                      </span>
-                    </div>
-
-                    <p style={{ margin: '0.3rem 0', color: '#555', fontSize: '0.9rem' }}>
-                      Local: {producto.local || 'No informado'}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p>No hay productos asociados.</p>
-          )}
-        </section>
-
-
+              {estadoGlobalId === 3 && (
+                <div
+                  style={{
+                    padding: '1rem',
+                    backgroundColor: '#d4edda',
+                    color: '#155724',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  ✅ Este pedido ya fue entregado.
+                </div>
+              )}
+            </section>
+          </>
+        )}
 
         {/* 💳 SECCIÓN DE INFORMACIÓN DE PAGO, COBRO Y LIQUIDACIÓN */}
         <section
           style={{
-            backgroundColor: esPagoEfectivo ? '#fff9db' : '#e7f5ff',
-            border: esPagoEfectivo ? '1px solid #ffe066' : '1px solid #a5d8ff',
+            backgroundColor: '#fff',
+            border: '1px solid #dee2e6',
             borderRadius: '8px',
             padding: '1rem',
             marginBottom: '1.5rem'
@@ -1064,22 +1029,22 @@ export const DetallePedidoRepartidor = () => {
           <h3
             style={{
               marginTop: 0,
-              color: esPagoEfectivo ? '#f59f00' : '#1c7ed6',
+              color: '#212529',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem'
             }}
           >
-            💳 Resumen Financiero y Cobro
+            📦 Productos y resumen del viaje
           </h3>
 
           {/* Resumen principal de montos */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '1rem',
-              marginBottom: '1.2rem'
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '0.65rem',
+              marginBottom: '0.8rem'
             }}
           >
             <div>
@@ -1090,71 +1055,124 @@ export const DetallePedidoRepartidor = () => {
             </div>
 
             <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Ganancia Envío (Para ti):</span>
+              <span style={{ fontSize: '0.85rem', color: '#666' }}>Tu parte del envío:</span>
               <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.2rem', color: '#2b8a3e' }}>
-                ${Number(pedido.ganancia_repartidor || (pedido.costo_envio * 0.85) || 0).toLocaleString('es-AR')}
+                ${formatoMonto(gananciaRepartidor)}
               </p>
             </div>
 
             <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Costo de Envío Total:</span>
+              <span style={{ fontSize: '0.85rem', color: '#666' }}>Costo total del envío:</span>
               <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.1rem', color: '#1c7ed6' }}>
-                ${Number(pedido.costo_envio || 0).toLocaleString('es-AR')}
+                ${formatoMonto(costoEnvio)}
               </p>
             </div>
 
             <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Total de la Orden:</span>
+              <span style={{ fontSize: '0.85rem', color: '#666' }}>Total del pedido:</span>
               <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.2rem', color: '#333' }}>
-                ${totalOrdenCalculado.toLocaleString('es-AR')}
+                ${formatoMonto(totalOrdenCalculado)}
               </p>
             </div>
           </div>
 
-          {/* 💵 DESGLOSE DE DISTRIBUCIÓN DE EFECTIVO O PAGO DIGITAL */}
-          {esPagoEfectivo ? (
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', border: '1px solid #ffe066' }}>
-              <p style={{ margin: '0 0 0.8rem 0', fontWeight: 'bold', color: '#d9480f', fontSize: '1rem' }}>
-                💵 Debes cobrar en mano al cliente: <u>${totalOrdenCalculado.toLocaleString('es-AR')}</u>
-              </p>
-
-              <div style={{ fontSize: '0.9rem', color: '#444', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: '0.3rem' }}>
-                  <span>🏪 Entregar al Local (Comida):</span>
-                  <strong>
-                    ${Number(
-                      pedido.ganancia_local_total ??
-                      pedido.subtotal ??
-                      pedido.precio ??
-                      0
-                    ).toLocaleString('es-AR')}
-                  </strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #eee', paddingBottom: '0.3rem' }}>
-                  <span>📱 Retención / Ganancia App:</span>
-                  <strong>${(Number(pedido.costo_envio || 0) - Number(pedido.ganancia_repartidor || (pedido.costo_envio * 0.85) || 0)).toLocaleString('es-AR')}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2b8a3e', fontWeight: 'bold', paddingTop: '0.2rem' }}>
-                  <span>🚴 Tu ganancia neta (conservas):</span>
-                  <span>${Number(pedido.ganancia_repartidor || (pedido.costo_envio * 0.85) || 0).toLocaleString('es-AR')}</span>
-                </div>
-              </div>
+          <div style={{ borderTop: '1px solid #dee2e6', borderBottom: '1px solid #dee2e6', padding: '0.55rem 0', marginBottom: '0.6rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+              <h4 style={{ margin: 0 }}>Productos por local</h4>
+              <span style={{ color: '#666', fontSize: '0.8rem' }}>{pedido.productos?.length || 0} productos</span>
             </div>
-          ) : (
-            <div style={{ padding: '0.8rem', backgroundColor: '#d3f9d8', border: '1px solid #8ce99a', borderRadius: '6px', color: '#2b8a3e', fontSize: '0.9rem' }}>
-              ✅ <strong>PAGO DIGITAL REGISTRADO:</strong> El cliente ya abonó electrónicamente.
-              <br />
-              <strong>NO cobres dinero al cliente.</strong> Tu ganancia por este envío (${Number(pedido.ganancia_repartidor || (pedido.costo_envio * 0.85) || 0).toLocaleString('es-AR')}) se acreditará automáticamente en tu billetera/saldo de la App.
+            {localesInvolucrados.length ? localesInvolucrados.map((local) => {
+              const liquidacion = pedido.liquidacion_locales?.find(
+                (item) => Number(item.IDlocal) === Number(local.id)
+              );
+              const importeBruto = Number(liquidacion?.importe_bruto ?? local.items.reduce((total, producto) => {
+                const estado = Number(producto.IDestado_detalle || producto.IDestado_item || producto.IDestado);
+                return estado === 6 ? total : total + Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0);
+              }, 0));
+
+              return (
+                <div key={`productos-local-${local.id}`} style={{ borderBottom: '1px solid #f1f3f5', padding: '0.45rem 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ minWidth: 0 }}>
+                      <strong>{local.nombre || `Local #${local.id}`}</strong>
+                      <span style={{ marginLeft: '0.45rem', color: '#777', fontSize: '0.8rem' }}>{local.items.length} ítems</span>
+                    </span>
+                    <strong style={{ whiteSpace: 'nowrap' }}>${formatoMonto(importeBruto)}</strong>
+                  </div>
+                  <div style={{ display: 'grid', gap: '0.35rem', padding: '0.5rem 0.5rem 0.1rem 1.3rem' }}>
+                    {local.items.map((producto, index) => {
+                      const estado = Number(producto.IDestado_detalle || producto.IDestado_item || producto.IDestado);
+                      const esCancelado = estado === 6;
+                      const importeItem = Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0);
+
+                      return (
+                        <div key={producto.IDdetalle || `${local.id}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem', opacity: esCancelado ? 0.65 : 1, fontSize: '0.88rem' }}>
+                          <span>
+                            <strong style={{ textDecoration: esCancelado ? 'line-through' : 'none' }}>{producto.cantidad}x {producto.producto}</strong>
+                            <span style={{ marginLeft: '0.4rem', color: esCancelado ? '#c92a2a' : '#666', fontSize: '0.78rem' }}>
+                              {producto.estado_detalle || (esCancelado ? 'Cancelado / Rechazado' : 'En proceso')}
+                            </span>
+                          </span>
+                          {esPedidoEntregado && <span style={{ whiteSpace: 'nowrap' }}>${formatoMonto(importeItem)}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }) : pedido.productos?.length ? pedido.productos.map((producto, index) => (
+              <div key={producto.IDdetalle || index} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.35rem 0', fontSize: '0.88rem' }}>
+                <span><strong>{producto.cantidad}x {producto.producto}</strong> <span style={{ color: '#777' }}>({producto.local || 'Local no informado'})</span></span>
+                {esPedidoEntregado && <span style={{ whiteSpace: 'nowrap' }}>${formatoMonto(Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0))}</span>}
+              </div>
+            )) : <p style={{ margin: '0.3rem 0', color: '#777', fontSize: '0.88rem' }}>No hay productos asociados.</p>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.35rem 1rem', padding: '0.55rem 0', borderBottom: '1px solid #dee2e6', marginBottom: '0.6rem', fontSize: '0.88rem' }}>
+            <span>Parte del envío para la plataforma</span>
+            <strong>${formatoMonto(Math.max(0, costoEnvio - gananciaRepartidor))}</strong>
+          </div>
+
+          {esPedidoEntregado && esPagoEfectivo && (
+            <div style={{ padding: '0.4rem 0 0.7rem', borderBottom: '1px solid #dee2e6', marginBottom: '0.7rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.45rem' }}>
+                <strong>Efectivo a rendir</strong>
+                <strong style={{ color: '#c92a2a' }}>${formatoMonto(montoARendir)}</strong>
+              </div>
+              <details style={{ fontSize: '0.84rem' }}>
+                <summary style={{ cursor: 'pointer', color: '#555' }}>Ver composición del efectivo a rendir</summary>
+                <div style={{ display: 'grid', gap: '0.3rem', padding: '0.45rem 0 0 1rem' }}>
+                  {pedido.liquidacion_locales?.map((local) => (
+                    <div key={`rendir-${local.IDlocal}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                      <span>Productos para {local.nombre || `Local #${local.IDlocal}`}</span>
+                      <span>${formatoMonto(local.importe_bruto)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <span>Retención de plataforma del envío</span>
+                    <span>${formatoMonto(Math.max(0, costoEnvio - gananciaRepartidor))}</span>
+                  </div>
+                </div>
+              </details>
             </div>
           )}
+
+          {/* 💵 DESGLOSE DE DISTRIBUCIÓN DE EFECTIVO O PAGO DIGITAL */}
+          {!esPedidoEntregado && (esPagoEfectivo ? (
+            <div style={{ backgroundColor: '#fff9db', padding: '0.7rem', borderRadius: '6px', marginTop: '0.7rem' }}>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#d9480f', fontSize: '0.92rem' }}>
+                💵 Cobro en efectivo: cobrar al cliente el total indicado arriba.
+              </p>
+            </div>
+          ) : (
+            <div style={{ padding: '0.65rem', backgroundColor: '#d3f9d8', borderRadius: '6px', color: '#2b8a3e', fontSize: '0.85rem', marginTop: '0.7rem' }}>
+              ✅ <strong>PAGO DIGITAL REGISTRADO:</strong> El cliente ya abonó electrónicamente. <strong>NO cobres dinero al cliente.</strong> Tu ganancia por el envío se acreditará automáticamente en tu billetera/saldo de la App.
+            </div>
+          ))}
         </section>
 
-
-
         {/* MODAL CONFIRMACIÓN RETIRO */}
-        {localAConfirmar && (
+        {!esPedidoEntregado && localAConfirmar && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', maxWidth: '450px', width: '90%', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
               <h3 style={{ marginTop: 0, color: '#1c7ed6' }}>📦 Confirmar Retiro de Productos</h3>

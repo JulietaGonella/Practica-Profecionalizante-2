@@ -2,6 +2,8 @@ import bcrypt from 'bcrypt';
 import { pool } from '../config/db.js';
 import { COMMISSIONS } from '../config/commissions.js';
 
+const FECHA_INICIO_DATOS_COMISION = '2026-10-01 14:54:50';
+
 // ========================================== 
 // FUNCIONES AUXILIARES Y SERVICIOS DE CREACIÓN
 // ==========================================
@@ -337,8 +339,8 @@ export const getLocalesAdminService = async () => {
 export const getDashboardMetricsService = async (filtros = {}) => {
   const { fechaInicio, fechaFin, categoria, estado, tipoPago } = filtros;
 
-  const whereClauses = [];
-  const params = [];
+  const whereClauses = ['o.creado_en >= ?'];
+  const params = [FECHA_INICIO_DATOS_COMISION];
 
   // Filtro por fecha inicial
   if (fechaInicio) {
@@ -377,6 +379,21 @@ export const getDashboardMetricsService = async (filtros = {}) => {
   }
 
   const whereSQL = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  const categoriaFiltrada = Boolean(categoria && categoria !== 'todas');
+  const comisionProductosPorOrdenSQL = `
+    (
+      SELECT COALESCE(SUM(do_ingreso.comision_plataforma_item), 0)
+      FROM detalle_orden do_ingreso
+      JOIN productos p_ingreso ON do_ingreso.IDproducto = p_ingreso.id
+      ${categoriaFiltrada ? 'JOIN categorias_productos cp_ingreso ON p_ingreso.IDcategoria = cp_ingreso.id' : ''}
+      WHERE do_ingreso.IDorden = o.id
+      ${categoriaFiltrada ? 'AND LOWER(cp_ingreso.nombre) = LOWER(?)' : ''}
+    )
+  `;
+  const ingresoEnvioPorOrdenSQL = categoriaFiltrada
+    ? '0'
+    : `(o.costo_envio * ${COMMISSIONS.DELIVERY_MARGIN_PERCENTAGE / 100})`;
+  const parametrosKpis = categoriaFiltrada ? [categoria, ...params] : params;
 
   // 0. Obtener catálogo dinámico de la tabla categorias_productos para el filtro
   const [categoriasList] = await pool.query(`
@@ -394,7 +411,7 @@ export const getDashboardMetricsService = async (filtros = {}) => {
       COALESCE(SUM(
         CASE
           WHEN o.IDestado = 3 AND o.IDestado_pago = 2
-          THEN o.ingreso_neto_plataforma
+          THEN ${comisionProductosPorOrdenSQL} + ${ingresoEnvioPorOrdenSQL}
           ELSE 0
         END
       ), 0) AS ingresosPlataforma
@@ -402,7 +419,7 @@ export const getDashboardMetricsService = async (filtros = {}) => {
     LEFT JOIN estados e ON o.IDestado = e.id
     LEFT JOIN metodos_pago mp ON o.IDmetodo_pago = mp.id
     ${whereSQL}
-  `, params);
+  `, parametrosKpis);
 
   // 2. Pedidos por Categoría (únicamente asociadas a categorias_productos)
   const [pedidosPorCategoriaRaw] = await pool.query(`

@@ -1,11 +1,12 @@
+// src/components/Cliente/NavbarCliente.jsx
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LogoutButton } from '../LogoutButton';
+import { NotificationMenu } from './NotificationMenu'; // 👈 Importar
 
 export const NavbarCliente = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Función para determinar si el botón coincide con la ruta activa
   const esActivo = (path) => {
     if (path === '/cliente/inicio') {
       return location.pathname === '/cliente/inicio';
@@ -40,7 +41,7 @@ export const NavbarCliente = () => {
       gap: '10px'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-        <h2 
+        <h2
           onClick={() => navigate('/cliente/inicio')}
           style={{ margin: 0, fontSize: '1.25rem', color: '#1c7ed6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
@@ -60,10 +61,17 @@ export const NavbarCliente = () => {
           <button style={getButtonStyle('/cliente/perfil')} onClick={() => navigate('/cliente/perfil')}>
             👤 Mi Perfil
           </button>
+          <button style={getButtonStyle('/cliente/tablero')} onClick={() => navigate('/cliente/tablero')}>
+            📊 Mi Tablero
+          </button>
         </nav>
       </div>
 
-      <LogoutButton />
+      {/* Contenedor para Notificaciones + Logout */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <NotificationMenu /> {/* 👈 Añadido aquí */}
+        <LogoutButton />
+      </div>
     </header>
   );
 };

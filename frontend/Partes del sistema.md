@@ -60,7 +60,28 @@ Para que tu profesor apruebe la sección de UI/UX, documenta el resultado mencio
 
 
 
+Para un flujo básico sin sobrecargar de alertas, estas son las notificaciones estrictamente esenciales para cada rol:
 
+---
 
+### 2. Local
 
-2. Reparto de los Fondos (¿Quién se queda con qué?)De acuerdo con las reglas de negocio y los archivos del sistema:   Repartidor:Recibe la mayor parte del costo de envío. Según la configuración de la plataforma, el repartidor obtiene habitualmente el 85% del costo de envío.Local / Comercio:Recibe el valor de los productos vendidos menos la comisión de la plataforma. Si la plataforma cobra, por ejemplo, un 10% de comisión, el local se queda con el 90% del subtotal de sus productos.La Plataforma / Sistema (Tus verdaderos ingresos netos):Comisión por Venta al Local: porcentaje retenido del subtotal de productos (ej. 10%).Margen/Comisión sobre el Envío: porcentaje retenido del costo de envío (ej. 15%).$$\text{Ingreso Neto Sistema} = (\text{Subtotal Productos} \times \% \text{Comisión Local}) + (\text{Costo de Envío} \times \% \text{Margen Envío})$$
+El objetivo es acelerar la preparación y gestionar excepciones.
+
+* **Nuevo Pedido Entrante:** Alerta sonora/visual crítica para que el local comience a preparar la orden de inmediato.
+* **Repartidor Asignado / En Arribo:** Le avisa cuándo el repartidor está cerca para tener el paquete listo en mostrador.
+* **Pedido Cancelado por el Cliente:** Notifica inmediatamente para detener la preparación de la comida/producto.
+
+---
+
+### 3. Repartidor
+
+El objetivo es coordinar la logística de retiro y entrega.
+
+* **Oferta / Asignación de Pedido:** Le avisa que tiene un nuevo viaje disponible para aceptar o recoger.
+* **Pedido Listo para Retiro:** Le indica que puede pasar a buscar la orden por el local sin perder tiempo esperando.
+* **Cancelación de Pedido:** Le notifica si el pedido se anuló mientras iba en camino para evitar trayectos innecesarios.
+
+---
+
+¿Te gustaría que definamos también el canal por el que se enviaría cada una (por ejemplo, *PushNotification*, *SMS* o *Email*) o la estructura de los mensajes?

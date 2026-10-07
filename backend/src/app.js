@@ -14,6 +14,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import clienteRoutes from './routes/clientes.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import categoriasComercialesRoutes from './routes/categoriasComerciales.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/clientes', clienteRoutes);
 app.use('/admin', adminRoutes);
 app.use('/categorias-comerciales', categoriasComercialesRoutes);
+app.use('/notificaciones', notificationsRoutes);
 app.use('/uploads', express.static('uploads'));
 
 // Manejo de rutas inexistentes (404)

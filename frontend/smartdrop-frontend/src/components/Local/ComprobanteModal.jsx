@@ -21,16 +21,14 @@ export const ComprobanteModal = ({ orden, onClose }) => {
       const totalItemBruto = precioUnitario * cantidad;
 
       // Ganancia Neta del Local
-      const gananciaItemNeto =
-        prod.ganancia_local_item !== undefined
-          ? Number(prod.ganancia_local_item)
-          : totalItemBruto * 0.90; // Fallback 10% comisión
+      const gananciaItemNeto = prod.ganancia_local_item !== undefined
+        ? Number(prod.ganancia_local_item)
+        : Number((totalItemBruto * 0.90).toFixed(2));
 
       // Comisión retenida por la Plataforma/Sistema
-      const comisionItem =
-        prod.comision_plataforma_item !== undefined
-          ? Number(prod.comision_plataforma_item)
-          : totalItemBruto - gananciaItemNeto;
+      const comisionItem = prod.comision_plataforma_item !== undefined
+        ? Number(prod.comision_plataforma_item)
+        : Number((totalItemBruto - gananciaItemNeto).toFixed(2));
 
       acc.subtotalBruto += totalItemBruto;
       acc.comisionPlataforma += comisionItem;
@@ -91,10 +89,9 @@ export const ComprobanteModal = ({ orden, onClose }) => {
                 const precioUnitario = Number(prod.precio_unitario || prod.precio || 0);
                 const totalBrutoItem = precioUnitario * cantidad;
 
-                const gananciaNetoItem =
-                  prod.ganancia_local_item !== undefined
-                    ? Number(prod.ganancia_local_item)
-                    : totalBrutoItem * 0.90;
+                const gananciaNetoItem = prod.ganancia_local_item !== undefined
+                  ? Number(prod.ganancia_local_item)
+                  : Number((totalBrutoItem * 0.90).toFixed(2));
 
                 return (
                   <div key={idx} className="ticket-item">

@@ -1,14 +1,17 @@
 // src/services/repartidoresDashboard.service.js
 import { pool } from '../config/db.js';
 
+const FECHA_INICIO_GESTION_REPARTIDORES = '2026-10-01 14:54:00';
+
 export const getFlotaDashboardService = async (filtros = {}) => {
   const { fechaInicio, fechaFin, repartidorFiltro, estado } = filtros;
 
-  // 1. Cláusulas BASE (Solo fechas, estado de pedido y restricción Entregados/Cancelados)
+  // 1. Cláusulas BASE (Filtra por fecha corte inicial, pedidos Entregados/Cancelados)
   const whereClausesBase = [
-    "o.IDestado IN (3, 6)" // 👈 Filtra solo pedidos Entregados (3) o Cancelados (6)
+    "o.creado_en >= ?",  // 👈 Nuevo filtro obligatorio por fecha y hora de inicio
+    "o.IDestado IN (3, 6)"
   ];
-  const paramsBase = [];
+  const paramsBase = [FECHA_INICIO_GESTION_REPARTIDORES]; // 👈 Pasa la fecha límite como primer parámetro
 
   if (fechaInicio) {
     whereClausesBase.push("o.creado_en >= ?");
@@ -131,41 +134,113 @@ export const getFlotaDashboardService = async (filtros = {}) => {
   };
 };
 
-// Tablero Vista Individual de Repartidor
-export const getRepartidorIndividualDashboardService = async (repartidorId) => {
-  const [[driverInfo]] = await pool.query(`
-    SELECT 
-      r.id,
-      u.username,
-      COUNT(o.id) AS pedidos_asignados,
-      SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) AS pedidos_entregados,
-      COALESCE(SUM(o.distancia_km), 0) AS total_km_recorridos
-    FROM repartidores r
-    JOIN usuarios u ON r.IDusuario = u.id
-    LEFT JOIN ordenes o ON r.id = o.IDrepartidor
-    WHERE r.id = ?
-    GROUP BY r.id, u.username
-  `, [repartidorId]);
+const FECHA_CORTE = '2026-10-01 00:00:00';
 
-  if (!driverInfo) throw new Error('Repartidor no encontrado');
+export const getMiTableroRepartidorService = async (IDusuario, filtros = {}) => {
+  const { fechaInicio, fechaFin } = filtros;
 
-  const [historialPedidos] = await pool.query(`
-    SELECT 
+  // 1. Obtener ID del repartidor
+  const [[repartidor]] = await pool.query(
+    `SELECT r.id, u.username, u.nombre, u.apellido
+     FROM repartidores r
+     JOIN usuarios u ON r.IDusuario = u.id
+     WHERE r.IDusuario = ?`,
+    [IDusuario]
+  );
+
+  if (!repartidor) {
+    throw new Error('El usuario no está registrado como repartidor');
+  }
+
+  const repartidorId = repartidor.id;
+  const nombreCompleto = [repartidor.nombre, repartidor.apellido].filter(Boolean).join(' ') || repartidor.username;
+
+  // 1. Cláusula WHERE: Filtrar ÚNICAMENTE por pedidos entregados (IDestado = 3)
+  const whereClauses = [
+    'o.IDrepartidor = ?',
+    'o.IDestado = 3', // 👈 Solamente pedidos entregados
+    'o.creado_en >= ?'
+  ];
+  const params = [repartidorId, FECHA_CORTE];
+
+  if (fechaInicio) {
+    whereClauses.push('o.creado_en >= ?');
+    params.push(`${fechaInicio} 00:00:00`);
+  }
+  if (fechaFin) {
+    whereClauses.push('o.creado_en <= ?');
+    params.push(`${fechaFin} 23:59:59`);
+  }
+
+  const whereSQL = `WHERE ${whereClauses.join(' AND ')}`;
+
+  // 3. KPIs del Repartidor (Agregado SUM(o.ganancia_repartidor))
+  const [[kpis]] = await pool.query(
+    `SELECT 
+      COALESCE(SUM(o.ganancia_repartidor), 0) AS ingresosTotales,
+      COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS pedidosEntregados,
+      COALESCE(SUM(o.distancia_km), 0) AS kmRecorridos
+     FROM ordenes o
+     ${whereSQL}`,
+    params
+  );
+
+  // 4. Gráfico: Cantidad de pedidos por fecha y estado
+  const [graficoRows] = await pool.query(
+    `SELECT 
+      DATE(o.creado_en) AS fecha,
+      COUNT(o.id) AS Entregado
+     FROM ordenes o
+     ${whereSQL}
+     GROUP BY DATE(o.creado_en)
+     ORDER BY fecha ASC`,
+    params
+  );
+
+  // 5. Tabla de pedidos repartidos
+  const [pedidos] = await pool.query(
+    `SELECT 
       o.id AS orden_id,
-      o.total,
-      (o.costo_envio * 0.85) AS ganancia_estimada_repartidor,
-      o.distancia_km,
-      o.puntaje_cliente,
-      e.nombre AS estado,
-      o.tiempo_estimado_min
-    FROM ordenes o
-    JOIN estados e ON o.IDestado = e.id
-    WHERE o.IDrepartidor = ?
-    ORDER BY o.id DESC
-  `, [repartidorId]);
+      o.creado_en AS fecha_clave,
+      COALESCE(o.distancia_km, 0) AS distancia_km,
+      COALESCE(o.ganancia_repartidor, 0) AS ganancia_repartidor,
+      o.IDestado
+     FROM ordenes o
+     ${whereSQL}
+     ORDER BY o.id DESC`,
+    params
+  );
+
+  // 6. Puntos para el mapa
+  const [mapaPedidos] = await pool.query(
+    `SELECT 
+      o.latitud_entrega AS latitud,
+      o.longitud_entrega AS longitud,
+      COUNT(o.id) AS cantidad_pedidos
+     FROM ordenes o
+     ${whereSQL}
+       AND o.latitud_entrega IS NOT NULL 
+       AND o.longitud_entrega IS NOT NULL
+     GROUP BY o.latitud_entrega, o.longitud_entrega`,
+    params
+  );
 
   return {
-    driver: driverInfo,
-    historial_pedidos: historialPedidos
+    repartidor: {
+      id: repartidor.id,
+      username: repartidor.username,
+      nombre: nombreCompleto
+    },
+    kpis: {
+      ingresosTotales: Number(kpis?.ingresosTotales || 0),
+      pedidosEntregados: Number(kpis?.pedidosEntregados || 0),
+      kmRecorridos: Number(kpis?.kmRecorridos || 0)
+    },
+    pedidosPorFechaEstado: graficoRows.map(row => ({
+      fecha: row.fecha,
+      Entregado: Number(row.Entregado || 0)
+    })),
+    pedidos,
+    mapaPedidos
   };
 };

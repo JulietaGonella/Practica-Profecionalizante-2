@@ -807,7 +807,7 @@ export const PanelRepartidor = () => {
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
-                {historialVisible.map((pedido) => renderCardPedido(pedido, 'historial', false))}
+                {historialVisible.map((pedido) => renderCardPedido(pedido, 'historial', true))}
               </div>
 
               {historialPedidos.length > 3 && (

@@ -1,6 +1,7 @@
 import { pool } from '../config/db.js';
 import { generarEtapasRuta } from './ai.service.js';
 import { evaluarEstadoDocumentación } from './admin.service.js';
+import { createNotificationService } from './notifications.service.js';
 
 export const simularRecorrido = async (req, res) => {
   try {
@@ -68,6 +69,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
         o.id, 
         o.IDestado, 
         o.IDrepartidor, 
+        o.IDcliente,
         COALESCE(o.latitud_entrega, dc.latitud, c.latitud) AS cliente_lat,
         COALESCE(o.longitud_entrega, dc.longitud, c.longitud) AS cliente_lng
       FROM ordenes o
@@ -82,7 +84,7 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
       simulacionesActivas.delete(IDrepartidor);
       throw new Error(`La orden con ID ${IDorden} no existe`);
     }
-    
+
     if (!orden.IDrepartidor || Number(orden.IDrepartidor) !== Number(IDrepartidor)) {
       simulacionesActivas.delete(IDrepartidor);
       throw new Error(`La orden no está asignada al repartidor #${IDrepartidor}`);
@@ -133,8 +135,22 @@ export const simularRecorridoOrdenService = async (IDorden, IDrepartidor) => {
       .map((e) => locales.find((l) => l.id === e.localId))
       .filter(Boolean);
 
+    // Actualizar estado de la orden a En Camino (5)
     await pool.query(`UPDATE ordenes SET IDestado = 5 WHERE id = ?`, [IDorden]);
 
+    // 🔔 Disparar notificación al cliente
+    if (orden?.IDcliente) {
+      try {
+        await createNotificationService(
+          orden.IDcliente,
+          IDorden,
+          '¡Tu pedido está en camino!',
+          `El repartidor ya lleva tu pedido #${IDorden} hacia tu ubicación.`
+        );
+      } catch (notifError) {
+        console.error('⚠️ Error no bloqueante al enviar notificación en simulación:', notifError.message);
+      }
+    }
     // 3️⃣ BUCLE DE SIMULACIÓN EN SEGUNDO PLANO
     (async () => {
       try {

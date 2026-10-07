@@ -58,9 +58,9 @@ export const getAvailableOrders = async (req, res) => {
 export const getLocalOrders = async (req, res) => {
   try {
     const IDusuario = req.user.id;
-    const { estado } = req.query; // 👈 OBTENER EL QUERY PARAMETER
+    const { estado, soloActivos } = req.query;
 
-    const orders = await getLocalOrdersService(IDusuario, estado);
+    const orders = await getLocalOrdersService(IDusuario, estado, soloActivos === 'true');
     res.json(orders);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -249,8 +249,15 @@ export const simularPagoExitoso = async (req, res) => {
 export const searchLocalOrders = async (req, res) => {
   try {
     const IDusuario = req.user.id;
-    const { busqueda, fechaInicio, fechaFin, estado } = req.query;
-    const orders = await searchLocalOrdersService(IDusuario, { busqueda, fechaInicio, fechaFin, estado });
+    const { busqueda, fechaInicio, fechaFin, estado, soloHistorial, soloActivos } = req.query;
+    const orders = await searchLocalOrdersService(IDusuario, {
+      busqueda,
+      fechaInicio,
+      fechaFin,
+      estado,
+      soloHistorial: soloHistorial === 'true',
+      soloActivos: soloActivos === 'true'
+    });
     res.json(orders);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -261,7 +268,7 @@ export const liberarPedidoRepartidor = async (req, res) => {
   try {
     const { id } = req.params;
     const IDusuario = req.user.id;
-    const { motivo } = req.body;
+    const { motivo } = req.body || {};
 
     const result = await liberarPedidoRepartidorService(id, IDusuario, motivo);
     res.json(result);

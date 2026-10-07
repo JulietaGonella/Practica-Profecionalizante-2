@@ -34,9 +34,8 @@ export const getPedidoAsignado = async (ordenId) => {
   return data;
 };
 
-// Añadir en repartidorService.js si no lo tienes:
-export const actualizarUbicacionRepartidor = async (latitud, longitud) => {
-  const { data } = await api.put('/orders/ubicacion', { latitud, longitud });
+export const getOrderTracking = async (ordenId) => {
+  const { data } = await api.get(`/orders/${ordenId}/tracking`);
   return data;
 };
 
@@ -65,21 +64,20 @@ export const seleccionarVehiculoActivo = async (IDvehiculo) => {
   return data;
 };
 
-// api/repartidorService.js
-export const getMiPerfilRepartidor = async () => {
-  const response = await api.get('/repartidores/me/perfil');
-  return response.data;
-};
-
-export const liberarPedidoRepartidor = async (ordenId, motivo = '') => {
-  const { data } = await api.put(`/orders/${ordenId}/liberar`, { motivo });
+export const actualizarVehiculoExistente = async (vehiculoId, formData) => {
+  const { data } = await api.put(`/repartidores/vehiculos/${vehiculoId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
   return data;
 };
 
-export const confirmarRetiroLocal = async (ordenId, payload) => {
-  // payload: { IDlocal }
-  const response = await api.put(`/orders/${ordenId}/confirmar-retiro`, payload);
-  return response.data;
+// 🟢 Funciones agregadas requeridas por PanelRepartidor.jsx:
+
+export const getMiPerfilRepartidor = async () => {
+  const { data } = await api.get('/repartidores/me/perfil');
+  return data;
 };
 
 export const getResumenGananciasHoy = async () => {
@@ -87,17 +85,19 @@ export const getResumenGananciasHoy = async () => {
   return data;
 };
 
-export const actualizarVehiculoExistente = async (vehiculoId, formData) => {
-  const response = await api.put(`/repartidores/vehiculos/${vehiculoId}`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    }
-  });
-  return response.data;
-};
-
-// En tu archivo de servicios del repartidor (ej: repartidorService.js)
 export const solicitarBajaVehiculo = async (vehiculoId) => {
   const { data } = await api.put(`/repartidores/vehiculos/${vehiculoId}/solicitar-baja`);
+  return data;
+};
+
+// Agrega esto al final de src/api/repartidorService.js
+
+export const liberarPedidoRepartidor = async (ordenId) => {
+  const { data } = await api.put(`/orders/${ordenId}/liberar`);
+  return data;
+};
+
+export const confirmarRetiroLocal = async (ordenId, bodyData) => {
+  const { data } = await api.put(`/orders/${ordenId}/confirmar-retiro`, bodyData);
   return data;
 };
