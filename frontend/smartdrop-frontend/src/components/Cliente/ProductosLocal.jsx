@@ -48,11 +48,7 @@ export const ProductosLocal = ({ locales, productos }) => {
   const categoriasComerciales = useMemo(() => {
     const listaCategorias = productosDelLocal
       .map((p) => getCategoriaComercial(p))
-      .filter(
-        (cat) =>
-          Boolean(cat) &&
-          cat !== 'Sin Categoría'
-      );
+      .filter(Boolean);
 
     return [
       'todas',
@@ -60,7 +56,7 @@ export const ProductosLocal = ({ locales, productos }) => {
     ];
   }, [productosDelLocal]);
 
-  // 3️⃣ Filtrar productos
+  // 3️⃣ Filtrar productos por búsqueda por texto y filtro desplegable
   const productosFiltrados = useMemo(() => {
     return productosDelLocal.filter((producto) => {
       const coincideNombre = producto.nombre
@@ -69,8 +65,7 @@ export const ProductosLocal = ({ locales, productos }) => {
           busqueda.toLowerCase().trim()
         );
 
-      const catComercial =
-        getCategoriaComercial(producto);
+      const catComercial = getCategoriaComercial(producto);
 
       const coincideCategoria =
         categoriaSeleccionada === 'todas' ||
@@ -83,6 +78,21 @@ export const ProductosLocal = ({ locales, productos }) => {
     busqueda,
     categoriaSeleccionada
   ]);
+
+  // 4️⃣ Agrupar productos filtrados por categoría comercial
+  const productosAgrupados = useMemo(() => {
+    const grupos = {};
+
+    productosFiltrados.forEach((producto) => {
+      const cat = getCategoriaComercial(producto);
+      if (!grupos[cat]) {
+        grupos[cat] = [];
+      }
+      grupos[cat].push(producto);
+    });
+
+    return grupos;
+  }, [productosFiltrados]);
 
   // ⏳ Cargando
   if (cargandoLocales || cargandoProductos) {
@@ -119,7 +129,6 @@ export const ProductosLocal = ({ locales, productos }) => {
 
   return (
     <div>
-
       {/* Banner del Local */}
       <div
         style={{
@@ -247,8 +256,8 @@ export const ProductosLocal = ({ locales, productos }) => {
         )}
       </div>
 
-      {/* Listado de Productos */}
-      {productosFiltrados.length === 0 ? (
+      {/* Listado de Productos Agrupados por Categoría */}
+      {Object.keys(productosAgrupados).length === 0 ? (
         <p
           style={{
             textAlign: 'center',
@@ -260,133 +269,156 @@ export const ProductosLocal = ({ locales, productos }) => {
           con los filtros aplicados.
         </p>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fill, minmax(250px, 1fr))',
-            gap: '1rem'
-          }}
-        >
-          {productosFiltrados.map((producto) => {
-            const catNombre =
-              getCategoriaComercial(producto);
-
-            // 🖼️ Construir URL completa de la imagen
-            const imagenCompleta =
-              producto.imagen_url
-                ? `${API_URL}${producto.imagen_url}`
-                : null;
-
-            return (
-              <div
-                key={producto.id}
+        Object.entries(productosAgrupados).map(([categoria, prods]) => (
+          <div
+            key={categoria}
+            style={{ marginBottom: '2.5rem' }}
+          >
+            {/* Encabezado de la Categoría Comercial */}
+            <h3
+              style={{
+                color: '#2c3e50',
+                borderBottom: '2px solid #e9ecef',
+                paddingBottom: '0.5rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              🏷️ {categoria}
+              <span
                 style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  opacity: estaAbiertoPorHorario
-                    ? 1
-                    : 0.7,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between'
+                  fontSize: '0.85rem',
+                  color: '#6c757d',
+                  fontWeight: 'normal'
                 }}
               >
-                <div>
+                ({prods.length} {prods.length === 1 ? 'producto' : 'productos'})
+              </span>
+            </h3>
 
-                  {/* 🖼️ Imagen del producto */}
-                  {imagenCompleta && (
-                    <img
-                      src={imagenCompleta}
-                      alt={producto.nombre}
-                      style={{
-                        width: '100%',
-                        height: '150px',
-                        objectFit: 'cover',
-                        borderRadius: '6px',
-                        marginBottom: '0.8rem'
-                      }}
-                    />
-                  )}
+            {/* Grid de Productos dentro de la Categoría */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fill, minmax(250px, 1fr))',
+                gap: '1rem'
+              }}
+            >
+              {prods.map((producto) => {
+                const imagenCompleta = producto.imagen_url
+                  ? `${API_URL}${producto.imagen_url}`
+                  : null;
 
-                  {/* Nombre + categoría */}
+                return (
                   <div
+                    key={producto.id}
                     style={{
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      opacity: estaAbiertoPorHorario ? 1 : 0.7,
                       display: 'flex',
+                      flexDirection: 'column',
                       justifyContent: 'space-between',
-                      alignItems: 'flex-start'
+                      backgroundColor: '#fff'
                     }}
                   >
-                    <h4
-                      style={{
-                        margin: '0 0 0.5rem 0'
-                      }}
-                    >
-                      {producto.nombre}
-                    </h4>
-
-                    {catNombre &&
-                      catNombre !== 'Sin Categoría' && (
-                        <span
+                    <div>
+                      {/* 🖼️ Imagen del producto / Placeholder cuando no hay foto */}
+                      {imagenCompleta ? (
+                        <img
+                          src={imagenCompleta}
+                          alt={producto.nombre}
                           style={{
-                            fontSize: '0.75rem',
-                            backgroundColor: '#e9ecef',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: '4px'
+                            width: '100%',
+                            height: '150px',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            marginBottom: '0.8rem'
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '150px',
+                            borderRadius: '6px',
+                            marginBottom: '0.8rem',
+                            backgroundColor: '#f8f9fa',
+                            border: '1px dashed #ced4da',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#adb5bd',
+                            fontSize: '0.85rem',
+                            userSelect: 'none'
                           }}
                         >
-                          🍔 {catNombre}
-                        </span>
+                          <span>Imagen no disponible</span>
+                        </div>
                       )}
+
+                      {/* Nombre del producto */}
+                      <h4
+                        style={{
+                          margin: '0 0 0.5rem 0',
+                          color: '#333'
+                        }}
+                      >
+                        {producto.nombre}
+                      </h4>
+
+                      {/* Precio */}
+                      <p
+                        style={{
+                          fontWeight: 'bold',
+                          color: '#2b8a3e',
+                          margin: '0.3rem 0',
+                          fontSize: '1.1rem'
+                        }}
+                      >
+                        ${Number(producto.precio).toFixed(2)}
+                      </p>
+                    </div>
+
+                    {/* Botón ver detalles */}
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/cliente/locales/producto/${producto.id}`
+                        )
+                      }
+                      disabled={!estaAbiertoPorHorario}
+                      style={{
+                        marginTop: '0.8rem',
+                        width: '100%',
+                        padding: '0.5rem',
+                        backgroundColor: estaAbiertoPorHorario
+                          ? '#1c7ed6'
+                          : '#adb5bd',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: estaAbiertoPorHorario
+                          ? 'pointer'
+                          : 'not-allowed',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {estaAbiertoPorHorario
+                        ? '👁️ Ver detalles'
+                        : '🚫 No disponible (Cerrado)'}
+                    </button>
                   </div>
-
-                  {/* Precio */}
-                  <p
-                    style={{
-                      fontWeight: 'bold',
-                      color: '#2b8a3e',
-                      margin: '0.3rem 0'
-                    }}
-                  >
-                    ${Number(producto.precio).toFixed(2)}
-                  </p>
-                </div>
-
-                {/* Botón */}
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/cliente/locales/producto/${producto.id}`
-                    )
-                  }
-                  disabled={!estaAbiertoPorHorario}
-                  style={{
-                    marginTop: '0.8rem',
-                    width: '100%',
-                    padding: '0.5rem',
-                    backgroundColor:
-                      estaAbiertoPorHorario
-                        ? '#1c7ed6'
-                        : '#adb5bd',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor:
-                      estaAbiertoPorHorario
-                        ? 'pointer'
-                        : 'not-allowed',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {estaAbiertoPorHorario
-                    ? '👁️ Ver detalles'
-                    : '🚫 No disponible (Cerrado)'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );

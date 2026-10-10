@@ -7,6 +7,7 @@ import {
   liberarPedidoRepartidor,
   confirmarRetiroLocal
 } from '../../api/repartidorService';
+import { NotificationMenu } from '../Common/NotificationMenu';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -556,12 +557,25 @@ export const DetallePedidoRepartidor = () => {
 
   return (
     <div style={{ maxWidth: '900px', margin: '2rem auto', padding: '1rem' }}>
-      <button
-        onClick={() => navigate('/repartidor/inicio')}
-        style={{ marginBottom: '1rem', padding: '0.6rem 1rem', cursor: 'pointer' }}
+      {/* 🟢 CABECERA SUPERIOR: Botón Volver + Menú de Notificaciones */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem'
+        }}
       >
-        ← Volver a mis pedidos
-      </button>
+        <button
+          onClick={() => navigate('/repartidor/inicio')}
+          style={{ padding: '0.6rem 1rem', cursor: 'pointer' }}
+        >
+          ← Volver a mis pedidos
+        </button>
+
+        {/* 🔔 Notificaciones integradas en la vista de detalle */}
+        <NotificationMenu />
+      </div>
 
       <div
         style={{

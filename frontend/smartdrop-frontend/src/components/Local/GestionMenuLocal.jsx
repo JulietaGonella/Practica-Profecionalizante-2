@@ -27,6 +27,9 @@ export const GestionMenuLocal = ({ localId }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingId, setIsTogglingId] = useState(null);
 
+  // Categorías comerciales abiertas en el listado
+  const [categoriasAbiertas, setCategoriasAbiertas] = useState({});
+
   const [crearNuevaCategoria, setCrearNuevaCategoria] = useState(false);
   const [nuevaCategoriaTexto, setNuevaCategoriaTexto] = useState('');
 
@@ -72,6 +75,13 @@ export const GestionMenuLocal = ({ localId }) => {
   useEffect(() => {
     if (localId) cargarDatos();
   }, [localId]);
+
+  const toggleCategoria = (nombreCategoria) => {
+    setCategoriasAbiertas((prev) => ({
+      ...prev,
+      [nombreCategoria]: !prev[nombreCategoria]
+    }));
+  };
 
   const handleToggleDisponible = async (id) => {
     setIsTogglingId(id);
@@ -288,6 +298,31 @@ export const GestionMenuLocal = ({ localId }) => {
   const precioLocalNum = Number(form.precio) || 0;
   const precioFinalCalculado = Number((precioLocalNum / (1 - COMISION_PORCENTAJE)).toFixed(2));
   const montoComision = Number((precioFinalCalculado - precioLocalNum).toFixed(2));
+
+  // Agrupar productos por Categoría Comercial y ordenar por nombre
+  const productosAgrupados = productos.reduce((acc, prod) => {
+    const catComercial = categoriasComerciales.find(
+      (c) => String(c.id) === String(prod.IDcategoria_comercial)
+    );
+
+    const nombreCategoria = catComercial
+      ? catComercial.nombre
+      : 'Otras / Sin Categoría Comercial';
+
+    if (!acc[nombreCategoria]) {
+      acc[nombreCategoria] = [];
+    }
+
+    acc[nombreCategoria].push(prod);
+    return acc;
+  }, {});
+
+  // Ordenar alfabéticamente los productos dentro de cada categoría
+  Object.keys(productosAgrupados).forEach((cat) => {
+    productosAgrupados[cat].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    );
+  });
 
   return (
     <div style={{ marginTop: '2rem' }}>
@@ -683,88 +718,243 @@ export const GestionMenuLocal = ({ localId }) => {
         </div>
       )}
 
-      {/* Tabla de Productos Existentes */}
-      {loading ? <p>Cargando productos...</p> : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#e9ecef', textAlign: 'left' }}>
-              <th style={{ padding: '0.8rem' }}>Imagen</th>
-              <th>Producto</th>
-              <th>Precio Venta (Neto Local)</th>
-              <th>Prep.</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {productos.map((prod) => {
-              const estaEditandoEste = editingId === prod.id;
-              const estaCambiandoEste = isTogglingId === prod.id;
-              const estaDisponible = parseDisponible(prod.disponible) === 1;
+      {/* 🟢 TABLA ORGANIZADA POR CATEGORÍAS COMERCIALES */}
+      {loading ? (
+        <p>Cargando productos...</p>
+      ) : Object.keys(productosAgrupados).length === 0 ? (
+        <p style={{ marginTop: '1rem', color: '#6c757d' }}>
+          No hay productos registrados en el menú.
+        </p>
+      ) : (
+        <div style={{ marginTop: '1.5rem' }}>
+          {Object.entries(productosAgrupados).map(
+            ([nombreCategoria, listaProductos]) => (
+              <div key={nombreCategoria} style={{ marginBottom: '2rem' }}>
 
-              const precioLocalVal = prod.precio_local !== undefined && prod.precio_local !== null
-                ? Number(prod.precio_local)
-                : Number((Number(prod.precio) * (1 - COMISION_PORCENTAJE)).toFixed(2));
+                {/* Encabezado desplegable de la Categoría Comercial */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategoria(nombreCategoria)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#f1f3f5',
+                    padding: '0.7rem 1rem',
+                    borderRadius: categoriasAbiertas[nombreCategoria]
+                      ? '6px 6px 0 0'
+                      : '6px',
+                    fontWeight: 'bold',
+                    fontSize: '1.05rem',
+                    color: '#343a40',
+                    border: 'none',
+                    borderLeft: '4px solid #007bff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span>
+                    {categoriasAbiertas[nombreCategoria] ? '🔽' : '▶️'} 🏷️ {nombreCategoria}
+                  </span>
 
-              return (
-                <tr key={prod.id} style={{ borderBottom: '1px solid #ddd', backgroundColor: estaEditandoEste ? '#e7f5ff' : 'transparent' }}>
-                  <td style={{ padding: '0.8rem' }}>
-                    <img
-                      src={
-                        prod.imagen_url && prod.imagen_url.trim() !== ''
-                          ? (prod.imagen_url.startsWith('http')
-                            ? prod.imagen_url
-                            : `${API_BASE_URL}${prod.imagen_url}`)
-                          : 'https://placehold.co/50x50?text=Sin+Foto'
-                      }
-                      alt={prod.nombre}
-                      style={{ width: '45px', height: '45px', borderRadius: '6px', objectFit: 'cover' }}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = 'https://placehold.co/50x50?text=Sin+Foto';
-                      }}
-                    />
-                  </td>
-                  <td><strong>{prod.nombre}</strong></td>
-                  <td>
-                    <strong>${Number(prod.precio).toFixed(2)}</strong>
-                    <div style={{ fontSize: '0.78rem', color: '#6c757d' }}>
-                      (Neto local: ${precioLocalVal.toFixed(2)})
-                    </div>
-                  </td>
-                  <td>⏱️ {prod.tiempo_preparacion_min || 15}m</td>
-                  <td>
-                    <span style={{ color: estaDisponible ? 'green' : 'red', fontWeight: 'bold' }}>
-                      {estaDisponible ? '🟢 Disponible' : '🔴 Pausado'}
-                    </span>
-                  </td>
-                  <td style={{ display: 'flex', gap: '5px', padding: '0.8rem 0' }}>
-                    <button
-                      onClick={() => handleEditarClick(prod)}
-                      disabled={isSaving || Boolean(isTogglingId)}
-                      style={{ padding: '0.4rem 0.8rem', cursor: 'pointer' }}
-                    >
-                      ✏️ Editar
-                    </button>
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.7rem',
+                      fontSize: '0.85rem',
+                      color: '#6c757d',
+                      fontWeight: 'normal'
+                    }}
+                  >
+                    ({listaProductos.length}{' '}
+                    {listaProductos.length === 1 ? 'producto' : 'productos'})
+                  </span>
+                </button>
 
-                    <button
-                      onClick={() => handleToggleDisponible(prod.id)}
-                      disabled={estaCambiandoEste || isSaving}
+                {/* Contenido desplegable de la categoría */}
+                {categoriasAbiertas[nombreCategoria] && (
+                  <div
+                    style={{
+                      border: '1px solid #dee2e6',
+                      borderTop: 'none',
+                      borderRadius: '0 0 6px 6px',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {/* Tabla de Productos pertenecientes a la categoría */}
+                    <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse'
+                  }}
+                >
+                  <thead>
+                    <tr
                       style={{
-                        padding: '0.4rem 0.8rem',
-                        cursor: (estaCambiandoEste || isSaving) ? 'not-allowed' : 'pointer'
+                        borderBottom: '2px solid #dee2e6',
+                        textAlign: 'left',
+                        color: '#495057',
+                        fontSize: '0.9rem'
                       }}
                     >
-                      {estaCambiandoEste
-                        ? '⏳ Procesando...'
-                        : (estaDisponible ? '⏸️ Pausar' : '▶️ Activar')}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      <th style={{ padding: '0.6rem 0.8rem', width: '60px' }}>
+                        Imagen
+                      </th>
+                      <th>Producto</th>
+                      <th>Precio Venta (Neto Local)</th>
+                      <th>Prep.</th>
+                      <th>Estado</th>
+                      <th style={{ textAlign: 'right', paddingRight: '0.8rem' }}>
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {listaProductos.map((prod) => {
+                      const estaEditandoEste = editingId === prod.id;
+                      const estaCambiandoEste = isTogglingId === prod.id;
+                      const estaDisponible = parseDisponible(prod.disponible) === 1;
+
+                      const precioLocalVal =
+                        prod.precio_local !== undefined &&
+                        prod.precio_local !== null
+                          ? Number(prod.precio_local)
+                          : Number(
+                              (
+                                Number(prod.precio) *
+                                (1 - COMISION_PORCENTAJE)
+                              ).toFixed(2)
+                            );
+
+                      return (
+                        <tr
+                          key={prod.id}
+                          style={{
+                            borderBottom: '1px solid #e9ecef',
+                            backgroundColor: estaEditandoEste
+                              ? '#e7f5ff'
+                              : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '0.6rem 0.8rem' }}>
+                            <img
+                              src={
+                                prod.imagen_url &&
+                                prod.imagen_url.trim() !== ''
+                                  ? prod.imagen_url.startsWith('http')
+                                    ? prod.imagen_url
+                                    : `${API_BASE_URL}${prod.imagen_url}`
+                                  : 'https://placehold.co/50x50?text=Sin+Foto'
+                              }
+                              alt={prod.nombre}
+                              style={{
+                                width: '45px',
+                                height: '45px',
+                                borderRadius: '6px',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src =
+                                  'https://placehold.co/50x50?text=Sin+Foto';
+                              }}
+                            />
+                          </td>
+
+                          <td>
+                            <strong>{prod.nombre}</strong>
+                          </td>
+
+                          <td>
+                            <strong>${Number(prod.precio).toFixed(2)}</strong>
+                            <div
+                              style={{
+                                fontSize: '0.78rem',
+                                color: '#6c757d'
+                              }}
+                            >
+                              (Neto local: ${precioLocalVal.toFixed(2)})
+                            </div>
+                          </td>
+
+                          <td>
+                            ⏱️ {prod.tiempo_preparacion_min || 15}m
+                          </td>
+
+                          <td>
+                            <span
+                              style={{
+                                color: estaDisponible ? '#2b8a3e' : '#e03131',
+                                fontWeight: 'bold',
+                                fontSize: '0.9rem'
+                              }}
+                            >
+                              {estaDisponible
+                                ? '🟢 Disponible'
+                                : '🔴 Pausado'}
+                            </span>
+                          </td>
+
+                          <td
+                            style={{
+                              textAlign: 'right',
+                              paddingRight: '0.8rem'
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                gap: '6px'
+                              }}
+                            >
+                              <button
+                                onClick={() => handleEditarClick(prod)}
+                                disabled={isSaving || Boolean(isTogglingId)}
+                                style={{
+                                  padding: '0.4rem 0.8rem',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px',
+                                  border: '1px solid #ccc'
+                                }}
+                              >
+                                ✏️ Editar
+                              </button>
+
+                              <button
+                                onClick={() => handleToggleDisponible(prod.id)}
+                                disabled={estaCambiandoEste || isSaving}
+                                style={{
+                                  padding: '0.4rem 0.8rem',
+                                  cursor:
+                                    estaCambiandoEste || isSaving
+                                      ? 'not-allowed'
+                                      : 'pointer',
+                                  borderRadius: '4px',
+                                  border: '1px solid #ccc'
+                                }}
+                              >
+                                {estaCambiandoEste
+                                  ? '⏳ Procesando...'
+                                  : estaDisponible
+                                  ? '⏸️ Pausar'
+                                  : '▶️ Activar'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          )}
+        </div>
       )}
     </div>
   );

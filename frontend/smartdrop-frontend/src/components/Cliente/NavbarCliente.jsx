@@ -1,7 +1,7 @@
 // src/components/Cliente/NavbarCliente.jsx
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LogoutButton } from '../LogoutButton';
-import { NotificationMenu } from './NotificationMenu'; // 👈 Importar
+import { NotificationMenu } from '../Common/NotificationMenu'; // Ajustar ruta// 👈 Importar
 
 export const NavbarCliente = () => {
   const navigate = useNavigate();

@@ -53,35 +53,3 @@ Para que tu profesor apruebe la sección de UI/UX, documenta el resultado mencio
 1. **Tokens de Diseño / Paleta:** Muestra la muestra de colores (Hexadecimales) y explica qué transmite cada uno (ej. *Azul `#1c7ed6` para transmitir confianza en el seguimiento, Naranja `#fd7e14` para llamar la atención en la siguiente parada*).
 2. **Jerarquía Visual:** Explica cómo los botones principales (Confirmar, Entregar) destacan sobre los secundarios mediante contraste.
 3. **Diseño Responsivo e Inclusivo:** Menciona que la interfaz fue generada bajo estándares de usabilidad, con contraste de color suficiente (WCAG) y tamaños de toque óptimos para dispositivos móviles.
-
-
-
-
-
-
-
-Para un flujo básico sin sobrecargar de alertas, estas son las notificaciones estrictamente esenciales para cada rol:
-
----
-
-### 2. Local
-
-El objetivo es acelerar la preparación y gestionar excepciones.
-
-* **Nuevo Pedido Entrante:** Alerta sonora/visual crítica para que el local comience a preparar la orden de inmediato.
-* **Repartidor Asignado / En Arribo:** Le avisa cuándo el repartidor está cerca para tener el paquete listo en mostrador.
-* **Pedido Cancelado por el Cliente:** Notifica inmediatamente para detener la preparación de la comida/producto.
-
----
-
-### 3. Repartidor
-
-El objetivo es coordinar la logística de retiro y entrega.
-
-* **Oferta / Asignación de Pedido:** Le avisa que tiene un nuevo viaje disponible para aceptar o recoger.
-* **Pedido Listo para Retiro:** Le indica que puede pasar a buscar la orden por el local sin perder tiempo esperando.
-* **Cancelación de Pedido:** Le notifica si el pedido se anuló mientras iba en camino para evitar trayectos innecesarios.
-
----
-
-¿Te gustaría que definamos también el canal por el que se enviaría cada una (por ejemplo, *PushNotification*, *SMS* o *Email*) o la estructura de los mensajes?

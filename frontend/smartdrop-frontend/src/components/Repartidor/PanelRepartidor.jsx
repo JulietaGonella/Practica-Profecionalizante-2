@@ -16,6 +16,7 @@ import {
 } from '../../api/repartidorService';
 import { LogoutButton } from '../LogoutButton';
 import { CambiarPasswordModal } from '../CambiarPasswordModal';
+import { NotificationMenu } from '../Common/NotificationMenu';
 
 export const PanelRepartidor = () => {
   const navigate = useNavigate();
@@ -609,6 +610,9 @@ export const PanelRepartidor = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 🔔 COMPONENTE DE NOTIFICACIONES INCORPORADO */}
+          <NotificationMenu />
+          
           <label
             style={{
               display: 'flex',

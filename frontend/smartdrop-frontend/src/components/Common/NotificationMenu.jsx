@@ -41,11 +41,13 @@ export const NotificationMenu = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Al abrir el menú, verificar la distancia al borde de la pantalla
+  // Ajustar alineación dinámica según espacio en pantalla
   const handleToggle = () => {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setAlignLeft(rect.left < 320);
+      const spaceRight = window.innerWidth - rect.right;
+      // Si hay poco espacio a la derecha, alinear a la derecha de la campana; si no, a la izquierda
+      setAlignLeft(rect.left < 320 && spaceRight > 320);
     }
     setOpen(!open);
   };
@@ -120,16 +122,20 @@ export const NotificationMenu = () => {
             position: 'absolute',
             top: '120%',
             ...(alignLeft ? { left: 0 } : { right: 0 }),
-            width: 'min(320px, 85vw)',
-            maxHeight: '400px',
+            width: '320px',
+            maxWidth: '85vw',
+            maxHeight: '380px',
             backgroundColor: '#ffffff',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
             borderRadius: '8px',
-            overflowY: 'auto',
-            zIndex: 1200,
-            border: '1px solid #e9ecef'
+            zIndex: 9999,
+            border: '1px solid #e9ecef',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}
         >
+          {/* Cabecera Fija */}
           <div
             style={{
               padding: '0.75rem 1rem',
@@ -137,10 +143,11 @@ export const NotificationMenu = () => {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              backgroundColor: '#f8f9fa'
+              backgroundColor: '#f8f9fa',
+              flexShrink: 0
             }}
           >
-            <strong style={{ fontSize: '0.95rem' }}>Notificaciones</strong>
+            <strong style={{ fontSize: '0.95rem', color: '#333' }}>Notificaciones</strong>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
@@ -158,44 +165,47 @@ export const NotificationMenu = () => {
             )}
           </div>
 
-          {notifications.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', color: '#888', fontSize: '0.9rem' }}>
-              No tienes notificaciones
-            </div>
-          ) : (
-            notifications.map((notif) => {
-              const estaLeido = Boolean(notif.leido);
-              return (
-                <div
-                  key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
-                  style={{
-                    padding: '0.8rem 1rem',
-                    borderBottom: '1px solid #f1f3f5',
-                    backgroundColor: estaLeido ? '#ffffff' : '#e7f5ff',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-                    <strong style={{ fontSize: '0.85rem', color: '#333' }}>{notif.titulo}</strong>
-                    {!estaLeido && (
-                      <span style={{ height: '8px', width: '8px', backgroundColor: '#1c7ed6', borderRadius: '50%' }} />
+          {/* Cuerpo con Scroll Integrado */}
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {notifications.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#888', fontSize: '0.9rem' }}>
+                No tienes notificaciones
+              </div>
+            ) : (
+              notifications.map((notif) => {
+                const estaLeido = Boolean(notif.leido);
+                return (
+                  <div
+                    key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
+                    style={{
+                      padding: '0.8rem 1rem',
+                      borderBottom: '1px solid #f1f3f5',
+                      backgroundColor: estaLeido ? '#ffffff' : '#e7f5ff',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#333' }}>{notif.titulo}</strong>
+                      {!estaLeido && (
+                        <span style={{ height: '8px', width: '8px', backgroundColor: '#1c7ed6', borderRadius: '50%' }} />
+                      )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#555', lineHeight: '1.3' }}>
+                      {notif.mensaje}
+                    </p>
+
+                    {notif.creado_en && (
+                      <span style={{ fontSize: '0.7rem', color: '#999', display: 'block', marginTop: '0.3rem' }}>
+                        {new Date(notif.creado_en).toLocaleString()}
+                      </span>
                     )}
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#555', lineHeight: '1.2' }}>
-                    {notif.mensaje}
-                  </p>
-
-                  {notif.creado_en && (
-                    <span style={{ fontSize: '0.7rem', color: '#999', display: 'block', marginTop: '0.3rem' }}>
-                      {new Date(notif.creado_en).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>

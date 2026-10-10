@@ -34,6 +34,7 @@ import { ClienteGuard } from './components/Cliente/ClienteGuard';
 import { TableroAdministrador } from './components/Admin/TableroAdministrador';
 import { TableroRepartidor } from './components/Repartidor/TableroRepartidor'; // Ajusta la ruta según la ubicación exacta de tus componentes
 import { TableroCliente } from './components/Cliente/TableroCliente';
+import { NotificationMenu } from './components/Common/NotificationMenu'; 
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -292,7 +293,7 @@ const LocalInicio = () => {
     <div style={{ padding: '1.5rem', maxWidth: '1150px', margin: '0 auto' }}>
 
       {/* ========================================================= */}
-      {/* 🖼️ ENCABEZADO PERSISTENTE DEL LOCAL (BANNER + FOTOS + INFO) */}
+      {/* 🖼️ ENCABEZADO PERSISTENTE DEL LOCAL (SIN OVERFLOW HIDDEN) */}
       {/* ========================================================= */}
       {loadingLocal ? (
         <div style={{ padding: '2rem', textAlign: 'center' }}>⏳ Cargando datos del local...</div>
@@ -303,17 +304,35 @@ const LocalInicio = () => {
           style={{
             position: 'relative',
             borderRadius: '12px',
-            overflow: 'hidden',
             backgroundColor: '#1a1a1a',
             color: '#fff',
             marginBottom: '1.5rem',
             boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
+            // ⚠️ Se eliminó overflow: 'hidden' de aquí para no recortar menús desplegables
           }}
         >
-          {/* 1. PORTADA / BANNER DE FONDO */}
+          {/* Botones Flotantes Superiores (Z-Index alto para sobresalir del banner) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '15px',
+              right: '15px',
+              zIndex: 100,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.8rem'
+            }}
+          >
+            <NotificationMenu />
+            <LogoutButton />
+          </div>
+
+          {/* 1. PORTADA / BANNER DE FONDO (Aquí si aplicamos el clip redondeado) */}
           <div
             style={{
               height: '180px',
+              borderRadius: '12px',
+              overflow: 'hidden',
               backgroundImage: local.banner_url
                 ? `linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.8)), url(${resolverUrl(local.banner_url)})`
                 : 'linear-gradient(135deg, #1c7ed6 0%, #0c8599 100%)',
@@ -325,11 +344,6 @@ const LocalInicio = () => {
               position: 'relative'
             }}
           >
-            {/* Botón de Cerrar Sesión en la esquina superior derecha */}
-            <div style={{ position: 'absolute', top: '15px', right: '15px', zIndex: 10 }}>
-              <LogoutButton />
-            </div>
-
             {/* Contenido Principal del Encabezado */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', width: '100%', flexWrap: 'wrap' }}>
 
