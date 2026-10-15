@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import './Components.css';
 
 export const LogoutButton = () => {
   const { logout } = useAuth();
@@ -25,11 +26,11 @@ export const LogoutButton = () => {
     <button 
       onClick={handleLogout} 
       disabled={isLoggingOut}
-      className="admin-btn admin-btn--danger" // 👈 Clases idénticas a los botones de peligro del admin
+      className="sd-logout-btn"
     >
       {isLoggingOut ? (
         <>
-          <span className="admin-spinner"></span>
+          <span className="sd-spinner sd-spinner--sm"></span>
           Cerrando...
         </>
       ) : (

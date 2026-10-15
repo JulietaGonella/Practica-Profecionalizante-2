@@ -20,8 +20,11 @@ Guía de organización:
 14. Responsive y accesibilidad
 
 Se conservan los selectores sd-* compartidos en el CSS original.
+Los tokens --sd-client-* son la ÚNICA fuente de color de este rol y coinciden
+con la paleta oficial usada por Administrador, Local y Repartidor.
 Los tokens tienen valores de respaldo para que Cliente.css no dependa de que
 Administrador.css se haya cargado primero.
+15. Ajustes de alineación entre roles (al final del archivo)
 ===============================================================================
 */
 
@@ -30,69 +33,79 @@ Administrador.css se haya cargado primero.
    ========================================================================== */
 
 :root {
-  --sd-client-bg: #F5F7FA;
+  /* Paleta oficial SmartDrop (idéntica a Administrador, Local y Repartidor) */
+  --sd-client-bg: #F7F4EF;
   --sd-client-surface: #FFFFFF;
-  --sd-client-surface-soft: #F8FAFC;
-  --sd-client-surface-muted: #F1F4F8;
+  --sd-client-surface-soft: #FAF8F4;
+  --sd-client-surface-muted: #F3EFE8;
   --sd-client-navy: #17243A;
   --sd-client-navy-hover: #223653;
-  --sd-client-text: #263449;
-  --sd-client-text-muted: #697789;
-  --sd-client-border: #E1E6ED;
-  --sd-client-border-strong: #CBD4DF;
+  --sd-client-navy-soft: #EEF1F6;
+  --sd-client-text: #202938;
+  --sd-client-text-muted: #667085;
+  --sd-client-border: #E6E9ED;
+  --sd-client-border-strong: #CBD2DB;
+  --sd-client-border-hover: #98A2B3;
   --sd-client-orange: #C45113;
-  --sd-client-orange-hover: #A9430E;
-  --sd-client-orange-soft: #FFF1E8;
-  --sd-client-blue: #315F91;
-  --sd-client-blue-soft: #EDF4FB;
-  --sd-client-green: #18794E;
-  --sd-client-green-soft: #EAF7EF;
-  --sd-client-red: #B42318;
-  --sd-client-red-soft: #FEF0EF;
-  --sd-client-yellow: #946200;
-  --sd-client-yellow-soft: #FFF7DF;
+  --sd-client-orange-hover: #A8430E;
+  --sd-client-orange-soft: #FEF1E4;
+  --sd-client-orange-line: #F8CFA8;
+  --sd-client-orange-identity: #F47A16;
+  --sd-client-blue: #245FC7;
+  --sd-client-blue-soft: #EAF0FC;
+  --sd-client-blue-line: #C3D3F2;
+  --sd-client-green: #16804A;
+  --sd-client-green-soft: #E8F4EC;
+  --sd-client-green-line: #BFE0CE;
+  --sd-client-red: #B42332;
+  --sd-client-red-soft: #FCEFF0;
+  --sd-client-red-line: #F2C6CA;
+  --sd-client-yellow: #946000;
+  --sd-client-yellow-soft: #FBF3E0;
+  --sd-client-yellow-line: #E8D5A3;
   --sd-client-radius-sm: 8px;
-  --sd-client-radius-control: 12px;
-  --sd-client-radius-card: 18px;
-  --sd-client-radius-lg: 24px;
-  --sd-client-shadow-sm: 0 2px 8px rgba(23, 36, 58, 0.045);
-  --sd-client-shadow-md: 0 8px 24px rgba(23, 36, 58, 0.075);
-  --sd-client-shadow-lg: 0 14px 36px rgba(23, 36, 58, 0.12);
-  --sd-client-focus: 0 0 0 3px rgba(49, 95, 145, 0.18);
+  --sd-client-radius-control: 11px;
+  --sd-client-radius-card: 16px;
+  --sd-client-radius-lg: 16px;
+  --sd-client-shadow-sm: 0 1px 2px rgba(23, 36, 58, 0.05), 0 1px 3px rgba(23, 36, 58, 0.04);
+  --sd-client-shadow-md: 0 6px 16px rgba(23, 36, 58, 0.08);
+  --sd-client-shadow-lg: 0 20px 48px rgba(23, 36, 58, 0.24);
+  --sd-client-focus: 0 0 0 3px rgba(36, 95, 199, 0.35);
 }
 
 /* Fallbacks para variables que ya utiliza el CSS original */
 .sd-container {
-  --sd-bg: var(--sd-client-bg, #F5F7FA);
+  --sd-bg: var(--sd-client-bg, #F7F4EF);
   --sd-surface: var(--sd-client-surface, #FFFFFF);
-  --sd-surface-muted: var(--sd-client-surface-muted, #F1F4F8);
+  --sd-surface-muted: var(--sd-client-surface-soft, #FAF8F4);
   --sd-navy: var(--sd-client-navy, #17243A);
-  --sd-text-main: var(--sd-client-text, #263449);
-  --sd-text-secondary: var(--sd-client-text-muted, #697789);
-  --sd-border: var(--sd-client-border, #E1E6ED);
-  --sd-info: var(--sd-client-blue, #315F91);
+  --sd-text-main: var(--sd-client-text, #202938);
+  --sd-text-secondary: var(--sd-client-text-muted, #667085);
+  --sd-border: var(--sd-client-border, #E6E9ED);
+  --sd-info: var(--sd-client-blue, #245FC7);
+  --sd-orange: var(--sd-client-orange-identity, #F47A16);
   --sd-orange-action: var(--sd-client-orange, #C45113);
-  --sd-orange-action-hover: var(--sd-client-orange-hover, #A9430E);
-  --sd-success: var(--sd-client-green, #18794E);
-  --sd-error: var(--sd-client-red, #B42318);
-  --sd-warning: var(--sd-client-yellow, #946200);
-  --sd-tint-orange: var(--sd-client-orange-soft, #FFF1E8);
-  --sd-tint-info: var(--sd-client-blue-soft, #EDF4FB);
-  --sd-tint-success: var(--sd-client-green-soft, #EAF7EF);
-  --sd-tint-error: var(--sd-client-red-soft, #FEF0EF);
-  --sd-tint-warning: var(--sd-client-yellow-soft, #FFF7DF);
-  --sd-line-error: #F4C7C3;
-  --sd-line-success: #B8E2C7;
-  --sd-line-info: #C9DDF0;
-  --sd-line-warning: #F0D998;
-  --sd-navy-soft: #EDF1F6;
+  --sd-orange-action-hover: var(--sd-client-orange-hover, #A8430E);
+  --sd-success: var(--sd-client-green, #16804A);
+  --sd-error: var(--sd-client-red, #B42332);
+  --sd-warning: var(--sd-client-yellow, #946000);
+  --sd-tint-orange: var(--sd-client-orange-soft, #FEF1E4);
+  --sd-tint-info: var(--sd-client-blue-soft, #EAF0FC);
+  --sd-tint-success: var(--sd-client-green-soft, #E8F4EC);
+  --sd-tint-error: var(--sd-client-red-soft, #FCEFF0);
+  --sd-tint-warning: var(--sd-client-yellow-soft, #FBF3E0);
+  --sd-line-error: var(--sd-client-red-line, #F2C6CA);
+  --sd-line-success: var(--sd-client-green-line, #BFE0CE);
+  --sd-line-info: var(--sd-client-blue-line, #C3D3F2);
+  --sd-line-warning: var(--sd-client-yellow-line, #E8D5A3);
+  --sd-navy-soft: var(--sd-client-navy-soft, #EEF1F6);
   --sd-radius-sm: var(--sd-client-radius-sm, 8px);
-  --sd-radius-ctl: var(--sd-client-radius-control, 12px);
-  --sd-radius-card: var(--sd-client-radius-card, 18px);
-  --sd-shadow-sm: var(--sd-client-shadow-sm, 0 2px 8px rgba(23,36,58,.045));
-  --sd-shadow-md: var(--sd-client-shadow-md, 0 8px 24px rgba(23,36,58,.075));
-  --sd-shadow-lg: var(--sd-client-shadow-lg, 0 14px 36px rgba(23,36,58,.12));
-  --sd-focus-ring: var(--sd-client-focus, 0 0 0 3px rgba(49,95,145,.18));
+  --sd-radius-ctl: var(--sd-client-radius-control, 11px);
+  --sd-radius-card: var(--sd-client-radius-card, 16px);
+  --sd-shadow-sm: var(--sd-client-shadow-sm, 0 1px 2px rgba(23,36,58,.05), 0 1px 3px rgba(23,36,58,.04));
+  --sd-shadow-md: var(--sd-client-shadow-md, 0 6px 16px rgba(23,36,58,.08));
+  --sd-shadow-lg: var(--sd-client-shadow-lg, 0 20px 48px rgba(23,36,58,.24));
+  --sd-focus-ring: var(--sd-client-focus, 0 0 0 3px rgba(36,95,199,.35));
 }
 
 .sd-container,
@@ -152,8 +165,8 @@ Administrador.css se haya cargado primero.
 
 .sd-container :focus-visible,
 .sd-navbar :focus-visible {
-  outline: 3px solid rgba(49, 95, 145, 0.35);
-  outline-offset: 3px;
+  outline: 2px solid var(--sd-client-blue);
+  outline-offset: 2px;
 }
 
 /* Encabezados de pantalla reutilizables */
@@ -254,8 +267,8 @@ Administrador.css se haya cargado primero.
 .sd-navbar__link.active,
 .sd-navbar__link[aria-current="page"] {
   color: var(--sd-client-navy);
-  background: #EDF1F6;
-  border-color: #E0E6EE;
+  background: var(--sd-client-navy-soft);
+  border-color: var(--sd-client-border);
 }
 
 .sd-navbar__actions {
@@ -331,7 +344,7 @@ Administrador.css se haya cargado primero.
 .sd-state--error {
   color: var(--sd-client-red);
   background: var(--sd-client-red-soft);
-  border: 1px solid #F2C8C4;
+  border: 1px solid var(--sd-client-red-line);
 }
 
 .sd-state--empty {
@@ -344,7 +357,7 @@ Administrador.css se haya cargado primero.
   width: 30px;
   height: 30px;
   color: var(--sd-client-orange);
-  border: 3px solid #F5D7C5;
+  border: 3px solid var(--sd-client-orange-line);
   border-top-color: var(--sd-client-orange);
   border-radius: 50%;
   animation: sd-spin .75s linear infinite;
@@ -434,7 +447,7 @@ Administrador.css se haya cargado primero.
 
 .sd-btn:hover:not(:disabled) {
   background: var(--sd-client-surface-muted);
-  border-color: #B7C2D0;
+  border-color: var(--sd-client-border-hover);
 }
 
 .sd-btn:active:not(:disabled) {
@@ -547,7 +560,7 @@ Administrador.css se haya cargado primero.
 .sd-field textarea::placeholder,
 .sd-input::placeholder,
 .sd-textarea::placeholder {
-  color: #98A3B2;
+  color: #8A94A6;
 }
 
 .sd-pill,
@@ -561,7 +574,7 @@ Administrador.css se haya cargado primero.
   padding: 5px 9px;
   color: var(--sd-client-blue);
   background: var(--sd-client-blue-soft);
-  border: 1px solid #D8E5F2;
+  border: 1px solid var(--sd-client-blue-line);
   border-radius: 999px;
   font-size: .75rem;
   font-weight: 750;
@@ -628,7 +641,7 @@ Administrador.css se haya cargado primero.
 
 .sd-search-input-wrapper:hover,
 .sd-search-input-wrapper:focus-within {
-  border-color: #A9B8C9;
+  border-color: var(--sd-client-border-hover);
 }
 
 .sd-search-input-wrapper:focus-within {
@@ -647,7 +660,7 @@ Administrador.css se haya cargado primero.
 }
 
 .sd-search-input::placeholder {
-  color: #98A3B2;
+  color: #8A94A6;
 }
 
 .sd-select-filter {
@@ -691,12 +704,12 @@ Administrador.css se haya cargado primero.
 
 .sd-store-card:hover {
   transform: translateY(-3px);
-  border-color: #D0D9E4;
+  border-color: var(--sd-client-border-strong);
   box-shadow: var(--sd-client-shadow-md);
 }
 
 .sd-store-card--closed {
-  background: #F8F9FB;
+  background: var(--sd-client-surface-soft);
 }
 
 .sd-store-card__img-container {
@@ -704,7 +717,7 @@ Administrador.css se haya cargado primero.
   width: 100%;
   height: 176px;
   overflow: hidden;
-  background: #E9EEF4;
+  background: var(--sd-client-surface-muted);
 }
 
 .sd-store-card__img {
@@ -771,9 +784,9 @@ Administrador.css se haya cargado primero.
 
 .sd-store-tag {
   padding: 5px 9px;
-  color: #40536A;
-  background: #F0F3F7;
-  border: 1px solid #E6EAF0;
+  color: #475467;
+  background: var(--sd-client-navy-soft);
+  border: 1px solid var(--sd-client-border);
   border-radius: 7px;
   font-size: .74rem;
   font-weight: 700;
@@ -793,7 +806,7 @@ Administrador.css se haya cargado primero.
 .sd-store-schedule-alert--warning {
   color: var(--sd-client-yellow);
   background: var(--sd-client-yellow-soft);
-  border: 1px solid #F0DFA9;
+  border: 1px solid var(--sd-client-yellow-line);
 }
 
 .sd-store-schedule-alert--success {
@@ -832,7 +845,7 @@ Administrador.css se haya cargado primero.
 
 .sd-local-banner--closed {
   border-left: 4px solid var(--sd-client-red);
-  background: #FFFBFB;
+  background: #FFFAFA;
 }
 
 .sd-local-banner__head {
@@ -913,19 +926,19 @@ Administrador.css se haya cargado primero.
 
 .sd-product-card:hover {
   transform: translateY(-3px);
-  border-color: #D0D9E4;
+  border-color: var(--sd-client-border-strong);
   box-shadow: var(--sd-client-shadow-md);
 }
 
 .sd-product-card--closed {
-  background: #F8F9FB;
+  background: var(--sd-client-surface-soft);
 }
 
 .sd-product-card__img-container {
   width: 100%;
   height: 164px;
   overflow: hidden;
-  background: #EEF2F6;
+  background: var(--sd-client-surface-muted);
   border-radius: 11px;
 }
 
@@ -1002,7 +1015,7 @@ Administrador.css se haya cargado primero.
   width: 100%;
   max-height: 360px;
   overflow: hidden;
-  background: #EEF2F6;
+  background: var(--sd-client-surface-muted);
   border: 1px solid var(--sd-client-border);
   border-radius: 15px;
 }
@@ -1079,7 +1092,7 @@ Administrador.css se haya cargado primero.
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid #EDF0F4;
+  border-bottom: 1px solid var(--sd-client-border);
   font-size: .88rem;
 }
 
@@ -1115,7 +1128,7 @@ Administrador.css se haya cargado primero.
 
 .sd-qty-btn:hover:not(:disabled) {
   background: var(--sd-client-orange-soft);
-  border-color: #E9B99C;
+  border-color: var(--sd-client-orange-line);
 }
 
 .sd-qty-btn:disabled {
@@ -1151,7 +1164,7 @@ Administrador.css se haya cargado primero.
 }
 
 .sd-cart-item:hover {
-  border-color: #D0D9E4;
+  border-color: var(--sd-client-border-strong);
   box-shadow: var(--sd-client-shadow-md);
 }
 
@@ -1335,7 +1348,7 @@ Administrador.css se haya cargado primero.
 .sd-profile-tab.active {
   color: var(--sd-client-navy);
   background: #fff;
-  border-color: #E3E8EF;
+  border-color: var(--sd-client-border);
   box-shadow: var(--sd-client-shadow-sm);
 }
 
@@ -1425,7 +1438,7 @@ Administrador.css se haya cargado primero.
 
 .sd-address-item:hover {
   background: #fff;
-  border-color: #BFCAD7;
+  border-color: var(--sd-client-border-hover);
 }
 
 .sd-address-info {
@@ -1461,7 +1474,7 @@ Administrador.css se haya cargado primero.
   height: clamp(240px, 35vw, 360px);
   margin-top: 6px;
   overflow: hidden;
-  background: #E9EEF4;
+  background: var(--sd-client-surface-muted);
   border: 1px solid var(--sd-client-border);
   border-radius: 14px;
   box-shadow: var(--sd-client-shadow-sm);
@@ -1487,14 +1500,14 @@ Administrador.css se haya cargado primero.
 .sd-gps-status--success {
   color: var(--sd-client-green);
   background: var(--sd-client-green-soft);
-  border-color: #B9E1C8;
+  border-color: var(--sd-client-green-line);
   font-weight: 700;
 }
 
 .sd-gps-status--warning {
   color: var(--sd-client-yellow);
   background: var(--sd-client-yellow-soft);
-  border-color: #F0DFA9;
+  border-color: var(--sd-client-yellow-line);
   font-weight: 700;
 }
 
@@ -1645,7 +1658,7 @@ Administrador.css se haya cargado primero.
 }
 
 .sd-order-card:hover {
-  border-color: #D0D9E4;
+  border-color: var(--sd-client-border-strong);
   box-shadow: var(--sd-client-shadow-md);
 }
 
@@ -1699,7 +1712,7 @@ Administrador.css se haya cargado primero.
 
 .sd-order-item--rejected {
   background: var(--sd-client-red-soft);
-  border-color: #F2C8C4;
+  border-color: var(--sd-client-red-line);
   border-left: 4px solid var(--sd-client-red);
 }
 
@@ -1751,7 +1764,7 @@ Administrador.css se haya cargado primero.
   padding: 13px 16px;
   color: var(--sd-client-blue);
   background: var(--sd-client-blue-soft);
-  border: 1px solid #D4E3F2;
+  border: 1px solid var(--sd-client-blue-line);
   border-radius: 12px;
   font-size: .9rem;
   font-weight: 750;
@@ -1808,7 +1821,7 @@ Administrador.css se haya cargado primero.
 
 .sd-tracking-product-item--cancelled {
   background: var(--sd-client-red-soft);
-  border-color: #F2C8C4;
+  border-color: var(--sd-client-red-line);
   opacity: .9;
 }
 
@@ -1830,7 +1843,7 @@ Administrador.css se haya cargado primero.
   padding: 22px;
   color: var(--sd-client-blue);
   background: var(--sd-client-blue-soft);
-  border: 1px dashed #9EBBD9;
+  border: 1px dashed var(--sd-client-blue-line);
   border-radius: 15px;
   text-align: center;
 }
@@ -2092,4 +2105,44 @@ Administrador.css se haya cargado primero.
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* ==========================================================================
+   15. AJUSTES DE ALINEACIÓN ENTRE ROLES
+   ========================================================================== */
+
+/* Contenedor de la pantalla (ClienteLayout): el fondo y la tipografía
+   también alcanzan a la barra de navegación, que queda fuera de .sd-container */
+.sd-client-layout {
+  min-height: 100vh;
+  background: var(--sd-client-bg);
+  color: var(--sd-client-text);
+  font-family: var(--sd-font, Inter, "Segoe UI", Roboto, Arial, sans-serif);
+}
+
+.sd-client-layout__main { padding-bottom: 3rem; }
+
+/* Variantes de aviso que los componentes ya usaban y no estaban definidas
+   (el aviso quedaba sin color) */
+.admin-banner--info {
+  background: var(--sd-client-blue-soft);
+  border-color: var(--sd-client-blue-line);
+  color: #1B4A9E;
+}
+
+.admin-banner--warning {
+  background: var(--sd-client-yellow-soft);
+  border-color: var(--sd-client-yellow-line);
+  color: var(--sd-client-yellow);
+}
+
+/* Leyenda del mapa de seguimiento: mismos colores que los marcadores */
+.sd-legend-dot {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
 }

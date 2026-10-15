@@ -1,0 +1,371 @@
+/* ==========================================================================
+   SMARTDROP · MODAL / TARJETA DE CAMBIO DE CONTRASEÑA (COMPARTIDO)
+   ========================================================================== */
+
+.sd-pwd-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 28px);
+  background: var(--sd-surface, #FFFFFF);
+  border: 1px solid var(--sd-border, #E6E9ED);
+  border-radius: var(--sd-radius-card, 16px);
+  box-shadow: var(--sd-shadow-md, 0 6px 16px rgba(23, 36, 58, 0.08));
+  font-family: var(--sd-font, 'Inter', system-ui, sans-serif);
+  color: var(--sd-text-main, #202938);
+}
+
+.sd-pwd-head {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sd-border, #E6E9ED);
+}
+
+.sd-pwd-head h3 {
+  color: var(--sd-navy, #17243A);
+  font-size: 1.1875rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.sd-pwd-head p {
+  margin-top: 4px;
+  color: var(--sd-text-secondary, #667085);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Alertas internas */
+.sd-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--sd-radius-ctl, 11px);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sd-alert--success {
+  background: var(--sd-tint-success, #E8F4EC);
+  border: 1px solid var(--sd-line-success, #BFE0CE);
+  color: var(--sd-success, #16804A);
+}
+
+.sd-alert--danger {
+  background: var(--sd-tint-error, #FCEFF0);
+  border: 1px solid var(--sd-line-error, #F2C6CA);
+  color: var(--sd-error, #B42332);
+}
+
+/* Estructura del formulario */
+.sd-form {
+  display: grid;
+  gap: 16px;
+}
+
+.sd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.875rem;
+}
+
+.sd-field > span {
+  color: var(--sd-navy, #17243A);
+  font-weight: 700;
+}
+
+.sd-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #CBD2DB;
+  border-radius: var(--sd-radius-ctl, 11px);
+  color: var(--sd-text-main, #202938);
+  font-size: 0.9375rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sd-input::placeholder {
+  color: #8A94A6;
+}
+
+.sd-input:focus {
+  outline: none;
+  border-color: var(--sd-info, #245FC7);
+  box-shadow: 0 0 0 3px rgba(36, 95, 199, 0.35);
+}
+
+/* Botones de acción */
+.sd-pwd-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.sd-pwd-actions .sd-btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--sd-radius-ctl, 11px);
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sd-btn--primary {
+  background: var(--sd-orange-action, #C45113);
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.sd-btn--primary:hover:not(:disabled) {
+  background: var(--sd-orange-action-hover, #A8430E);
+}
+
+.sd-btn--outline {
+  background: #fff;
+  color: var(--sd-navy, #17243A);
+  border: 1px solid #CBD2DB;
+}
+
+.sd-btn--outline:hover:not(:disabled) {
+  background: var(--sd-navy-soft, #EEF1F6);
+  border-color: var(--sd-navy, #17243A);
+}
+
+/* Spinner miniatura para el botón de carga */
+.sd-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: sd-spin 0.7s linear infinite;
+}
+
+@keyframes sd-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .sd-pwd-actions {
+    flex-direction: column-reverse;
+  }
+}
+
+/* ==========================================================================
+   SMARTDROP · BOTÓN DE CERRAR SESIÓN COMPARTIDO
+   ========================================================================== */
+.sd-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  background-color: var(--sd-tint-error, #FCEFF0);
+  border: 1px solid var(--sd-line-error, #F2C6CA);
+  color: var(--sd-error, #B42332);
+  border-radius: var(--sd-radius-ctl, 11px);
+  font-family: var(--sd-font, 'Inter', system-ui, sans-serif);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.sd-logout-btn:hover:not(:disabled) {
+  background-color: #F9DFE1;
+  border-color: var(--sd-error, #B42332);
+}
+
+.sd-logout-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.sd-logout-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sd-logout-btn .sd-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  color: var(--sd-error, #B42332);
+}
+
+/* ==========================================================================
+   SMARTDROP · MENÚ DE NOTIFICACIONES COMPARTIDO
+   ========================================================================== */
+.sd-notification-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.sd-notification-btn {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 1.25rem;
+  position: relative;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--sd-radius-ctl, 11px);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sd-notification-btn:hover {
+  background-color: var(--sd-navy-soft, #EEF1F6);
+  border-color: var(--sd-border, #E6E9ED);
+}
+
+.sd-notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  background-color: var(--sd-error, #B42332);
+  color: white;
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sd-notification-dropdown {
+  position: absolute;
+  top: 125%;
+  width: 320px;
+  max-width: 85vw;
+  max-height: 380px;
+  background: var(--sd-surface, #FFFFFF);
+  box-shadow: var(--sd-shadow-md, 0 6px 16px rgba(23, 36, 58, 0.08));
+  border-radius: var(--sd-radius-card, 16px);
+  z-index: 9999;
+  border: 1px solid var(--sd-border, #E6E9ED);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--sd-font, 'Inter', system-ui, sans-serif);
+}
+
+.sd-notification-dropdown--right {
+  right: 0;
+}
+
+.sd-notification-dropdown--left {
+  left: 0;
+}
+
+.sd-notification-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sd-border, #E6E9ED);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--sd-surface-muted, #FAF8F4);
+  flex-shrink: 0;
+}
+
+.sd-notification-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--sd-navy, #17243A);
+}
+
+.sd-notification-mark-all {
+  background: none;
+  border: none;
+  color: var(--sd-info, #245FC7);
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0;
+}
+
+.sd-notification-mark-all:hover {
+  text-decoration: underline;
+}
+
+.sd-notification-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sd-notification-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--sd-text-secondary, #667085);
+  font-size: 0.875rem;
+}
+
+.sd-notification-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sd-border, #E6E9ED);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.sd-notification-item:last-child {
+  border-bottom: none;
+}
+
+.sd-notification-item--read {
+  background-color: var(--sd-surface, #FFFFFF);
+}
+
+.sd-notification-item--unread {
+  background-color: var(--sd-tint-info, #EAF0FC);
+}
+
+.sd-notification-item:hover {
+  background-color: var(--sd-navy-soft, #EEF1F6);
+}
+
+.sd-notification-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.sd-notification-item-title {
+  font-size: 0.875rem;
+  font-weight: 750;
+  color: var(--sd-navy, #17243A);
+}
+
+.sd-notification-item-dot {
+  height: 8px;
+  width: 8px;
+  background-color: var(--sd-info, #245FC7);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sd-notification-message {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--sd-text-main, #202938);
+  line-height: 1.4;
+}
+
+.sd-notification-time {
+  font-size: 0.72rem;
+  color: var(--sd-text-secondary, #667085);
+  display: block;
+  margin-top: 4px;
+}

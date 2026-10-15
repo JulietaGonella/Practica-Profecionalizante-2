@@ -1,3 +1,4 @@
+// src/components/NotificationMenu.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -5,6 +6,8 @@ import {
   marcarNotificacionLeida,
   marcarTodasComoLeidas
 } from '../../api/notificationsService';
+import '../Components.css';
+import { Inbox } from "lucide-react";
 
 export const NotificationMenu = () => {
   const [notifications, setNotifications] = useState([]);
@@ -46,7 +49,6 @@ export const NotificationMenu = () => {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceRight = window.innerWidth - rect.right;
-      // Si hay poco espacio a la derecha, alinear a la derecha de la campana; si no, a la izquierda
       setAlignLeft(rect.left < 320 && spaceRight > 320);
     }
     setOpen(!open);
@@ -77,39 +79,17 @@ export const NotificationMenu = () => {
   };
 
   return (
-    <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
-      {/* Botón Campana */}
+    <div ref={menuRef} className="sd-notification-wrapper">
+      {/* Botón Bandeja */}
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          fontSize: '1.3rem',
-          position: 'relative',
-          padding: '0.4rem',
-          display: 'flex',
-          alignItems: 'center'
-        }}
+        className="sd-notification-btn"
         title="Notificaciones"
       >
-        🔔
+        <Inbox size={22} strokeWidth={1.8} color="#C45113" />
         {unreadCount > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: '2px',
-              right: '2px',
-              backgroundColor: '#e03131',
-              color: 'white',
-              borderRadius: '50%',
-              padding: '2px 6px',
-              fontSize: '0.7rem',
-              fontWeight: 'bold',
-              lineHeight: 1
-            }}
-          >
+          <span className="sd-notification-badge">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -117,58 +97,21 @@ export const NotificationMenu = () => {
 
       {/* Menú Desplegable Adaptable */}
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '120%',
-            ...(alignLeft ? { left: 0 } : { right: 0 }),
-            width: '320px',
-            maxWidth: '85vw',
-            maxHeight: '380px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-            borderRadius: '8px',
-            zIndex: 9999,
-            border: '1px solid #e9ecef',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}
-        >
+        <div className={`sd-notification-dropdown ${alignLeft ? 'sd-notification-dropdown--left' : 'sd-notification-dropdown--right'}`}>
           {/* Cabecera Fija */}
-          <div
-            style={{
-              padding: '0.75rem 1rem',
-              borderBottom: '1px solid #eee',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor: '#f8f9fa',
-              flexShrink: 0
-            }}
-          >
-            <strong style={{ fontSize: '0.95rem', color: '#333' }}>Notificaciones</strong>
+          <div className="sd-notification-header">
+            <span className="sd-notification-title">Notificaciones</span>
             {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#1c7ed6',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
+              <button onClick={handleMarkAllRead} className="sd-notification-mark-all">
                 Marcar todas leídas
               </button>
             )}
           </div>
 
           {/* Cuerpo con Scroll Integrado */}
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          <div className="sd-notification-body">
             {notifications.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#888', fontSize: '0.9rem' }}>
+              <div className="sd-notification-empty">
                 No tienes notificaciones
               </div>
             ) : (
@@ -178,26 +121,18 @@ export const NotificationMenu = () => {
                   <div
                     key={notif.id}
                     onClick={() => handleNotificationClick(notif)}
-                    style={{
-                      padding: '0.8rem 1rem',
-                      borderBottom: '1px solid #f1f3f5',
-                      backgroundColor: estaLeido ? '#ffffff' : '#e7f5ff',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s'
-                    }}
+                    className={`sd-notification-item ${estaLeido ? 'sd-notification-item--read' : 'sd-notification-item--unread'}`}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#333' }}>{notif.titulo}</strong>
-                      {!estaLeido && (
-                        <span style={{ height: '8px', width: '8px', backgroundColor: '#1c7ed6', borderRadius: '50%' }} />
-                      )}
+                    <div className="sd-notification-item-head">
+                      <strong className="sd-notification-item-title">{notif.titulo}</strong>
+                      {!estaLeido && <span className="sd-notification-item-dot" />}
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#555', lineHeight: '1.3' }}>
+                    <p className="sd-notification-message">
                       {notif.mensaje}
                     </p>
 
                     {notif.creado_en && (
-                      <span style={{ fontSize: '0.7rem', color: '#999', display: 'block', marginTop: '0.3rem' }}>
+                      <span className="sd-notification-time">
                         {new Date(notif.creado_en).toLocaleString()}
                       </span>
                     )}

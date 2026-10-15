@@ -138,7 +138,7 @@ export const TableroAdministrador = () => {
                         aria-pressed={subVista === 'general'}
                     >
                         <Icon name="chart" />
-                        Tablero general admin
+                        Tablero general 
                     </button>
                     <button
                         type="button"
