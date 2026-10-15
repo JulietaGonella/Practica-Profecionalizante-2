@@ -1,6 +1,8 @@
+// src/pages/LoginPage.jsx
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import './Auth.css'; // 👈 Importa los estilos unificados
 
 export const LoginPage = () => {
   const { login } = useAuth();
@@ -27,25 +29,16 @@ export const LoginPage = () => {
     else navigate('/login', { replace: true });
   };
 
-  // 🔴 IMPORTANTE: Se eliminó el useEffect que dependía de [user]. 
-  // Ese hook hacía que si cambiaba el estado, el formulario se reiniciara.
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // 1. Intentamos loguear al usuario
       const userLogged = await login(email, password);
-
       sessionStorage.removeItem('ubicacionValidada');
-      
-      // 2. Si las credenciales SON CORRECTAS:
       setError('');
       redirigirPorUsuario(userLogged);
     } catch (err) {
-      // 3. Si las credenciales SON INCORRECTAS:
-      // No redirige, no desmonta el componente, retiene los campos e imprime el mensaje.
       const mensajeError = err.response?.data?.error || err.message || 'Error al iniciar sesión';
       setError(mensajeError);
     } finally {
@@ -54,44 +47,72 @@ export const LoginPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '3rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>Iniciar Sesión</h2>
-      
-      {/* El cartel permanene visible con el mensaje del servidor */}
-      {error && (
-        <div style={{ padding: '0.75rem', marginBottom: '1rem', color: '#721c24', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '4px' }}>
-          ⚠️ {error}
+    <div className="auth-page">
+      <div className="auth-card">
+        
+        <div className="auth-card__header">
+          <h2 className="auth-card__title">Iniciar Sesión</h2>
+          <p className="auth-card__subtitle">Ingresá a tu cuenta de SmartDrop</p>
         </div>
-      )}
+        
+        {error && (
+          <div className="auth-banner" role="alert">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Correo electrónico"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={isSubmitting}
-          required
-        />
-        <br /><br />
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={isSubmitting}
-          required
-        />
-        <br /><br />
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label htmlFor="email">Correo electrónico</label>
+            <input
+              id="email"
+              type="email"
+              className="auth-input"
+              placeholder="nombre@correo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isSubmitting}
+              required
+            />
+          </div>
 
-        <button type="submit" disabled={isSubmitting} style={{ cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-          {isSubmitting ? '⏳ Cargando...' : 'Ingresar'}
-        </button>
-      </form>
+          <div className="auth-field">
+            <label htmlFor="password">Contraseña</label>
+            <input
+              id="password"
+              type="password"
+              className="auth-input"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isSubmitting}
+              required
+            />
+          </div>
 
-      <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-        <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
-        <Link to="/register">Regístrate como cliente</Link>
+          <button 
+            type="submit" 
+            className="admin-btn admin-btn--primary admin-btn--block" 
+            disabled={isSubmitting}
+            style={{ marginTop: '8px' }}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="admin-spinner"></span>
+                Ingresando...
+              </>
+            ) : (
+              'Ingresar'
+            )}
+          </button>
+        </form>
+
+        <div className="auth-footer-links">
+          <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
+          <Link to="/register">Regístrate</Link>
+        </div>
+
       </div>
     </div>
   );

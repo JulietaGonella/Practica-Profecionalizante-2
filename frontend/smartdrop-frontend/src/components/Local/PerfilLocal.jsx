@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { getMiLocal, updatePerfilLocal } from '../../api/localService';
 import { CambiarPasswordModal } from '../CambiarPasswordModal';
+import { Icon, Spinner, Banner } from './LocalUI';
+import './css/Local.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -100,178 +102,216 @@ export const PerfilLocal = () => {
             setIsSaving(false);
         }
     };
-    if (loading) return <div>⏳ Cargando datos del perfil...</div>;
+    if (loading) {
+        return (
+            <div className="local-state local-scope" role="status">
+                <Spinner />
+                Cargando datos del perfil...
+            </div>
+        );
+    }
 
     return (
-        <div style={{ marginTop: '1.5rem', border: '1px solid #ccc', padding: '1.5rem', borderRadius: '8px', backgroundColor: '#fff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <section className="local-section">
+            <div className="local-section-head">
                 <div>
-                    <h3 style={{ margin: 0 }}>🏪 Perfil e Información del Comercio</h3>
-                    <p style={{ color: '#666', fontSize: '0.85rem', margin: '0.3rem 0 0 0' }}>
-                        Gestiona la información operativa e imágenes del comercio.
+                    <h2 className="local-title">
+                        <span className="local-title__icon"><Icon name="store" size={20} /></span>
+                        Perfil e información del comercio
+                    </h2>
+                    <p className="local-subtitle">
+                        Gestioná la información operativa e imágenes del comercio.
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    {/* 🟢 Botón para alternar la visibilidad del cambio de contraseña */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {/* Alterna la visibilidad del cambio de contraseña */}
                     <button
                         type="button"
                         onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
-                        style={{ padding: '0.6rem 1.2rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                        className="local-btn local-btn--outline"
                     >
-                        🔐 {mostrarCambioPass ? 'Ocultar Cambio Clave' : 'Cambiar Contraseña'}
+                        <Icon name="key" />
+                        {mostrarCambioPass ? 'Ocultar cambio de clave' : 'Cambiar contraseña'}
                     </button>
 
                     {!editando && (
                         <button
                             type="button"
                             onClick={() => setEditando(true)}
-                            style={{ padding: '0.6rem 1.2rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                            className="local-btn local-btn--primary"
                         >
-                            ✏️ Editar Perfil
+                            <Icon name="pencil" />
+                            Editar perfil
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Renderizado condicional del modal/formulario para cambiar contraseña */}
+            {/* Formulario para cambiar contraseña */}
             {mostrarCambioPass && (
-                <div style={{ marginBottom: '1.5rem' }}>
+                <div className="local-card">
                     <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
                 </div>
             )}
 
             {mensaje.texto && (
-                <p style={{ color: mensaje.tipo === 'error' ? 'red' : 'green', fontWeight: 'bold', marginBottom: '1rem' }}>
+                <Banner tipo={mensaje.tipo === 'error' ? 'error' : 'success'}>
                     {mensaje.texto}
-                </p>
+                </Banner>
             )}
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} className="local-profile">
                 {/* SECCIÓN 1: DATOS EXCLUSIVOS DE ADMINISTRADOR (SOLO LECTURA) */}
-                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #e9ecef' }}>
-                    <h4 style={{ margin: '0 0 0.8rem 0', color: '#495057' }}>🔒 Información Administrativa (Solo Administrador General)</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                        <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>Nombre del Local:</label>
-                            <input type="text" value={localData?.nombre || ''} disabled style={{ width: '100%', padding: '0.5rem', marginTop: '4px', backgroundColor: '#e9ecef', border: '1px solid #ced4da', borderRadius: '4px' }} />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>Dirección:</label>
-                            <input type="text" value={localData?.direccion || ''} disabled style={{ width: '100%', padding: '0.5rem', marginTop: '4px', backgroundColor: '#e9ecef', border: '1px solid #ced4da', borderRadius: '4px' }} />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>Ubicación GPS (Lat / Lng):</label>
-                            <input type="text" value={`${localData?.latitud || 0}, ${localData?.longitud || 0}`} disabled style={{ width: '100%', padding: '0.5rem', marginTop: '4px', backgroundColor: '#e9ecef', border: '1px solid #ced4da', borderRadius: '4px' }} />
-                        </div>
+                <div className="local-readonly">
+                    <h3>
+                        <Icon name="lock" size={16} />
+                        Información administrativa (solo administrador general)
+                    </h3>
+                    <div className="local-grid-auto">
+                        <label className="local-field">
+                            <span>Nombre del local</span>
+                            <input type="text" value={localData?.nombre || ''} disabled className="local-input" />
+                        </label>
+                        <label className="local-field">
+                            <span>Dirección</span>
+                            <input type="text" value={localData?.direccion || ''} disabled className="local-input" />
+                        </label>
+                        <label className="local-field">
+                            <span>Ubicación GPS (lat / lng)</span>
+                            <input type="text" value={`${localData?.latitud || 0}, ${localData?.longitud || 0}`} disabled className="local-input" />
+                        </label>
                     </div>
                 </div>
 
                 {/* SECCIÓN 2: DATOS EDITABLES POR EL COMERCIO */}
-                <h4 style={{ margin: '0 0 0.8rem 0', color: '#212529' }}>⚙️ Configuración Operativa y Contacto</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '1.5rem' }}>
-                    <div>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>📞 Teléfono de Contacto:</label>
-                        <input
-                            type="text"
-                            disabled={!editando || isSaving}
-                            value={telefono}
-                            onChange={(e) => setTelefono(e.target.value)}
-                            placeholder="Ej: +54 353 1234567"
-                            style={{ width: '100%', padding: '0.5rem', marginTop: '4px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-                        />
-                    </div>
+                <div className="local-card">
+                    <h3 className="local-card__title">
+                        <Icon name="timer" size={18} />
+                        Configuración operativa y contacto
+                    </h3>
+                    <div className="local-grid-auto">
+                        <label className="local-field">
+                            <span>Teléfono de contacto</span>
+                            <input
+                                type="text"
+                                disabled={!editando || isSaving}
+                                value={telefono}
+                                onChange={(e) => setTelefono(e.target.value)}
+                                placeholder="Ej: +54 353 1234567"
+                                className="local-input"
+                            />
+                        </label>
 
-                    <div>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>💵 Costo de Envío Base ($):</label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            disabled={!editando || isSaving}
-                            value={costoEnvioBase}
-                            onChange={(e) => setCostoEnvioBase(e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem', marginTop: '4px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-                        />
-                    </div>
+                        <label className="local-field">
+                            <span>Costo de envío base ($)</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                disabled={!editando || isSaving}
+                                value={costoEnvioBase}
+                                onChange={(e) => setCostoEnvioBase(e.target.value)}
+                                className="local-input"
+                            />
+                        </label>
 
-                    <div>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block' }}>⏱️ Tiempo Prep. Promedio (Mins):</label>
-                        <input
-                            type="number"
-                            min="1"
-                            disabled={!editando || isSaving}
-                            value={tiempoPreparacionPromedio}
-                            onChange={(e) => setTiempoPreparacionPromedio(e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem', marginTop: '4px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }}
-                        />
+                        <label className="local-field">
+                            <span>Tiempo de preparación promedio (min)</span>
+                            <input
+                                type="number"
+                                min="1"
+                                disabled={!editando || isSaving}
+                                value={tiempoPreparacionPromedio}
+                                onChange={(e) => setTiempoPreparacionPromedio(e.target.value)}
+                                className="local-input"
+                            />
+                        </label>
                     </div>
                 </div>
 
                 {/* SECCIÓN 3: IMÁGENES DEL COMERCIO (LOGO, BANNER, FOTO) */}
-                <h4 style={{ margin: '0 0 0.8rem 0', color: '#212529' }}>🖼️ Galería e Imagen de Marca</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '1.5rem' }}>
-                    {/* Logo */}
-                    <div style={{ border: '1px solid #eee', padding: '0.8rem', borderRadius: '6px', textAlign: 'center' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>Logo del Local</label>
-                        {previews.logo ? (
-                            <img src={previews.logo} alt="Logo" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '50%', marginBottom: '0.5rem' }} />
-                        ) : (
-                            <div style={{ width: '80px', height: '80px', backgroundColor: '#eee', borderRadius: '50%', margin: '0 auto 0.5rem auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Sin logo</div>
-                        )}
-                        {editando && (
-                            <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'logo')} style={{ fontSize: '0.8rem', width: '100%' }} />
-                        )}
-                    </div>
+                <div className="local-card">
+                    <h3 className="local-card__title">
+                        <Icon name="image" size={18} />
+                        Galería e imagen de marca
+                    </h3>
+                    <div className="local-images">
+                        {/* Logo */}
+                        <div className="local-image-card local-file">
+                            <span>Logo del local</span>
+                            <div className="local-image-card__preview local-image-card__preview--round">
+                                {previews.logo ? (
+                                    <img src={previews.logo} alt="Logo" />
+                                ) : (
+                                    'Sin logo'
+                                )}
+                            </div>
+                            {editando && (
+                                <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'logo')} aria-label="Seleccionar logo" />
+                            )}
+                        </div>
 
-                    {/* Banner */}
-                    <div style={{ border: '1px solid #eee', padding: '0.8rem', borderRadius: '6px', textAlign: 'center' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>Banner Encabezado</label>
-                        {previews.banner ? (
-                            <img src={previews.banner} alt="Banner" style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '4px', marginBottom: '0.5rem' }} />
-                        ) : (
-                            <div style={{ width: '100%', height: '80px', backgroundColor: '#eee', borderRadius: '4px', margin: '0 auto 0.5rem auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Sin banner</div>
-                        )}
-                        {editando && (
-                            <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'banner')} style={{ fontSize: '0.8rem', width: '100%' }} />
-                        )}
-                    </div>
+                        {/* Banner */}
+                        <div className="local-image-card local-file">
+                            <span>Banner de encabezado</span>
+                            <div className="local-image-card__preview">
+                                {previews.banner ? (
+                                    <img src={previews.banner} alt="Banner" />
+                                ) : (
+                                    'Sin banner'
+                                )}
+                            </div>
+                            {editando && (
+                                <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'banner')} aria-label="Seleccionar banner" />
+                            )}
+                        </div>
 
-                    {/* Foto Principal / Fachada */}
-                    <div style={{ border: '1px solid #eee', padding: '0.8rem', borderRadius: '6px', textAlign: 'center' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>Foto Fachada / Local</label>
-                        {previews.foto ? (
-                            <img src={previews.foto} alt="Foto Fachada" style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '4px', marginBottom: '0.5rem' }} />
-                        ) : (
-                            <div style={{ width: '100%', height: '80px', backgroundColor: '#eee', borderRadius: '4px', margin: '0 auto 0.5rem auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Sin foto</div>
-                        )}
-                        {editando && (
-                            <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'foto')} style={{ fontSize: '0.8rem', width: '100%' }} />
-                        )}
+                        {/* Foto principal / fachada */}
+                        <div className="local-image-card local-file">
+                            <span>Foto fachada / local</span>
+                            <div className="local-image-card__preview">
+                                {previews.foto ? (
+                                    <img src={previews.foto} alt="Foto Fachada" />
+                                ) : (
+                                    'Sin foto'
+                                )}
+                            </div>
+                            {editando && (
+                                <input type="file" accept="image/*" disabled={isSaving} onChange={(e) => handleFileChange(e, 'foto')} aria-label="Seleccionar foto de fachada" />
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* BOTONES DE ACCIÓN */}
                 {editando && (
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem' }}>
+                    <div className="local-sticky-actions" style={{ marginTop: 0 }}>
                         <button
                             type="button"
                             onClick={handleCancelar}
                             disabled={isSaving}
-                            style={{ flex: 1, padding: '0.8rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                            className="local-btn local-btn--outline local-btn--lg"
+                            style={{ flex: 1 }}
                         >
-                            ❌ Cancelar
+                            <Icon name="x" />
+                            Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isSaving}
-                            style={{ flex: 1, padding: '0.8rem', backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                            className="local-btn local-btn--primary local-btn--lg"
+                            style={{ flex: 1 }}
                         >
-                            {isSaving ? '⏳ Guardando...' : '💾 Guardar Cambios'}
+                            {isSaving ? (
+                                <><Spinner /> Guardando...</>
+                            ) : (
+                                <><Icon name="save" /> Guardar cambios</>
+                            )}
                         </button>
                     </div>
                 )}
             </form>
-        </div>
+        </section>
     );
 };

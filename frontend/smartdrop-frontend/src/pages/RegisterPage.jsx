@@ -1,8 +1,11 @@
+// src/pages/Cliente/RegisterPage.jsx (o src/pages/RegisterPage.jsx)
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { obtenerPosicion } from '../utils/geo'; // 👈 Importamos la función robusta de geo.js
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import './Auth.css';
 
 // Solución para el ícono por defecto de Leaflet en React
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -16,16 +19,16 @@ const DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Componente auxiliar para recentrar el mapa dinámicamente cuando cambia el centro
 const MapRecenter = ({ center }) => {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
+    if (center) {
+      map.setView(center, map.getZoom(), { animate: true });
+    }
   }, [center, map]);
   return null;
 };
 
-// Componente auxiliar para capturar clics manuales en el mapa
 const LocationSelector = ({ position, setPosition, setForm }) => {
   useMapEvents({
     click(e) {
@@ -62,29 +65,29 @@ export const RegisterPage = () => {
     longitud: ''
   });
 
-  // Centro por defecto (Villa María, Córdoba) temporal hasta que cargue el GPS
-  const [mapCenter, setMapCenter] = useState([-32.4075, -63.2402]);
+  const [mapCenter, setMapCenter] = useState([-32.4075, -63.2402]); // Villa María por defecto
   const [markerPosition, setMarkerPosition] = useState(null);
 
   const [error, setError] = useState('');
   const [loadingGps, setLoadingGps] = useState(true);
+  const [modalAviso, setModalAviso] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // 🌍 Obtener Ubicación GPS automáticamente al cargar la página
+  // 🌍 Obtención inteligente de posición usando geo.js
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setError('La geolocalización no es soportada por tu navegador. Por favor, selecciona tu ubicación en el mapa.');
-      setLoadingGps(false);
-      return;
-    }
+    const cargarUbicacionGPS = async () => {
+      try {
+        setLoadingGps(true);
+        setError('');
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
+        // Llama a la función optimizada de geo.js que maneja fallbacks automáticamente
+        const pos = await obtenerPosicion();
+        const lat = pos.lat;
+        const lng = pos.lng;
 
         setMapCenter([lat, lng]);
         setMarkerPosition([lat, lng]);
@@ -94,7 +97,7 @@ export const RegisterPage = () => {
           longitud: lng
         }));
 
-        // Intentar obtener la dirección legible mediante Nominatim (Reverse Geocoding)
+        // Intentar obtener la dirección legible mediante Nominatim
         try {
           const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
           const data = await response.json();
@@ -106,17 +109,16 @@ export const RegisterPage = () => {
           }
         } catch (err) {
           console.error('No se pudo obtener la dirección automática:', err);
-        } finally {
-          setLoadingGps(false);
         }
-      },
-      (err) => {
-        console.warn('Permiso de GPS denegado o no disponible:', err.message);
+      } catch (err) {
+        console.warn('No se pudo obtener la ubicación automática:', err.message);
         setError('No pudimos obtener tu ubicación automáticamente. Selecciona tu domicilio haciendo clic en el mapa.');
+      } finally {
         setLoadingGps(false);
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
+      }
+    };
+
+    cargarUbicacionGPS();
   }, []);
 
   const handleSubmit = async (e) => {
@@ -124,23 +126,24 @@ export const RegisterPage = () => {
     setError('');
 
     if (!form.latitud || !form.longitud) {
-      setError('Por favor, selecciona una ubicación válida en el mapa.');
+      setError('Por favor, selecciona una ubicación válida en el mapa antes de registrarte.');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await registerClient({
         ...form,
         latitud: Number(form.latitud),
         longitud: Number(form.longitud)
       });
-      alert('¡Registro exitoso! Ahora puedes iniciar sesión.');
-      navigate('/login');
+      
+      setModalAviso({
+        titulo: '✓ ¡Registro Exitoso!',
+        mensaje: 'Tu cuenta ha sido creada correctamente. Ahora puedes iniciar sesión.'
+      });
     } catch (err) {
-      // 🔍 Esto imprimirá el error real del servidor en la consola del navegador
       console.error('Detalle del error del backend:', err.response?.data);
-
-      // Extraemos el mensaje sin importar cómo lo envíe el backend
       const serverError = 
         err.response?.data?.error || 
         err.response?.data?.message || 
@@ -148,57 +151,157 @@ export const RegisterPage = () => {
         err.message;
 
       setError(serverError);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '2rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>Registro de Cliente con Geolocalización</h2>
-      {error && <p style={{ color: 'red', fontSize: '0.9rem' }}>{error}</p>}
-      {loadingGps && <p style={{ color: '#666', fontStyle: 'italic' }}>📍 Detectando tu ubicación actual...</p>}
-
-      <form onSubmit={handleSubmit}>
-        <input type="text" name="nombre" placeholder="Nombre" value={form.nombre} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
-        <input type="text" name="apellido" placeholder="Apellido" value={form.apellido} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
-        <input type="text" name="username" placeholder="Nombre de usuario" value={form.username} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
-        <input type="email" name="email" placeholder="Correo electrónico" value={form.email} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
-        <input type="password" name="password" placeholder="Contraseña (mínimo 8 caracteres)" value={form.password} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
-        <input type="text" name="telefono" placeholder="Teléfono" value={form.telefono} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
+    <div className="auth-page" style={{ minHeight: 'auto', padding: '2rem 1rem' }}>
+      <div className="auth-card" style={{ maxWidth: '640px' }}>
         
-        <div style={{ border: '1px dashed #aaa', padding: '12px', marginBottom: '15px', borderRadius: '6px', backgroundColor: '#f9f9f9' }}>
-          <p style={{ margin: '0 0 8px' }}>
-            <small><strong>Ubicación de entrega:</strong> Mueve el marcador o haz clic en otra parte del mapa si deseas ajustarla.</small>
-          </p>
+        <div className="auth-card__header">
+          <h2 className="auth-card__title">Registro de Cliente</h2>
+          <p className="auth-card__subtitle">Completa tus datos y selecciona tu ubicación de entrega</p>
+        </div>
+        
+        {error && (
+          <div className="auth-banner" role="alert">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
-          {/* 🗺️ Contenedor del Mapa Visual */}
-          <div style={{ height: '300px', width: '100%', marginBottom: '10px', borderRadius: '4px', overflow: 'hidden' }}>
-            <MapContainer center={mapCenter} zoom={15} style={{ height: '100%', width: '100%' }}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapRecenter center={mapCenter} />
-              <LocationSelector position={markerPosition} setPosition={setMarkerPosition} setForm={setForm} />
-            </MapContainer>
+        {loadingGps && (
+          <div className="admin-inline-note admin-inline-note--info" style={{ marginBottom: '12px' }}>
+            <span className="admin-spinner"></span>
+            <span>📍 Detectando ubicación actual...</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="auth-field">
+              <label>Nombre</label>
+              <input type="text" name="nombre" className="auth-input" placeholder="Tu nombre" value={form.nombre} onChange={handleChange} disabled={isSubmitting} required />
+            </div>
+            <div className="auth-field">
+              <label>Apellido</label>
+              <input type="text" name="apellido" className="auth-input" placeholder="Tu apellido" value={form.apellido} onChange={handleChange} disabled={isSubmitting} required />
+            </div>
           </div>
 
-          <p style={{ margin: '4px 0' }}><small><strong>Latitud:</strong> {form.latitud || 'Pendiente'}</small></p>
-          <p style={{ margin: '0 0 4px' }}><small><strong>Longitud:</strong> {form.longitud || 'Pendiente'}</small></p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="auth-field">
+              <label>Nombre de usuario</label>
+              <input type="text" name="username" className="auth-input" placeholder="usuario123" value={form.username} onChange={handleChange} disabled={isSubmitting} required />
+            </div>
+            <div className="auth-field">
+              <label>Teléfono</label>
+              <input type="text" name="telefono" className="auth-input" placeholder="3534123456" value={form.telefono} onChange={handleChange} disabled={isSubmitting} required />
+            </div>
+          </div>
+
+          <div className="auth-field">
+            <label>Correo electrónico</label>
+            <input type="email" name="email" className="auth-input" placeholder="nombre@correo.com" value={form.email} onChange={handleChange} disabled={isSubmitting} required />
+          </div>
+
+          <div className="auth-field">
+            <label>Contraseña</label>
+            <input type="password" name="password" className="auth-input" placeholder="Mínimo 8 caracteres" value={form.password} onChange={handleChange} disabled={isSubmitting} required />
+          </div>
+
+          {/* 🗺️ Bloque de Geolocalización Integrado */}
+          <div className="admin-subbox" style={{ marginTop: '4px' }}>
+            <h4 className="admin-subbox__title">📍 Ubicación de entrega</h4>
+            <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--sd-text-secondary)' }}>
+              Mueve el marcador o haz clic en el mapa para ajustar tu posición exacta.
+            </p>
+
+            <div style={{ height: '280px', width: '100%', borderRadius: 'var(--sd-radius-ctl)', overflow: 'hidden', border: '1px solid var(--sd-border)' }}>
+              <MapContainer center={mapCenter} zoom={15} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapRecenter center={mapCenter} />
+                <LocationSelector position={markerPosition} setPosition={setMarkerPosition} setForm={setForm} />
+              </MapContainer>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', fontSize: '0.8125rem', color: 'var(--sd-text-secondary)' }}>
+              <span><strong>Latitud:</strong> {form.latitud || 'Pendiente'}</span>
+              <span><strong>Longitud:</strong> {form.longitud || 'Pendiente'}</span>
+            </div>
+          </div>
+
+          <div className="auth-field">
+            <label>Dirección de entrega</label>
+            <input type="text" name="direccion" className="auth-input" placeholder="Calle y número" value={form.direccion} onChange={handleChange} disabled={isSubmitting} required />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="auth-field">
+              <label>Piso (opcional)</label>
+              <input type="text" name="piso" className="auth-input" placeholder="Ej: 2" value={form.piso} onChange={handleChange} disabled={isSubmitting} />
+            </div>
+            <div className="auth-field">
+              <label>Departamento (opcional)</label>
+              <input type="text" name="departamento" className="auth-input" placeholder="Ej: B" value={form.departamento} onChange={handleChange} disabled={isSubmitting} />
+            </div>
+          </div>
+
+          <div className="auth-field">
+            <label>Referencia (opcional)</label>
+            <input type="text" name="referencia" className="auth-input" placeholder="Entre calles, color de fachada, etc." value={form.referencia} onChange={handleChange} disabled={isSubmitting} />
+          </div>
+
+          <button 
+            type="submit" 
+            className="admin-btn admin-btn--primary admin-btn--block" 
+            disabled={isSubmitting}
+            style={{ marginTop: '8px' }}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="admin-spinner"></span>
+                Registrando cuenta...
+              </>
+            ) : (
+              'Registrarse'
+            )}
+          </button>
+        </form>
+
+        <div className="auth-footer-links">
+          <Link to="/login">¿Ya tienes cuenta? Inicia Sesión</Link>
         </div>
 
-        <input type="text" name="direccion" placeholder="Dirección de entrega" value={form.direccion} onChange={handleChange} required style={{ width: '100%', marginBottom: '10px', padding: '8px' }} />
+      </div>
 
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <input type="text" name="piso" placeholder="Piso (opcional)" value={form.piso} onChange={handleChange} style={{ flex: 1, padding: '8px' }} />
-          <input type="text" name="departamento" placeholder="Departamento (opcional)" value={form.departamento} onChange={handleChange} style={{ flex: 1, padding: '8px' }} />
+      {/* 🟢 Modal Estético de Éxito */}
+      {modalAviso && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-content" style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ color: 'var(--sd-success)', marginTop: 0 }}>{modalAviso.titulo}</h3>
+            <p style={{ color: 'var(--sd-text-main)', fontSize: '0.9375rem', margin: '1rem 0', lineHeight: '1.5' }}>
+              {modalAviso.mensaje}
+            </p>
+            <button
+              onClick={() => {
+                setModalAviso(null);
+                navigate('/login');
+              }}
+              className="admin-btn admin-btn--primary admin-btn--block"
+            >
+              Entendido
+            </button>
+          </div>
         </div>
+      )}
 
-        <input type="text" name="referencia" placeholder="Referencia (opcional, ej: Entre calles, color de casa)" value={form.referencia} onChange={handleChange} style={{ width: '100%', marginBottom: '15px', padding: '8px' }} />
-
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Registrarse</button>
-      </form>
-
-      <p style={{ marginTop: '1rem', textAlign: 'center' }}><small>¿Ya tienes cuenta? <Link to="/login">Inicia Sesión</Link></small></p>
     </div>
   );
 };

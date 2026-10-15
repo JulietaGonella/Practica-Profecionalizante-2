@@ -1,0 +1,128 @@
+/* ==========================================
+   SMARTDROP · ESTILOS DE AUTENTICACIÓN
+   Ubicación: src/pages/Auth.css
+   ========================================== */
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background-color: var(--sd-bg);
+  font-family: var(--sd-font);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 32px;
+  background-color: var(--sd-surface);
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-card);
+  box-shadow: var(--sd-shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-card__header {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.auth-card__title {
+  color: var(--sd-navy);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.auth-card__subtitle {
+  color: var(--sd-text-secondary);
+  font-size: 0.875rem;
+  margin-top: 6px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field label {
+  color: var(--sd-navy);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #CBD2DB;
+  border-radius: var(--sd-radius-ctl);
+  background-color: var(--sd-surface);
+  color: var(--sd-text-main);
+  font-size: 0.9375rem;
+  font-family: var(--sd-font);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-input:hover {
+  border-color: #98A2B3;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: var(--sd-info);
+  box-shadow: var(--sd-focus-ring);
+}
+
+.auth-input:disabled {
+  background-color: var(--sd-surface-muted);
+  color: var(--sd-text-secondary);
+  cursor: not-allowed;
+}
+
+.auth-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--sd-radius-ctl);
+  font-size: 0.875rem;
+  font-weight: 600;
+  background-color: var(--sd-tint-error);
+  border: 1px solid var(--sd-line-error);
+  color: var(--sd-error);
+}
+
+.auth-footer-links {
+  display: flex;
+  flex-direction: column; /* 👈 Esto los pone uno debajo del otro */
+  align-items: center;    /* 👈 Centra los enlaces horizontalmente */
+  gap: 10px;              /* 👈 Espacio vertical entre los enlaces */
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sd-border);
+  font-size: 0.875rem;
+}
+
+.auth-footer-links a {
+  color: var(--sd-navy);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.auth-footer-links a:hover {
+  color: var(--sd-orange-action);
+  text-decoration: underline;
+}

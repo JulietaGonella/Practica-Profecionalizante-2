@@ -1,11 +1,11 @@
 // src/components/LogoutButton.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // 👈 1. Importar useNavigate
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export const LogoutButton = () => {
   const { logout } = useAuth();
-  const navigate = useNavigate(); // 👈 2. Instanciar navigate
+  const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -13,7 +13,7 @@ export const LogoutButton = () => {
     try {
       sessionStorage.removeItem('ubicacionValidada');
       await logout();
-      navigate('/login', { replace: true }); // 👈 3. Reemplazar historial al salir
+      navigate('/login', { replace: true });
     } catch (error) {
       console.error('Error al cerrar sesión:', error);
     } finally {
@@ -25,9 +25,16 @@ export const LogoutButton = () => {
     <button 
       onClick={handleLogout} 
       disabled={isLoggingOut}
-      style={{ cursor: isLoggingOut ? 'not-allowed' : 'pointer' }}
+      className="admin-btn admin-btn--danger" // 👈 Clases idénticas a los botones de peligro del admin
     >
-      {isLoggingOut ? '⏳ Cerrando sesión...' : 'Cerrar Sesión'}
+      {isLoggingOut ? (
+        <>
+          <span className="admin-spinner"></span>
+          Cerrando...
+        </>
+      ) : (
+        '🚪 Cerrar Sesión'
+      )}
     </button>
   );
 };

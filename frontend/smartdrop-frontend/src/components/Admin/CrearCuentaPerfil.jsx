@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -6,6 +7,8 @@ import {
   crearLocalCompletoAdmin,
   crearRepartidorCompletoAdmin
 } from '../../api/adminService';
+import { Icon, Spinner, Banner, sinEmoji } from './AdminUI';
+import './CSS/Administrador.css';
 
 // Configuración de iconos por defecto para Leaflet en React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -45,6 +48,7 @@ const MapClickHandler = ({ setMarkerPosition, setUbicacionLocal }) => {
 };
 
 export const CrearCuentaPerfilAdmin = () => {
+  const navigate = useNavigate();
   const [tipo, setTipo] = useState('local');
   const [usuarioForm, setUsuarioForm] = useState({
     username: '',
@@ -325,450 +329,438 @@ export const CrearCuentaPerfilAdmin = () => {
 
   const tipoVehiculoActual = String(perfilForm.vehiculo.IDtipo_vehiculo);
 
-  const inputStyle = {
-    padding: '0.75rem',
-    borderRadius: '6px',
-    border: '1px solid #ced4da',
-    fontSize: '0.95rem',
-    width: '100%',
-    boxSizing: 'border-box'
-  };
-
-  const labelStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.4rem',
-    fontSize: '0.85rem',
-    fontWeight: '600',
-    color: '#495057'
-  };
-
-  const cardStyle = {
-    backgroundColor: '#ffffff',
-    border: '1px solid #e9ecef',
-    borderRadius: '8px',
-    padding: '1.25rem',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
-  };
-
   return (
-    <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '1.2rem', fontFamily: 'system-ui, sans-serif' }}>
-      <h2 style={{ color: '#212529', marginBottom: '1.5rem' }}>Crear cuenta y perfil</h2>
-
-      {banner.texto && (
-        <div
-          style={{
-            marginBottom: '1.5rem',
-            padding: '0.9rem 1rem',
-            borderRadius: '8px',
-            backgroundColor: banner.tipo === 'success' ? '#e6fcf5' : '#fff5f5',
-            border: `1px solid ${banner.tipo === 'success' ? '#a9eec2' : '#ffc9c9'}`,
-            color: banner.tipo === 'success' ? '#087f5b' : '#c92a2a',
-            fontWeight: 'bold'
-          }}
-        >
-          {banner.texto}
-        </div>
-      )}
-
-      {/* Selector de Perfil */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
-        <button
-          onClick={() => handleTipoChange('local')}
-          style={{
-            flex: 1,
-            backgroundColor: tipo === 'local' ? '#2b8a3e' : '#f1f3f5',
-            color: tipo === 'local' ? '#fff' : '#495057',
-            padding: '0.75rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-        >
-          Local
-        </button>
-
-        <button
-          onClick={() => handleTipoChange('repartidor')}
-          style={{
-            flex: 1,
-            backgroundColor: tipo === 'repartidor' ? '#d9480f' : '#f1f3f5',
-            color: tipo === 'repartidor' ? '#fff' : '#495057',
-            padding: '0.75rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            transition: 'all 0.2s'
-          }}
-        >
-          Repartidor
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gap: '1.25rem' }}>
-
-        {/* Sección: Datos de Cuenta */}
-        <div style={cardStyle}>
-          <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-            🔐 Datos de la Cuenta
-          </strong>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            <input
-              name="username"
-              value={usuarioForm.username}
-              onChange={handleUsuarioChange}
-              placeholder="Nombre de usuario"
-              style={inputStyle}
-            />
-            <input
-              name="email"
-              type="email"
-              value={usuarioForm.email}
-              onChange={handleUsuarioChange}
-              placeholder="Correo Electrónico"
-              style={inputStyle}
-            />
-            <input
-              name="password"
-              type="password"
-              value={usuarioForm.password}
-              onChange={handleUsuarioChange}
-              placeholder="Contraseña"
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        {/* Sección: Datos del Local y Ubicación Híbrida */}
-        {tipo === 'local' && (
-          <div style={cardStyle}>
-            <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-              🏪 Información del Local y Ubicación
-            </strong>
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              <input
-                name="nombre"
-                value={perfilForm.nombre}
-                onChange={handlePerfilChange}
-                placeholder="Nombre del local"
-                style={inputStyle}
-              />
-
-              {/* Input de Dirección con Autocompletado */}
-              <div style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
-                    name="direccion"
-                    value={perfilForm.direccion}
-                    onChange={handleDireccionChange}
-                    placeholder="Dirección del local (ej. San Martín 123)"
-                    style={inputStyle}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleBuscarDireccion}
-                    disabled={buscandoDireccion}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      backgroundColor: buscandoDireccion ? '#adb5bd' : '#2b8a3e',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: buscandoDireccion ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {buscandoDireccion ? '⏳ Buscando...' : '🔍 Buscar'}
-                  </button>
-                </div>
-
-                {/* Lista de sugerencias desplegables */}
-                {sugerencias.length > 0 && (
-                  <ul
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      backgroundColor: '#ffffff',
-                      border: '1px solid #ced4da',
-                      borderRadius: '0 0 6px 6px',
-                      listStyle: 'none',
-                      padding: 0,
-                      margin: 0,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      zIndex: 1000,
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    {sugerencias.map((item, index) => (
-                      <li
-                        key={index}
-                        onClick={() => seleccionarSugerencia(item)}
-                        style={{
-                          padding: '0.6rem 0.75rem',
-                          fontSize: '0.9rem',
-                          borderBottom: index < sugerencias.length - 1 ? '1px solid #f1f3f5' : 'none',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8f9fa')}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#ffffff')}
-                      >
-                        📍 {item.display_name}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Contenedor del Mapa Interactivo */}
-              <div style={{ height: '320px', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid #ced4da' }}>
-                <MapContainer
-                  center={[mapCenter.lat, mapCenter.lng]}
-                  zoom={14}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  <MapUpdater center={mapCenter} />
-                  <MapClickHandler setMarkerPosition={setMarkerPosition} setUbicacionLocal={setUbicacionLocal} />
-                  {markerPosition.lat && markerPosition.lng && (
-                    <Marker
-                      position={[markerPosition.lat, markerPosition.lng]}
-                      draggable={true}
-                      eventHandlers={{
-                        dragend: handleMarkerDragEnd,
-                      }}
-                    />
-                  )}
-                </MapContainer>
-              </div>
-
-              <small style={{ color: '#6c757d' }}>
-                💡 Escribe la dirección para ver sugerencias y selecciona una, o haz clic / arrastra el marcador en el mapa.
-              </small>
-
-              {/* Coordenadas sincronizadas automáticamente */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <input
-                  name="latitud"
-                  value={ubicacionLocal.latitud}
-                  placeholder="Latitud"
-                  style={{ ...inputStyle, backgroundColor: '#f8f9fa' }}
-                  readOnly
-                />
-                <input
-                  name="longitud"
-                  value={ubicacionLocal.longitud}
-                  placeholder="Longitud"
-                  style={{ ...inputStyle, backgroundColor: '#f8f9fa' }}
-                  readOnly
-                />
-              </div>
+    <div className="admin-page admin-scope">
+      <div className="admin-page__inner">
+        <div className="admin-page-head">
+          <div className="admin-brand">
+            <span className="admin-brand__mark" aria-hidden="true">
+              <Icon name="users" size={24} />
+            </span>
+            <div>
+              <h1>Crear cuenta y perfil</h1>
+              <p>Dá de alta un local o un repartidor con su usuario de acceso.</p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/admin/inicio')}
+            className="admin-btn admin-btn--outline"
+          >
+            <Icon name="arrowLeft" />
+            Volver
+          </button>
+        </div>
+
+        {banner.texto && (
+          <Banner tipo={banner.tipo}>{sinEmoji(banner.texto)}</Banner>
         )}
 
-        {/* Sección: Datos del Repartidor */}
-        {tipo === 'repartidor' && (
-          <div style={cardStyle}>
-            <strong style={{ color: '#343a40', fontSize: '1rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-              🛵 Perfil de Repartidor
-            </strong>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <input
-                name="dni"
-                value={perfilForm.dni}
-                onChange={handlePerfilChange}
-                placeholder="DNI del repartidor"
-                style={inputStyle}
-              />
-              <select
-                name="IDtipo_vehiculo"
-                value={perfilForm.vehiculo.IDtipo_vehiculo}
-                onChange={handleVehiculoChange}
-                style={inputStyle}
-              >
-                <option value="">Seleccione tipo de vehículo</option>
-                <option value="4">Auto</option>
-                <option value="3">Moto</option>
-                <option value="2">Bicicleta</option>
-              </select>
+        {/* Selector de perfil */}
+        <div className="admin-segmented" role="group" aria-label="Tipo de perfil" style={{ marginBottom: '20px' }}>
+          <button
+            type="button"
+            onClick={() => handleTipoChange('local')}
+            className={`admin-segmented__btn ${tipo === 'local' ? 'active' : ''}`}
+            aria-pressed={tipo === 'local'}
+          >
+            <Icon name="store" />
+            Local
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTipoChange('repartidor')}
+            className={`admin-segmented__btn ${tipo === 'repartidor' ? 'active' : ''}`}
+            aria-pressed={tipo === 'repartidor'}
+          >
+            <Icon name="bike" />
+            Repartidor
+          </button>
+        </div>
+
+        <div className="admin-form-stack">
+
+          {/* Sección: datos de cuenta */}
+          <section className="admin-form-card">
+            <h2 className="admin-form-card__title">
+              <Icon name="key" size={18} />
+              Datos de la cuenta
+            </h2>
+            <div className="admin-grid-auto">
+              <label className="admin-field">
+                <span>Nombre de usuario</span>
+                <input
+                  name="username"
+                  value={usuarioForm.username}
+                  onChange={handleUsuarioChange}
+                  placeholder="Nombre de usuario"
+                  className="admin-input"
+                />
+              </label>
+              <label className="admin-field">
+                <span>Correo electrónico</span>
+                <input
+                  name="email"
+                  type="email"
+                  value={usuarioForm.email}
+                  onChange={handleUsuarioChange}
+                  placeholder="Correo Electrónico"
+                  className="admin-input"
+                />
+              </label>
+              <label className="admin-field">
+                <span>Contraseña</span>
+                <input
+                  name="password"
+                  type="password"
+                  value={usuarioForm.password}
+                  onChange={handleUsuarioChange}
+                  placeholder="Contraseña"
+                  className="admin-input"
+                />
+              </label>
             </div>
+          </section>
 
-            {(tipoVehiculoActual === '3' || tipoVehiculoActual === '4') && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+          {/* Sección: datos del local y ubicación híbrida */}
+          {tipo === 'local' && (
+            <section className="admin-form-card">
+              <h2 className="admin-form-card__title">
+                <Icon name="store" size={18} />
+                Información del local y ubicación
+              </h2>
 
-                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
-                    DETALLES DEL VEHÍCULO
-                  </span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
-                    <input
-                      name="marca"
-                      value={perfilForm.vehiculo.marca}
-                      onChange={handleVehiculoChange}
-                      placeholder="Marca"
-                      style={inputStyle}
-                    />
-                    <input
-                      name="modelo"
-                      value={perfilForm.vehiculo.modelo}
-                      onChange={handleVehiculoChange}
-                      placeholder="Modelo"
-                      style={inputStyle}
-                    />
-                    <input
-                      name="anio"
-                      type="number"
-                      value={perfilForm.vehiculo.anio}
-                      onChange={handleVehiculoChange}
-                      placeholder="Año (Ej: 2022)"
-                      style={inputStyle}
-                    />
-                    <input
-                      name="patente"
-                      value={perfilForm.vehiculo.patente}
-                      onChange={handleVehiculoChange}
-                      placeholder="Patente"
-                      style={inputStyle}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.75rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        name="seguro_vigente"
-                        checked={perfilForm.vehiculo.seguro_vigente}
-                        onChange={handleVehiculoChange}
-                      />
-                      Seguro vigente
-                    </label>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        name="licencia_vigente"
-                        checked={perfilForm.vehiculo.licencia_vigente}
-                        onChange={handleVehiculoChange}
-                      />
-                      Licencia vigente
-                    </label>
-                  </div>
-                </div>
-
-                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
-                    FECHAS DE VENCIMIENTO
-                  </span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                    <label style={labelStyle}>
-                      Vencimiento Licencia
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_licencia"
-                        value={perfilForm.vehiculo.fecha_vencimiento_licencia}
-                        onChange={handleVehiculoChange}
-                        style={inputStyle}
-                      />
-                    </label>
-
-                    <label style={labelStyle}>
-                      Vencimiento Seguro
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_seguro"
-                        value={perfilForm.vehiculo.fecha_vencimiento_seguro}
-                        onChange={handleVehiculoChange}
-                        style={inputStyle}
-                      />
-                    </label>
-
-                    <label style={labelStyle}>
-                      Vencimiento Cédula
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_cedula"
-                        value={perfilForm.vehiculo.fecha_vencimiento_cedula}
-                        onChange={handleVehiculoChange}
-                        style={inputStyle}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', border: '1px solid #e9ecef' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#495057', display: 'block', marginBottom: '0.75rem' }}>
-                    DOCUMENTACIÓN EN ADJUNTO
-                  </span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                    <label style={labelStyle}>
-                      Cédula Verde/Azul
-                      <input type="file" name="cedula" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
-                    </label>
-
-                    <label style={labelStyle}>
-                      Comprobante Seguro
-                      <input type="file" name="seguro" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
-                    </label>
-
-                    <label style={labelStyle}>
-                      Licencia de Conducir
-                      <input type="file" name="licencia" accept="image/*,.pdf" onChange={handleFileChange} style={{ fontSize: '0.8rem' }} />
-                    </label>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {tipoVehiculoActual === '2' && (
-              <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '6px', marginTop: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <div className="admin-form">
+                <label className="admin-field">
+                  <span>Nombre del local</span>
                   <input
-                    type="checkbox"
-                    name="bici_propia"
-                    checked={perfilForm.vehiculo.bici_propia}
-                    onChange={handleVehiculoChange}
+                    name="nombre"
+                    value={perfilForm.nombre}
+                    onChange={handlePerfilChange}
+                    placeholder="Nombre del local"
+                    className="admin-input"
                   />
-                  ¿Dispone de bicicleta propia?
+                </label>
+
+                {/* Input de dirección con autocompletado */}
+                <div className="admin-field">
+                  <label htmlFor="direccion-local" className="admin-field__label">Dirección</label>
+                  <div className="admin-address">
+                    <div className="admin-address__row">
+                      <input
+                        id="direccion-local"
+                        name="direccion"
+                        value={perfilForm.direccion}
+                        onChange={handleDireccionChange}
+                        placeholder="Dirección del local (ej. San Martín 123)"
+                        className="admin-input"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleBuscarDireccion}
+                        disabled={buscandoDireccion}
+                        className="admin-btn admin-btn--navy"
+                      >
+                        {buscandoDireccion ? (
+                          <><Spinner /> Buscando...</>
+                        ) : (
+                          <><Icon name="search" size={16} /> Buscar</>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Lista de sugerencias desplegables */}
+                    {sugerencias.length > 0 && (
+                      <ul className="admin-suggest">
+                        {sugerencias.map((item, index) => (
+                          <li
+                            key={index}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => seleccionarSugerencia(item)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') seleccionarSugerencia(item);
+                            }}
+                          >
+                            <Icon name="pin" size={14} />
+                            <span>{item.display_name}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {isSearchingSugerencias && (
+                    <span className="admin-field-hint"><Spinner /> Buscando sugerencias...</span>
+                  )}
+                </div>
+
+                {/* Contenedor del mapa interactivo */}
+                <div className="admin-map-box">
+                  <MapContainer
+                    center={[mapCenter.lat, mapCenter.lng]}
+                    zoom={14}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <MapUpdater center={mapCenter} />
+                    <MapClickHandler setMarkerPosition={setMarkerPosition} setUbicacionLocal={setUbicacionLocal} />
+                    {markerPosition.lat && markerPosition.lng && (
+                      <Marker
+                        position={[markerPosition.lat, markerPosition.lng]}
+                        draggable={true}
+                        eventHandlers={{
+                          dragend: handleMarkerDragEnd,
+                        }}
+                      />
+                    )}
+                  </MapContainer>
+                </div>
+
+                <p className="admin-inline-note admin-inline-note--info">
+                  <Icon name="info" size={16} />
+                  <span>
+                    Escribe la dirección para ver sugerencias y selecciona una, o haz clic / arrastra el marcador en el mapa.
+                  </span>
+                </p>
+
+                {/* Coordenadas sincronizadas automáticamente */}
+                <div className="admin-grid-2">
+                  <label className="admin-field">
+                    <span>Latitud</span>
+                    <input
+                      name="latitud"
+                      value={ubicacionLocal.latitud}
+                      placeholder="Latitud"
+                      className="admin-input admin-input--readonly"
+                      readOnly
+                    />
+                  </label>
+                  <label className="admin-field">
+                    <span>Longitud</span>
+                    <input
+                      name="longitud"
+                      value={ubicacionLocal.longitud}
+                      placeholder="Longitud"
+                      className="admin-input admin-input--readonly"
+                      readOnly
+                    />
+                  </label>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Sección: datos del repartidor */}
+          {tipo === 'repartidor' && (
+            <section className="admin-form-card">
+              <h2 className="admin-form-card__title">
+                <Icon name="bike" size={18} />
+                Perfil de repartidor
+              </h2>
+
+              <div className="admin-grid-2">
+                <label className="admin-field">
+                  <span>DNI</span>
+                  <input
+                    name="dni"
+                    value={perfilForm.dni}
+                    onChange={handlePerfilChange}
+                    placeholder="DNI del repartidor"
+                    className="admin-input"
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Tipo de vehículo</span>
+                  <select
+                    name="IDtipo_vehiculo"
+                    value={perfilForm.vehiculo.IDtipo_vehiculo}
+                    onChange={handleVehiculoChange}
+                    className="admin-input"
+                  >
+                    <option value="">Seleccione tipo de vehículo</option>
+                    <option value="4">Auto</option>
+                    <option value="3">Moto</option>
+                    <option value="2">Bicicleta</option>
+                  </select>
                 </label>
               </div>
-            )}
-          </div>
-        )}
 
-        <button
-          onClick={crearUsuarioYPerfil}
-          disabled={loading}
-          style={{
-            padding: '1rem',
-            border: 'none',
-            borderRadius: '8px',
-            backgroundColor: '#1c7ed6',
-            color: '#fff',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold',
-            fontSize: '1rem',
-            marginTop: '0.5rem',
-            transition: 'background-color 0.2s'
-          }}
-        >
-          {loading ? '⏳ Creando...' : 'Crear cuenta y perfil'}
-        </button>
+              {(tipoVehiculoActual === '3' || tipoVehiculoActual === '4') && (
+                <div className="admin-form-stack" style={{ gap: '16px' }}>
+
+                  <div className="admin-subbox">
+                    <h3 className="admin-subbox__title">Detalles del vehículo</h3>
+                    <div className="admin-grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))' }}>
+                      <label className="admin-field">
+                        <span>Marca</span>
+                        <input
+                          name="marca"
+                          value={perfilForm.vehiculo.marca}
+                          onChange={handleVehiculoChange}
+                          placeholder="Marca"
+                          className="admin-input"
+                        />
+                      </label>
+                      <label className="admin-field">
+                        <span>Modelo</span>
+                        <input
+                          name="modelo"
+                          value={perfilForm.vehiculo.modelo}
+                          onChange={handleVehiculoChange}
+                          placeholder="Modelo"
+                          className="admin-input"
+                        />
+                      </label>
+                      <label className="admin-field">
+                        <span>Año</span>
+                        <input
+                          name="anio"
+                          type="number"
+                          value={perfilForm.vehiculo.anio}
+                          onChange={handleVehiculoChange}
+                          placeholder="Año (Ej: 2022)"
+                          className="admin-input"
+                        />
+                      </label>
+                      <label className="admin-field">
+                        <span>Patente</span>
+                        <input
+                          name="patente"
+                          value={perfilForm.vehiculo.patente}
+                          onChange={handleVehiculoChange}
+                          placeholder="Patente"
+                          className="admin-input"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="admin-check-row">
+                      <label className="admin-check">
+                        <input
+                          type="checkbox"
+                          name="seguro_vigente"
+                          checked={perfilForm.vehiculo.seguro_vigente}
+                          onChange={handleVehiculoChange}
+                        />
+                        Seguro vigente
+                      </label>
+
+                      <label className="admin-check">
+                        <input
+                          type="checkbox"
+                          name="licencia_vigente"
+                          checked={perfilForm.vehiculo.licencia_vigente}
+                          onChange={handleVehiculoChange}
+                        />
+                        Licencia vigente
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="admin-subbox">
+                    <h3 className="admin-subbox__title">Fechas de vencimiento</h3>
+                    <div className="admin-grid-auto">
+                      <label className="admin-field">
+                        <span>Vencimiento licencia</span>
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_licencia"
+                          value={perfilForm.vehiculo.fecha_vencimiento_licencia}
+                          onChange={handleVehiculoChange}
+                          className="admin-input"
+                        />
+                      </label>
+
+                      <label className="admin-field">
+                        <span>Vencimiento seguro</span>
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_seguro"
+                          value={perfilForm.vehiculo.fecha_vencimiento_seguro}
+                          onChange={handleVehiculoChange}
+                          className="admin-input"
+                        />
+                      </label>
+
+                      <label className="admin-field">
+                        <span>Vencimiento cédula</span>
+                        <input
+                          type="date"
+                          name="fecha_vencimiento_cedula"
+                          value={perfilForm.vehiculo.fecha_vencimiento_cedula}
+                          onChange={handleVehiculoChange}
+                          className="admin-input"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="admin-subbox">
+                    <h3 className="admin-subbox__title">Documentación adjunta</h3>
+                    <div className="admin-grid-auto">
+                      <label className="admin-field admin-file">
+                        <span>Cédula verde / azul</span>
+                        <input type="file" name="cedula" accept="image/*,.pdf" onChange={handleFileChange} />
+                        {archivosVehiculo.cedula && (
+                          <span className="admin-file__name"><Icon name="check" size={12} /> {archivosVehiculo.cedula.name}</span>
+                        )}
+                      </label>
+
+                      <label className="admin-field admin-file">
+                        <span>Comprobante de seguro</span>
+                        <input type="file" name="seguro" accept="image/*,.pdf" onChange={handleFileChange} />
+                        {archivosVehiculo.seguro && (
+                          <span className="admin-file__name"><Icon name="check" size={12} /> {archivosVehiculo.seguro.name}</span>
+                        )}
+                      </label>
+
+                      <label className="admin-field admin-file">
+                        <span>Licencia de conducir</span>
+                        <input type="file" name="licencia" accept="image/*,.pdf" onChange={handleFileChange} />
+                        {archivosVehiculo.licencia && (
+                          <span className="admin-file__name"><Icon name="check" size={12} /> {archivosVehiculo.licencia.name}</span>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {tipoVehiculoActual === '2' && (
+                <div className="admin-subbox">
+                  <label className="admin-check">
+                    <input
+                      type="checkbox"
+                      name="bici_propia"
+                      checked={perfilForm.vehiculo.bici_propia}
+                      onChange={handleVehiculoChange}
+                    />
+                    ¿Dispone de bicicleta propia?
+                  </label>
+                </div>
+              )}
+            </section>
+          )}
+
+          <button
+            onClick={crearUsuarioYPerfil}
+            disabled={loading}
+            className="admin-btn admin-btn--primary admin-btn--lg admin-btn--block"
+          >
+            {loading ? (
+              <><Spinner /> Creando...</>
+            ) : (
+              <><Icon name="plus" /> Crear cuenta y perfil</>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

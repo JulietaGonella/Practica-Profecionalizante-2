@@ -1,34 +1,28 @@
 import React from 'react';
+import { Icon } from './AdminUI';
+import './CSS/Administrador.css';
 
 export const BarraBusquedaFiltro = ({ busqueda, setBusqueda, placeholder = "Buscar..." }) => {
   return (
-    <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '10px' }}>
-      <input
-        type="text"
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%',
-          padding: '0.75rem 1rem',
-          fontSize: '0.95rem',
-          border: '1px solid #ced4da',
-          borderRadius: '8px',
-          outline: 'none',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-        }}
-      />
+    <div className="admin-searchbar">
+      <div className="admin-searchbar__field">
+        <Icon name="search" size={18} />
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="admin-searchbar__input"
+        />
+      </div>
       {busqueda && (
         <button
+          type="button"
           onClick={() => setBusqueda('')}
-          style={{
-            padding: '0.75rem 1rem',
-            border: '1px solid #ced4da',
-            backgroundColor: '#f1f3f5',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
+          className="admin-btn admin-btn--outline"
         >
+          <Icon name="x" size={16} />
           Limpiar
         </button>
       )}

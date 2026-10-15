@@ -14,9 +14,29 @@ import {
 } from 'recharts';
 import { getAdminDashboardApi, getFlotaDashboardApi } from "../../api/tableroService.js";
 import { MapaRepartidores } from './MapaRepartidores';
+import { Icon, Badge } from './AdminUI';
+import './CSS/Administrador.css';
 
-const COLORES_PAGO = ['#1c7ed6', '#0ca678', '#f59f00', '#d9480f'];
-const COLORES_ESTADO = { Entregado: '#2b8a3e', Cancelado: '#e03131' };
+// Colores de gráficos alineados a la paleta SmartDrop
+const COLORES_PAGO = ['#17243A', '#F47A16', '#245FC7', '#16804A'];
+const COLORES_ESTADO = { Entregado: '#16804A', Cancelado: '#B42332' };
+
+// Estilos compartidos de los gráficos (solo visual)
+const TICK = { fill: '#667085', fontSize: 12 };
+const EJE = { stroke: '#E6E9ED' };
+const TOOLTIP_ESTILO = {
+    borderRadius: 10,
+    border: '1px solid #E6E9ED',
+    boxShadow: '0 6px 16px rgba(23, 36, 58, 0.08)',
+    fontSize: 13
+};
+
+const GraficoVacio = ({ children }) => (
+    <div className="admin-chart-empty">
+        <Icon name="chart" size={24} />
+        {children}
+    </div>
+);
 
 export const TableroAdministrador = () => {
     const [subVista, setSubVista] = useState('general');
@@ -105,383 +125,375 @@ export const TableroAdministrador = () => {
         };
     }, [subVista, fechaInicio, fechaFin, categoria, estadoPedido, tipoPago, repartidorFiltro]);
 
-    const estiloContenedorFiltros = {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '1.25rem',
-        backgroundColor: '#ffffff',
-        padding: '1.25rem 1.5rem',
-        borderRadius: '12px',
-        border: '1px solid #e9ecef',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-    };
-
-    const estiloLabel = {
-        display: 'block',
-        fontSize: '0.825rem',
-        fontWeight: '600',
-        color: '#495057',
-        marginBottom: '0.4rem'
-    };
-
-    const estiloInputSelect = {
-        width: '100%',
-        padding: '0.6rem 0.75rem',
-        borderRadius: '8px',
-        border: '1px solid #ced4da',
-        fontSize: '0.9rem',
-        backgroundColor: '#fff',
-        boxSizing: 'border-box'
-    };
-
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="admin-tablero">
+            <div className="admin-tablero__inner admin-scope">
 
-            {/* Pestañas de Navegación */}
-            <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid #dee2e6', paddingBottom: '0.5rem' }}>
-                <button
-                    onClick={() => setSubVista('general')}
-                    style={{
-                        padding: '0.6rem 1.2rem',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        backgroundColor: subVista === 'general' ? '#0b7285' : '#f1f3f5',
-                        color: subVista === 'general' ? '#fff' : '#495057'
-                    }}
-                >
-                    📈 Tablero General Admin
-                </button>
-                <button
-                    onClick={() => setSubVista('repartidores')}
-                    style={{
-                        padding: '0.6rem 1.2rem',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        backgroundColor: subVista === 'repartidores' ? '#0b7285' : '#f1f3f5',
-                        color: subVista === 'repartidores' ? '#fff' : '#495057'
-                    }}
-                >
-                    🚴 Gestión de Repartidores
-                </button>
-            </div>
-
-            {error && (
-                <div style={{ padding: '1rem', backgroundColor: '#ffe3e3', color: '#e03131', borderRadius: '8px' }}>
-                    {error}
+                {/* Pestañas de navegación */}
+                <div className="admin-subtabs">
+                    <button
+                        type="button"
+                        onClick={() => setSubVista('general')}
+                        className={subVista === 'general' ? 'active' : ''}
+                        aria-pressed={subVista === 'general'}
+                    >
+                        <Icon name="chart" />
+                        Tablero general admin
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSubVista('repartidores')}
+                        className={subVista === 'repartidores' ? 'active' : ''}
+                        aria-pressed={subVista === 'repartidores'}
+                    >
+                        <Icon name="bike" />
+                        Gestión de repartidores
+                    </button>
                 </div>
-            )}
 
-            {/* VISTA 1: TABLERO GENERAL */}
-            {subVista === 'general' && (
-                <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h2 style={{ margin: 0 }}>Tablero General - Administrador</h2>
+                {error && (
+                    <div className="admin-inline-note admin-inline-note--error" role="alert" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <Icon name="alert" size={16} />
+                        {error}
                     </div>
+                )}
 
-                    {/* Filtros */}
-                    <div style={estiloContenedorFiltros}>
-                        <div>
-                            <label style={estiloLabel}>Desde</label>
-                            <input
-                                type="date"
-                                value={fechaInicio}
-                                onChange={(e) => setFechaInicio(e.target.value)}
-                                style={estiloInputSelect}
-                            />
+                {/* VISTA 1: TABLERO GENERAL */}
+                {subVista === 'general' && (
+                    <>
+                        <h2 className="admin-section-title" style={{ marginBottom: 0 }}>
+                            <span className="admin-section-title__icon"><Icon name="chart" size={20} /></span>
+                            Tablero General - Administrador
+                        </h2>
+
+                        {/* Filtros */}
+                        <div className="admin-filters">
+                            <label className="admin-field">
+                                <span>Desde</span>
+                                <input
+                                    type="date"
+                                    value={fechaInicio}
+                                    onChange={(e) => setFechaInicio(e.target.value)}
+                                    className="admin-input"
+                                />
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Hasta</span>
+                                <input
+                                    type="date"
+                                    value={fechaFin}
+                                    onChange={(e) => setFechaFin(e.target.value)}
+                                    className="admin-input"
+                                />
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Categoría</span>
+                                <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="admin-select">
+                                    <option value="todas">Todas las categorías</option>
+                                    {listaCategorias.map((cat) => (
+                                        <option key={cat.id || cat.nombre} value={cat.nombre}>
+                                            {cat.nombre}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Estados de pedido</span>
+                                <select value={estadoPedido} onChange={(e) => setEstadoPedido(e.target.value)} className="admin-select">
+                                    <option value="todos">Todos los estados</option>
+                                    <option value="Entregado">Entregado</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                </select>
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Tipo de pago</span>
+                                <select value={tipoPago} onChange={(e) => setTipoPago(e.target.value)} className="admin-select">
+                                    <option value="todos">Todos los métodos</option>
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="mercadopago">Mercado Pago</option>
+                                    <option value="tarjeta_credito">Tarjeta</option>
+                                </select>
+                            </label>
                         </div>
 
-                        <div>
-                            <label style={estiloLabel}>Hasta</label>
-                            <input
-                                type="date"
-                                value={fechaFin}
-                                onChange={(e) => setFechaFin(e.target.value)}
-                                style={estiloInputSelect}
-                            />
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Categoría</label>
-                            <select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={estiloInputSelect}>
-                                <option value="todas">Todas las categorías</option>
-                                {listaCategorias.map((cat) => (
-                                    <option key={cat.id || cat.nombre} value={cat.nombre}>
-                                        {cat.nombre}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Estados de pedido</label>
-                            <select value={estadoPedido} onChange={(e) => setEstadoPedido(e.target.value)} style={estiloInputSelect}>
-                                <option value="todos">Todos los estados</option>
-                                <option value="Entregado">Entregado</option>
-                                <option value="Cancelado">Cancelado</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Tipo de pago</label>
-                            <select value={tipoPago} onChange={(e) => setTipoPago(e.target.value)} style={estiloInputSelect}>
-                                <option value="todos">Todos los métodos</option>
-                                <option value="efectivo">Efectivo</option>
-                                <option value="mercadopago">Mercado Pago</option>
-                                <option value="tarjeta_credito">Tarjeta</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <p style={{ margin: '-0.8rem 0 0', color: '#6c757d', fontSize: '0.82rem' }}>
-                        Los indicadores consideran pedidos creados desde el 01/10/2026 a las 14:54, cuando comenzó el registro de comisiones por producto.
-                    </p>
-
-                    {/* Tarjetas de KPIs */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-                        <div style={{ padding: '1.2rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                            <span style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>Total de Pedidos</span>
-                            <h1 style={{ margin: '0.5rem 0 0', color: '#1c7ed6', fontSize: '2.5rem' }}>{kpisGeneral.totalPedidos}</h1>
-                        </div>
-
-                        <div style={{ padding: '1.2rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                            <span style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>Pedidos Entregados vs Cancelados</span>
-                            <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2b8a3e', fontWeight: 'bold' }}>
-                                    <span>1. Entregado</span>
-                                    <span>{kpisGeneral.entregados}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#e03131', fontWeight: 'bold' }}>
-                                    <span>2. Cancelado</span>
-                                    <span>{kpisGeneral.cancelados}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style={{ padding: '1.2rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                            <span style={{ color: '#666', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                {categoria === 'todas' ? 'Ingresos netos de la plataforma' : 'Comisiones de productos de la categoría'}
+                        <p className="admin-field-hint" style={{ marginTop: '-8px', alignItems: 'flex-start' }}>
+                            <Icon name="info" size={14} />
+                            <span>
+                                Los indicadores consideran pedidos creados desde el 01/10/2026 a las 14:54, cuando comenzó el registro de comisiones por producto.
                             </span>
-                            <h2 style={{ margin: '0.5rem 0 0', color: '#2b8a3e', fontSize: '1.8rem' }}>
-                                $ {Number(kpisGeneral.ingresosPlataforma).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </h2>
-                        </div>
-                    </div>
+                        </p>
 
-                    {/* Gráficos */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                        <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6' }}>
-                            <h3>Cantidad de Pedidos por Categoría</h3>
-                            <div style={{ width: '100%', height: 300 }}>
-                                {pedidosPorCategoria && pedidosPorCategoria.length > 0 ? (
-                                    <ResponsiveContainer>
-                                        <BarChart data={pedidosPorCategoria} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis type="number" />
-                                            <YAxis dataKey="categoria" type="category" width={110} style={{ fontSize: '0.8rem' }} />
-                                            <Tooltip />
-                                            <Bar dataKey="cantidad" fill="#1c7ed6" radius={[0, 4, 4, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96' }}>
-                                        No hay datos de pedidos por categoría para los filtros seleccionados.
+                        {/* Tarjetas de KPIs */}
+                        <div className="admin-kpi-grid">
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon"><Icon name="package" size={18} /></span>
+                                    <span className="admin-kpi__label">Total de pedidos</span>
+                                </div>
+                                <div className="admin-kpi__value">{kpisGeneral.totalPedidos}</div>
+                            </div>
+
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon admin-kpi__icon--info"><Icon name="checkCircle" size={18} /></span>
+                                    <span className="admin-kpi__label">Pedidos entregados vs cancelados</span>
+                                </div>
+                                <div className="admin-kpi__rows">
+                                    <div className="admin-kpi__row">
+                                        <Badge tone="success" icon="checkCircle">Entregado</Badge>
+                                        <strong className="admin-text-success">{kpisGeneral.entregados}</strong>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6' }}>
-                            <h3>Cantidad de Pedidos por Fecha y Estado</h3>
-                            <div style={{ width: '100%', height: 300 }}>
-                                <ResponsiveContainer>
-                                    <BarChart data={pedidosPorFechaEstado}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="fecha" style={{ fontSize: '0.75rem' }} />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="Entregado" fill={COLORES_ESTADO.Entregado} />
-                                        <Bar dataKey="Cancelado" fill={COLORES_ESTADO.Cancelado} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6' }}>
-                            <h3>Porcentaje de acuerdo a los métodos de pago</h3>
-                            <div style={{ width: '100%', height: 300 }}>
-                                {metodosPago && metodosPago.length > 0 && metodosPago.some(m => Number(m.value) > 0) ? (
-                                    <ResponsiveContainer>
-                                        <PieChart margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
-                                            <Pie
-                                                data={metodosPago.map(m => ({ ...m, value: Number(m.value) }))}
-                                                cx="50%"
-                                                cy="45%"
-                                                outerRadius={75}
-                                                dataKey="value"
-                                                label={({ value }) => `${value}%`}
-                                            >
-                                                {metodosPago.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORES_PAGO[index % COLORES_PAGO.length]} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip formatter={(val) => `${val}%`} />
-                                            <Legend verticalAlign="bottom" height={36} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96' }}>
-                                        No hay datos de métodos de pago para los filtros seleccionados.
+                                    <div className="admin-kpi__row">
+                                        <Badge tone="error" icon="xCircle">Cancelado</Badge>
+                                        <strong className="admin-text-error">{kpisGeneral.cancelados}</strong>
                                     </div>
-                                )}
+                                </div>
+                            </div>
+
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon admin-kpi__icon--orange"><Icon name="dollar" size={18} /></span>
+                                    <span className="admin-kpi__label">
+                                        {categoria === 'todas' ? 'Ingresos netos de la plataforma' : 'Comisiones de productos de la categoría'}
+                                    </span>
+                                </div>
+                                <div className="admin-kpi__value admin-kpi__value--success" style={{ fontSize: '1.75rem' }}>
+                                    $ {Number(kpisGeneral.ingresosPlataforma).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
 
-            {/* VISTA 2: GESTIÓN DE REPARTIDORES */}
-            {subVista === 'repartidores' && (
-                <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h2 style={{ margin: 0 }}>Tablero General - Gestión de Repartidores</h2>
-                    </div>
-
-                    {/* Filtros */}
-                    <div style={estiloContenedorFiltros}>
-                        <div>
-                            <label style={estiloLabel}>Desde</label>
-                            <input
-                                type="date"
-                                value={fechaInicio}
-                                onChange={(e) => setFechaInicio(e.target.value)}
-                                style={estiloInputSelect}
-                            />
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Hasta</label>
-                            <input
-                                type="date"
-                                value={fechaFin}
-                                onChange={(e) => setFechaFin(e.target.value)}
-                                style={estiloInputSelect}
-                            />
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Estado de pedido</label>
-                            <select value={estadoPedido} onChange={(e) => setEstadoPedido(e.target.value)} style={estiloInputSelect}>
-                                <option value="todos">Todos los estados</option>
-                                <option value="Entregado">Entregado</option>
-                                <option value="Cancelado">Cancelado</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label style={estiloLabel}>Repartidores con pedidos</label>
-                            <select value={repartidorFiltro} onChange={(e) => setRepartidorFiltro(e.target.value)} style={estiloInputSelect}>
-                                <option value="todos">Todos los repartidores con pedidos</option>
-                                {listaRepartidores.map((r) => (
-                                    <option key={r.id} value={r.id}>{r.nombre}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Tarjetas de KPIs Repartidores */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                        <div style={{ padding: '1rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px' }}>
-                            <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: 'bold' }}>Cantidad de Repartidores con Pedidos</span>
-                            <h2 style={{ margin: '0.4rem 0 0', color: '#1c7ed6' }}>{kpisRepartidores.cantidadRepartidores}</h2>
-                        </div>
-
-                        <div style={{ padding: '1rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px' }}>
-                            <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: 'bold' }}>Tiempo Promedio de Entrega</span>
-                            <h2 style={{ margin: '0.4rem 0 0', color: '#7048e8' }}>{kpisRepartidores.tiempoPromedio} min</h2>
-                        </div>
-
-                        <div style={{ padding: '1rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px' }}>
-                            <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: 'bold' }}>Porcentaje Pedidos Entregados</span>
-                            <h2 style={{ margin: '0.4rem 0 0', color: '#2b8a3e' }}>{kpisRepartidores.porcentajeEntregados}%</h2>
-                        </div>
-
-                        <div style={{ padding: '1rem', backgroundColor: '#fff', border: '1px solid #dee2e6', borderRadius: '10px' }}>
-                            <span style={{ color: '#666', fontSize: '0.85rem', fontWeight: 'bold' }}>Total de KM Recorridos</span>
-                            <h2 style={{ margin: '0.4rem 0 0', color: '#d9480f' }}>{kpisRepartidores.kmRecorridos} km</h2>
-                        </div>
-                    </div>
-
-                    {/* Tabla y Gráficos */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                        <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6', overflowX: 'auto' }}>
-                            <h3>Tabla de Pedidos por Repartidores</h3>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.8rem', fontSize: '0.85rem' }}>
-                                <thead>
-                                    <tr style={{ backgroundColor: '#e9ecef', textAlign: 'left' }}>
-                                        <th style={{ padding: '0.6rem' }}>Nombre Completo</th>
-                                        <th style={{ padding: '0.6rem' }}>Entregados</th>
-                                        <th style={{ padding: '0.6rem' }}>Cancelados</th>
-                                        <th style={{ padding: '0.6rem' }}>Tiempo Promedio</th>
-                                        <th style={{ padding: '0.6rem' }}>Asignados</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {tablaRepartidores.length > 0 ? (
-                                        tablaRepartidores.map((r) => (
-                                            <tr key={r.id} style={{ borderBottom: '1px solid #dee2e6' }}>
-                                                <td style={{ padding: '0.6rem' }}>{r.nombre}</td>
-                                                <td style={{ padding: '0.6rem', color: '#2b8a3e', fontWeight: 'bold' }}>{r.entregados}</td>
-                                                <td style={{ padding: '0.6rem', color: '#e03131', fontWeight: 'bold' }}>{r.cancelados}</td>
-                                                <td style={{ padding: '0.6rem' }}>{r.tiempoPromedio} min</td>
-                                                <td style={{ padding: '0.6rem' }}>{r.asignados}</td>
-                                            </tr>
-                                        ))
+                        {/* Gráficos */}
+                        <div className="admin-chart-grid">
+                            <div className="admin-panel-card">
+                                <h3>Cantidad de pedidos por categoría</h3>
+                                <div style={{ width: '100%', height: 300 }}>
+                                    {pedidosPorCategoria && pedidosPorCategoria.length > 0 ? (
+                                        <ResponsiveContainer>
+                                            <BarChart data={pedidosPorCategoria} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#E6E9ED" />
+                                                <XAxis type="number" tick={TICK} axisLine={EJE} tickLine={false} />
+                                                <YAxis dataKey="categoria" type="category" width={110} tick={TICK} axisLine={EJE} tickLine={false} />
+                                                <Tooltip contentStyle={TOOLTIP_ESTILO} cursor={{ fill: 'rgba(23, 36, 58, 0.04)' }} />
+                                                <Bar dataKey="cantidad" fill="#17243A" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     ) : (
-                                        <tr>
-                                            <td colSpan="5" style={{ padding: '1rem', textAlign: 'center', color: '#666' }}>
-                                                No hay repartidores con pedidos asignados para los filtros seleccionados.
-                                            </td>
-                                        </tr>
+                                        <GraficoVacio>No hay datos de pedidos por categoría para los filtros seleccionados.</GraficoVacio>
                                     )}
-                                </tbody>
-                            </table>
-                        </div>
+                                </div>
+                            </div>
 
-                        <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6' }}>
-                            <h3>Cantidad de Pedidos Asignados por Repartidores</h3>
-                            <div style={{ width: '100%', height: 280 }}>
-                                {pedidosAsignadosPorRepartidor && pedidosAsignadosPorRepartidor.length > 0 ? (
+                            <div className="admin-panel-card">
+                                <h3>Cantidad de pedidos por fecha y estado</h3>
+                                <div style={{ width: '100%', height: 300 }}>
                                     <ResponsiveContainer>
-                                        <BarChart data={pedidosAsignadosPorRepartidor}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="nombre" style={{ fontSize: '0.75rem' }} />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <Bar dataKey="cantidad" fill="#7048e8" radius={[4, 4, 0, 0]} />
+                                        <BarChart data={pedidosPorFechaEstado}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#E6E9ED" />
+                                            <XAxis dataKey="fecha" tick={TICK} axisLine={EJE} tickLine={false} />
+                                            <YAxis tick={TICK} axisLine={EJE} tickLine={false} />
+                                            <Tooltip contentStyle={TOOLTIP_ESTILO} cursor={{ fill: 'rgba(23, 36, 58, 0.04)' }} />
+                                            <Legend wrapperStyle={{ fontSize: 13 }} />
+                                            <Bar dataKey="Entregado" fill={COLORES_ESTADO.Entregado} radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="Cancelado" fill={COLORES_ESTADO.Cancelado} radius={[4, 4, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
-                                ) : (
-                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96' }}>
-                                        No hay repartidores con pedidos asignados para los filtros seleccionados.
-                                    </div>
-                                )}
+                                </div>
+                            </div>
+
+                            <div className="admin-panel-card">
+                                <h3>Porcentaje de acuerdo a los métodos de pago</h3>
+                                <div style={{ width: '100%', height: 300 }}>
+                                    {metodosPago && metodosPago.length > 0 && metodosPago.some(m => Number(m.value) > 0) ? (
+                                        <ResponsiveContainer>
+                                            <PieChart margin={{ top: 10, right: 20, left: 20, bottom: 10 }}>
+                                                <Pie
+                                                    data={metodosPago.map(m => ({ ...m, value: Number(m.value) }))}
+                                                    cx="50%"
+                                                    cy="45%"
+                                                    outerRadius={75}
+                                                    dataKey="value"
+                                                    stroke="#FFFFFF"
+                                                    label={({ value }) => `${value}%`}
+                                                >
+                                                    {metodosPago.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORES_PAGO[index % COLORES_PAGO.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip contentStyle={TOOLTIP_ESTILO} formatter={(val) => `${val}%`} />
+                                                <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: 13 }} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <GraficoVacio>No hay datos de métodos de pago para los filtros seleccionados.</GraficoVacio>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </>
+                )}
 
-                    {/* Mapa de Pedidos por Repartidores */}
-                    <div style={{ backgroundColor: '#fff', padding: '1.2rem', borderRadius: '10px', border: '1px solid #dee2e6' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>Mapa de Pedidos por Repartidores</h3>
-                        <MapaRepartidores datosMapa={mapaFlota} />
-                    </div>
-                </>
-            )}
+                {/* VISTA 2: GESTIÓN DE REPARTIDORES */}
+                {subVista === 'repartidores' && (
+                    <>
+                        <h2 className="admin-section-title" style={{ marginBottom: 0 }}>
+                            <span className="admin-section-title__icon"><Icon name="bike" size={20} /></span>
+                            Tablero General - Gestión de Repartidores
+                        </h2>
 
+                        {/* Filtros */}
+                        <div className="admin-filters">
+                            <label className="admin-field">
+                                <span>Desde</span>
+                                <input
+                                    type="date"
+                                    value={fechaInicio}
+                                    onChange={(e) => setFechaInicio(e.target.value)}
+                                    className="admin-input"
+                                />
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Hasta</span>
+                                <input
+                                    type="date"
+                                    value={fechaFin}
+                                    onChange={(e) => setFechaFin(e.target.value)}
+                                    className="admin-input"
+                                />
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Estado de pedido</span>
+                                <select value={estadoPedido} onChange={(e) => setEstadoPedido(e.target.value)} className="admin-select">
+                                    <option value="todos">Todos los estados</option>
+                                    <option value="Entregado">Entregado</option>
+                                    <option value="Cancelado">Cancelado</option>
+                                </select>
+                            </label>
+
+                            <label className="admin-field">
+                                <span>Repartidores con pedidos</span>
+                                <select value={repartidorFiltro} onChange={(e) => setRepartidorFiltro(e.target.value)} className="admin-select">
+                                    <option value="todos">Todos los repartidores con pedidos</option>
+                                    {listaRepartidores.map((r) => (
+                                        <option key={r.id} value={r.id}>{r.nombre}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+
+                        {/* Tarjetas de KPIs repartidores */}
+                        <div className="admin-kpi-grid">
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon"><Icon name="users" size={18} /></span>
+                                    <span className="admin-kpi__label">Cantidad de repartidores con pedidos</span>
+                                </div>
+                                <div className="admin-kpi__value">{kpisRepartidores.cantidadRepartidores}</div>
+                            </div>
+
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon admin-kpi__icon--info"><Icon name="timer" size={18} /></span>
+                                    <span className="admin-kpi__label">Tiempo promedio de entrega</span>
+                                </div>
+                                <div className="admin-kpi__value">
+                                    {Math.round(Number(kpisRepartidores.tiempoPromedio) || 0)} min
+                                </div>
+                            </div>
+
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon admin-kpi__icon--success"><Icon name="percent" size={18} /></span>
+                                    <span className="admin-kpi__label">Porcentaje de pedidos entregados</span>
+                                </div>
+                                <div className="admin-kpi__value admin-kpi__value--success">{kpisRepartidores.porcentajeEntregados}%</div>
+                            </div>
+
+                            <div className="admin-kpi">
+                                <div className="admin-kpi__top">
+                                    <span className="admin-kpi__icon admin-kpi__icon--orange"><Icon name="navigation" size={18} /></span>
+                                    <span className="admin-kpi__label">Total de km recorridos</span>
+                                </div>
+                                <div className="admin-kpi__value">{kpisRepartidores.kmRecorridos} km</div>
+                            </div>
+                        </div>
+
+                        {/* Tabla y gráficos */}
+                        <div className="admin-chart-grid">
+                            <div className="admin-panel-card admin-panel-card--flush">
+                                <h3>Tabla de pedidos por repartidores</h3>
+                                <div className="admin-table-scroll">
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Nombre completo</th>
+                                                <th>Entregados</th>
+                                                <th>Cancelados</th>
+                                                <th>Tiempo promedio</th>
+                                                <th>Asignados</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {tablaRepartidores.length > 0 ? (
+                                                tablaRepartidores.map((r) => (
+                                                    <tr key={r.id}>
+                                                        <td style={{ fontWeight: 600 }}>{r.nombre}</td>
+                                                        <td className="admin-text-success" style={{ fontWeight: 700 }}>{r.entregados}</td>
+                                                        <td className="admin-text-error" style={{ fontWeight: 700 }}>{r.cancelados}</td>
+                                                        <td>{r.tiempoPromedio} min</td>
+                                                        <td>{r.asignados}</td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="admin-table__empty">
+                                                        No hay repartidores con pedidos asignados para los filtros seleccionados.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div className="admin-panel-card">
+                                <h3>Cantidad de pedidos asignados por repartidores</h3>
+                                <div style={{ width: '100%', height: 280 }}>
+                                    {pedidosAsignadosPorRepartidor && pedidosAsignadosPorRepartidor.length > 0 ? (
+                                        <ResponsiveContainer>
+                                            <BarChart data={pedidosAsignadosPorRepartidor}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#E6E9ED" />
+                                                <XAxis dataKey="nombre" tick={TICK} axisLine={EJE} tickLine={false} />
+                                                <YAxis tick={TICK} axisLine={EJE} tickLine={false} />
+                                                <Tooltip contentStyle={TOOLTIP_ESTILO} cursor={{ fill: 'rgba(23, 36, 58, 0.04)' }} />
+                                                <Bar dataKey="cantidad" fill="#F47A16" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <GraficoVacio>No hay repartidores con pedidos asignados para los filtros seleccionados.</GraficoVacio>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Mapa de pedidos por repartidores */}
+                        <div className="admin-panel-card">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Icon name="map" size={18} />
+                                Mapa de pedidos por repartidores
+                            </h3>
+                            <MapaRepartidores datosMapa={mapaFlota} />
+                        </div>
+                    </>
+                )}
+
+            </div>
         </div>
     );
 };

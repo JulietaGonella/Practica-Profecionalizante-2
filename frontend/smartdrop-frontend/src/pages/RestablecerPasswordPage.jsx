@@ -1,6 +1,8 @@
+// src/pages/RestablecerPasswordPage.jsx
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { restablecerPasswordApi } from '../api/authService';
+import './Auth.css'; // 👈 Importamos los estilos unificados de autenticación
 
 export const RestablecerPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -48,44 +50,81 @@ export const RestablecerPasswordPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '420px', margin: '3rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>🔐 Restablecer Contraseña</h2>
-
-      {exito ? (
-        <div style={{ color: 'green', textAlign: 'center' }}>
-          <p>✅ ¡Tu contraseña ha sido actualizada con éxito!</p>
-          <p><small>Redirigiendo al login en unos segundos...</small></p>
-          <Link to="/login">Ir al Login ahora</Link>
+    <div className="auth-page">
+      <div className="auth-card">
+        
+        <div className="auth-card__header">
+          <h2 className="auth-card__title">🔐 Restablecer Contraseña</h2>
+          <p className="auth-card__subtitle">Ingresa y confirma tu nueva contraseña</p>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          {error && <p style={{ color: 'red' }}>{error}</p>}
 
-          <input 
-            type="password" 
-            placeholder="Nueva Contraseña (mínimo 8 caracteres)" 
-            value={nuevaPassword} 
-            onChange={(e) => setNuevaPassword(e.target.value)} 
-            disabled={loading}
-            required 
-            style={{ width: '100%', padding: '0.5rem', marginBottom: '1rem' }}
-          />
-          
-          <input 
-            type="password" 
-            placeholder="Confirmar Nueva Contraseña" 
-            value={confirmarPassword} 
-            onChange={(e) => setConfirmarPassword(e.target.value)} 
-            disabled={loading}
-            required 
-            style={{ width: '100%', padding: '0.5rem', marginBottom: '1rem' }}
-          />
+        {exito ? (
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="admin-banner admin-banner--success" role="alert">
+              <span>✓</span>
+              <span>¡Tu contraseña ha sido actualizada con éxito!</span>
+            </div>
+            <p className="auth-card__subtitle" style={{ margin: 0 }}>Redirigiendo al login en unos segundos...</p>
+            <div className="auth-footer-links" style={{ borderTop: 'none', paddingTop: 0 }}>
+              <Link to="/login">Ir al Login ahora</Link>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="auth-form">
+            {error && (
+              <div className="auth-banner" role="alert">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
 
-          <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.6rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
-            {loading ? '⏳ Actualizando...' : 'Cambiar Contraseña'}
-          </button>
-        </form>
-      )}
+            <div className="auth-field">
+              <label htmlFor="nuevaPassword">Nueva Contraseña</label>
+              <input 
+                id="nuevaPassword"
+                type="password" 
+                className="auth-input"
+                placeholder="Mínimo 8 caracteres" 
+                value={nuevaPassword} 
+                onChange={(e) => setNuevaPassword(e.target.value)} 
+                disabled={loading}
+                required 
+              />
+            </div>
+            
+            <div className="auth-field">
+              <label htmlFor="confirmarPassword">Confirmar Nueva Contraseña</label>
+              <input 
+                id="confirmarPassword"
+                type="password" 
+                className="auth-input"
+                placeholder="Repite tu contraseña" 
+                value={confirmarPassword} 
+                onChange={(e) => setConfirmarPassword(e.target.value)} 
+                disabled={loading}
+                required 
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="admin-btn admin-btn--primary admin-btn--block" 
+              disabled={loading}
+              style={{ marginTop: '8px' }}
+            >
+              {loading ? (
+                <>
+                  <span className="admin-spinner"></span>
+                  Actualizando...
+                </>
+              ) : (
+                'Cambiar Contraseña'
+              )}
+            </button>
+          </form>
+        )}
+
+      </div>
     </div>
   );
 };

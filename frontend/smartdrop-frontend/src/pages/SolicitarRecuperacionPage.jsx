@@ -1,6 +1,8 @@
+// src/pages/SolicitarRecuperacionPage.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { solicitarRecuperacionApi } from '../api/authService';
+import './Auth.css'; // 👈 Importamos los estilos unificados de autenticación
 
 export const SolicitarRecuperacionPage = () => {
   const [email, setEmail] = useState('');
@@ -32,41 +34,78 @@ export const SolicitarRecuperacionPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '3rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>🔑 Recuperar Contraseña</h2>
-      <p style={{ fontSize: '0.9rem', color: '#666' }}>
-        Ingresa tu correo registrado y te enviaremos un enlace de recuperación.
-      </p>
-
-      {mensaje && <p style={{ color: 'green', fontWeight: 'bold' }}>{mensaje}</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-
-      {/* Enlace de desarrollo para pruebas rápidas */}
-      {debugUrl && (
-        <div style={{ padding: '0.5rem', backgroundColor: '#e7f5ff', marginBottom: '1rem', borderRadius: '4px' }}>
-          <small>🧪 <strong>Entorno de pruebas:</strong></small><br/>
-          <a href={debugUrl} style={{ wordBreak: 'break-all', fontSize: '0.8rem' }}>Ir a Restablecer Clave Directo</a>
+    <div className="auth-page">
+      <div className="auth-card">
+        
+        <div className="auth-card__header">
+          <h2 className="auth-card__title">🔑 Recuperar Contraseña</h2>
+          <p className="auth-card__subtitle">
+            Ingresa tu correo registrado y te enviaremos un enlace de recuperación.
+          </p>
         </div>
-      )}
 
-      <form onSubmit={handleSubmit}>
-        <input 
-          type="email" 
-          placeholder="Correo electrónico" 
-          value={email} 
-          onChange={(e) => setEmail(e.target.value)} 
-          disabled={loading}
-          required 
-          style={{ width: '100%', padding: '0.5rem', marginBottom: '1rem' }}
-        />
-        <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.6rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
-          {loading ? '⏳ Enviando...' : 'Enviar Enlace de Recuperación'}
-        </button>
-      </form>
+        {mensaje && (
+          <div className="admin-banner admin-banner--success" role="alert" style={{ marginBottom: '4px' }}>
+            <span>✓</span>
+            <span>{mensaje}</span>
+          </div>
+        )}
 
-      <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-        <small><Link to="/login">← Volver al inicio de sesión</Link></small>
-      </p>
+        {error && (
+          <div className="auth-banner" role="alert">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Enlace de desarrollo para pruebas rápidas */}
+        {debugUrl && (
+          <div className="admin-inline-note admin-inline-note--info" style={{ wordBreak: 'break-all' }}>
+            <span>🧪</span>
+            <div>
+              <strong>Entorno de pruebas:</strong><br />
+              <a href={debugUrl} className="admin-link">Ir a Restablecer Clave Directo</a>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label htmlFor="email">Correo electrónico</label>
+            <input 
+              id="email"
+              type="email" 
+              className="auth-input"
+              placeholder="nombre@correo.com" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              disabled={loading}
+              required 
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            className="admin-btn admin-btn--primary admin-btn--block" 
+            disabled={loading}
+            style={{ marginTop: '8px' }}
+          >
+            {loading ? (
+              <>
+                <span className="admin-spinner"></span>
+                Enviando enlace...
+              </>
+            ) : (
+              'Enviar Enlace de Recuperación'
+            )}
+          </button>
+        </form>
+
+        <div className="auth-footer-links">
+          <Link to="/login">← Volver al inicio de sesión</Link>
+        </div>
+
+      </div>
     </div>
   );
 };

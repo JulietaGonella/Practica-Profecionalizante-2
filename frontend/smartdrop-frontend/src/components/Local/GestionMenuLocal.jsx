@@ -1,3 +1,4 @@
+// src/components/Local/GestionMenuLocal.jsx
 import { useState, useEffect } from 'react';
 import {
   getProductos,
@@ -7,6 +8,8 @@ import {
   getCategoriasComerciales,
   createCategoriaComercial
 } from '../../api/productService';
+import { Icon, Spinner, AvisoModal } from './LocalUI';
+import './css/Local.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const COMISION_PORCENTAJE = 0.10; // 10% de comisión del sistema
@@ -36,6 +39,9 @@ export const GestionMenuLocal = ({ localId }) => {
   // Estado para el archivo de imagen seleccionado y la vista previa
   const [imagenArchivo, setImagenArchivo] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
+
+  // 🟢 Estado para el Modal Estético de Avisos (Reemplazo de los alert)
+  const [modalAviso, setModalAviso] = useState(null); // { titulo: '', mensaje: '' }
 
   const formInicial = {
     nombre: '',
@@ -105,11 +111,11 @@ export const GestionMenuLocal = ({ localId }) => {
         })
       );
     } catch (err) {
-      alert(
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Error al cambiar disponibilidad'
-      );
+      // 🟢 Reemplazo del primer alert nativo
+      setModalAviso({
+        titulo: '⚠️ Error de Disponibilidad',
+        mensaje: err.response?.data?.message || err.response?.data?.error || 'Error al cambiar disponibilidad'
+      });
     } finally {
       setIsTogglingId(null);
     }
@@ -280,15 +286,27 @@ export const GestionMenuLocal = ({ localId }) => {
 
       if (editingId) {
         await updateProducto(editingId, formData);
-        alert('Producto actualizado exitosamente');
+        // 🟢 Reemplazo del segundo alert nativo (actualización exitosa)
+        setModalAviso({
+          titulo: '✓ Producto Actualizado',
+          mensaje: 'El producto fue actualizado exitosamente.'
+        });
       } else {
         await createProducto(formData);
-        alert('Producto creado exitosamente');
+        // 🟢 Reemplazo del tercer alert nativo (creación exitosa)
+        setModalAviso({
+          titulo: '✓ Producto Creado',
+          mensaje: 'El producto fue creado exitosamente.'
+        });
       }
       cerrarModal();
       await cargarDatos();
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || 'Error al guardar el producto');
+      // 🟢 Reemplazo del cuarto alert nativo (error al guardar)
+      setModalAviso({
+        titulo: '⚠️ Error al Guardar',
+        mensaje: err.response?.data?.error || err.response?.data?.message || 'Error al guardar el producto'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -325,10 +343,14 @@ export const GestionMenuLocal = ({ localId }) => {
   });
 
   return (
-    <div style={{ marginTop: '2rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>🍕 Gestión de Productos y Menú</h2>
+    <section className="local-section">
+      <div className="local-section-head">
+        <h2 className="local-title">
+          <span className="local-title__icon"><Icon name="utensils" size={20} /></span>
+          Gestión de productos y menú
+        </h2>
         <button
+          type="button"
           disabled={isSaving}
           onClick={() => {
             setEditingId(null);
@@ -339,79 +361,50 @@ export const GestionMenuLocal = ({ localId }) => {
             setPreviewUrl('');
             setMostrarForm(true);
           }}
-          style={{
-            padding: '0.6rem 1.2rem',
-            backgroundColor: '#2b8a3e',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
+          className="local-btn local-btn--primary"
         >
-          ➕ Nuevo Producto
+          <Icon name="plus" />
+          Nuevo producto
         </button>
       </div>
 
       {mostrarForm && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000,
-            padding: '1rem'
-          }}
-        >
+        <div className="local-modal-overlay">
           <div
-            style={{
-              backgroundColor: '#fff',
-              borderRadius: '10px',
-              width: '100%',
-              maxWidth: '680px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '1.8rem',
-              boxShadow: '0px 10px 25px rgba(0,0,0,0.3)',
-              position: 'relative'
-            }}
+            className="local-modal local-modal--lg"
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingId ? 'Editar producto' : 'Crear nuevo producto'}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.3rem' }}>{editingId ? '✏️ Editar Producto' : '➕ Crear Nuevo Producto'}</h3>
+            <div className="local-modal__head">
+              <h3>{editingId ? 'Editar producto' : 'Crear nuevo producto'}</h3>
               <button
                 type="button"
                 onClick={cerrarModal}
                 disabled={isSaving}
-                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                className="local-icon-btn"
+                aria-label="Cerrar"
               >
-                ❌
+                <Icon name="x" size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit}>
-              {/* Datos Generales */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '1.2rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}><strong>Nombre del Producto:</strong></label>
+              {/* Datos generales */}
+              <div className="local-grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}>
+                <label className="local-field">
+                  <span>Nombre del producto</span>
                   <input
                     type="text"
                     required
                     disabled={isSaving}
                     value={form.nombre}
                     onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+                    className="local-input"
                   />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
-                    <strong>Precio que querés recibir por producto ($):</strong>
-                  </label>
+                </label>
+                <label className="local-field">
+                  <span>Precio que querés recibir por producto ($)</span>
                   <input
                     type="number"
                     step="0.01"
@@ -420,61 +413,49 @@ export const GestionMenuLocal = ({ localId }) => {
                     placeholder="Ej: 1000"
                     value={form.precio}
                     onChange={(e) => setForm({ ...form, precio: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+                    className="local-input"
                   />
-                </div>
+                </label>
               </div>
 
-              {/* 📊 Tarjeta informativa de cálculo de la comisión del 10% */}
+              {/* Tarjeta informativa del cálculo de la comisión del 10% */}
               {precioLocalNum > 0 && (
-                <div
-                  style={{
-                    backgroundColor: '#e7f5ff',
-                    border: '1px solid #74c0fc',
-                    borderRadius: '8px',
-                    padding: '0.8rem 1rem',
-                    marginBottom: '1.2rem',
-                    fontSize: '0.88rem',
-                    color: '#1864ab'
-                  }}
-                >
-                  <div style={{ fontWeight: 'bold', marginBottom: '0.3rem', borderBottom: '1px solid #a5d8ff', paddingBottom: '0.2rem' }}>
-                    💡 Desglose del precio (10% del precio cobrado)
+                <div className="local-breakdown">
+                  <div className="local-breakdown__title">
+                    <Icon name="info" size={16} />
+                    Desglose del precio (10% del precio cobrado)
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem' }}>
-                    <span>Ganancia Neta para tu Local:</span>
+                  <div className="local-breakdown__row">
+                    <span>Ganancia neta para tu local</span>
                     <strong>${precioLocalNum.toFixed(2)}</strong>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', color: '#495057' }}>
-                    <span>Comisión Plataforma (10%):</span>
+                  <div className="local-breakdown__row">
+                    <span>Comisión plataforma (10%)</span>
                     <span>+${montoComision.toFixed(2)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', paddingTop: '0.3rem', borderTop: '1px dashed #74c0fc', fontWeight: 'bold', fontSize: '0.95rem', color: '#0b7285' }}>
-                    <span>Precio Final al Cliente en App:</span>
+                  <div className="local-breakdown__row local-breakdown__row--total">
+                    <span>Precio final al cliente en la app</span>
                     <span>${precioFinalCalculado.toFixed(2)}</span>
                   </div>
                 </div>
               )}
 
-              {/* Imagen del Producto */}
-              <div style={{ marginBottom: '1.2rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}>
-                  <strong>📷 Imagen del Producto:</strong>
-                </label>
+              {/* Imagen del producto */}
+              <div className="local-field local-file" style={{ marginTop: '20px' }}>
+                <span className="local-field__label">Imagen del producto</span>
                 <input
                   type="file"
                   accept="image/*"
                   disabled={isSaving}
                   onChange={handleFileChange}
-                  style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+                  aria-label="Imagen del producto"
                 />
 
                 {previewUrl && (
-                  <div style={{ marginTop: '0.8rem', textAlign: 'center', position: 'relative', display: 'inline-block' }}>
+                  <div className="local-preview">
                     <img
                       src={previewUrl}
                       alt="Vista previa"
-                      style={{ maxWidth: '120px', maxHeight: '120px', borderRadius: '8px', objectFit: 'cover' }}
                       onError={(e) => {
                         e.target.onerror = null;
                         e.target.style.display = 'none';
@@ -483,28 +464,19 @@ export const GestionMenuLocal = ({ localId }) => {
                     <button
                       type="button"
                       onClick={handleRemoveImagen}
-                      style={{
-                        display: 'block',
-                        margin: '0.4rem auto 0',
-                        backgroundColor: '#ff4d4f',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '0.3rem 0.6rem',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem'
-                      }}
+                      className="local-btn local-btn--sm local-btn--danger-soft"
                     >
-                      🗑️ Eliminar Imagen
+                      <Icon name="trash" size={14} />
+                      Eliminar imagen
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Tiempos y Categorías */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '1.5rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}><strong>⏱️ Tiempo Prep. (Mins):</strong></label>
+              {/* Tiempos y categorías */}
+              <div className="local-grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', marginTop: '20px' }}>
+                <label className="local-field">
+                  <span>Tiempo de preparación (min)</span>
                   <input
                     type="number"
                     required
@@ -512,29 +484,29 @@ export const GestionMenuLocal = ({ localId }) => {
                     disabled={isSaving}
                     value={form.tiempo_preparacion_min}
                     onChange={(e) => setForm({ ...form, tiempo_preparacion_min: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+                    className="local-input"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.9rem' }}><strong>📦 Cat. Técnica:</strong></label>
+                <label className="local-field">
+                  <span>Categoría técnica</span>
                   <select
                     disabled={isSaving}
                     value={form.IDcategoria}
                     onChange={(e) => setForm({ ...form, IDcategoria: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                    className="local-select"
                   >
-                    <option value={1}>📦 Panadería y Secos</option>
-                    <option value={2}>🥤 Bebidas</option>
-                    <option value={3}>🔥 Comida Caliente</option>
-                    <option value={4}>🍟 Fritos y Crujientes</option>
-                    <option value={5}>🍦 Helados y Postres Fríos</option>
+                    <option value={1}>Panadería y Secos</option>
+                    <option value={2}>Bebidas</option>
+                    <option value={3}>Comida Caliente</option>
+                    <option value={4}>Fritos y Crujientes</option>
+                    <option value={5}>Helados y Postres Fríos</option>
                   </select>
-                </div>
+                </label>
 
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                    <label style={{ fontSize: '0.9rem', margin: 0 }}><strong>🍔 Cat. Comercial:</strong></label>
+                <div className="local-field">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span className="local-field__label">Categoría comercial</span>
                     <button
                       type="button"
                       disabled={isSaving}
@@ -542,16 +514,9 @@ export const GestionMenuLocal = ({ localId }) => {
                         setCrearNuevaCategoria(!crearNuevaCategoria);
                         setNuevaCategoriaTexto('');
                       }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#007bff',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        textDecoration: 'underline'
-                      }}
+                      className="local-link-btn"
                     >
-                      {crearNuevaCategoria ? '🔙 Seleccionar existente' : '➕ Crear Nueva'}
+                      {crearNuevaCategoria ? 'Seleccionar existente' : 'Crear nueva'}
                     </button>
                   </div>
 
@@ -559,18 +524,20 @@ export const GestionMenuLocal = ({ localId }) => {
                     <input
                       type="text"
                       placeholder="Ej: Picadas, Ensaladas..."
+                      aria-label="Nombre de la nueva categoría comercial"
                       required
                       disabled={isSaving}
                       value={nuevaCategoriaTexto}
                       onChange={(e) => setNuevaCategoriaTexto(e.target.value)}
-                      style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #007bff', boxSizing: 'border-box', backgroundColor: '#e7f5ff' }}
+                      className="local-input local-input--accent"
                     />
                   ) : (
                     <select
                       disabled={isSaving}
+                      aria-label="Categoría comercial"
                       value={form.IDcategoria_comercial}
                       onChange={(e) => setForm({ ...form, IDcategoria_comercial: e.target.value })}
-                      style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                      className="local-select"
                     >
                       <option value="">-- Seleccionar --</option>
                       {categoriasComerciales.map((cat) => (
@@ -584,69 +551,144 @@ export const GestionMenuLocal = ({ localId }) => {
               </div>
 
               {/* Ingredientes */}
-              <div style={{ borderTop: '1px solid #eee', paddingTop: '1.2rem', marginTop: '1rem' }}>
-                <h4 style={{ marginTop: 0, marginBottom: '0.8rem' }}>🥗 Ingredientes Incluidos</h4>
+              <div className="local-fieldset">
+                <h4><Icon name="list" size={18} /> Ingredientes incluidos</h4>
                 {form.ingredientes.map((ing, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '0.6rem' }}>
-                    <input placeholder="Ej: Queso Mozzarella" disabled={isSaving} value={ing.nombre} onChange={(e) => updateIngrediente(idx, 'nombre', e.target.value)} style={{ flex: 2, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }} />
-                    <input placeholder="Ej: 200g" disabled={isSaving} value={ing.cantidad} onChange={(e) => updateIngrediente(idx, 'cantidad', e.target.value)} style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }} />
-                    <button type="button" disabled={isSaving} onClick={() => removeIngrediente(idx)} style={{ backgroundColor: '#ffc9c9', border: 'none', borderRadius: '4px', cursor: isSaving ? 'not-allowed' : 'pointer', padding: '0 0.8rem' }}>🗑️</button>
+                  <div key={idx} className="local-row">
+                    <input
+                      placeholder="Ej: Queso Mozzarella"
+                      aria-label="Nombre del ingrediente"
+                      disabled={isSaving}
+                      value={ing.nombre}
+                      onChange={(e) => updateIngrediente(idx, 'nombre', e.target.value)}
+                      className="local-input local-input--sm"
+                    />
+                    <input
+                      placeholder="Ej: 200g"
+                      aria-label="Cantidad del ingrediente"
+                      disabled={isSaving}
+                      value={ing.cantidad}
+                      onChange={(e) => updateIngrediente(idx, 'cantidad', e.target.value)}
+                      className="local-input local-input--sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => removeIngrediente(idx)}
+                      className="local-icon-btn local-icon-btn--danger"
+                      aria-label="Quitar ingrediente"
+                    >
+                      <Icon name="trash" size={16} />
+                    </button>
                   </div>
                 ))}
-                <button type="button" disabled={isSaving} onClick={addIngrediente} style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid #ccc', cursor: isSaving ? 'not-allowed' : 'pointer', marginTop: '0.4rem' }}>+ Agregar Ingrediente</button>
+                <div>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={addIngrediente}
+                    className="local-btn local-btn--sm local-btn--outline"
+                  >
+                    <Icon name="plus" size={14} />
+                    Agregar ingrediente
+                  </button>
+                </div>
               </div>
 
-              {/* Grupos de Opciones */}
-              <div style={{ borderTop: '1px solid #eee', paddingTop: '1.2rem', marginTop: '1.2rem' }}>
-                <h4 style={{ marginTop: 0, marginBottom: '0.8rem' }}>🍦 Grupos de Opciones / Gustos</h4>
+              {/* Grupos de opciones */}
+              <div className="local-fieldset">
+                <h4><Icon name="tag" size={18} /> Grupos de opciones / gustos</h4>
                 {form.grupos_opciones.map((grupo, gIdx) => (
-                  <div key={gIdx} style={{ border: '1px solid #cce5ff', backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input placeholder="Nombre Grupo (Ej: Gustos de Helado)" disabled={isSaving} value={grupo.nombre} onChange={(e) => updateGrupoOpcion(gIdx, 'nombre', e.target.value)} style={{ flex: '2 1 200px', padding: '0.5rem', fontWeight: 'bold', borderRadius: '4px', border: '1px solid #ccc' }} />
+                  <div key={gIdx} className="local-group">
+                    <div className="local-group__head">
+                      <input
+                        placeholder="Nombre del grupo (Ej: Gustos de Helado)"
+                        aria-label="Nombre del grupo de opciones"
+                        disabled={isSaving}
+                        value={grupo.nombre}
+                        onChange={(e) => updateGrupoOpcion(gIdx, 'nombre', e.target.value)}
+                        className="local-input"
+                      />
 
-                      <label style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <input type="checkbox" disabled={isSaving} checked={grupo.obligatorio} onChange={(e) => updateGrupoOpcion(gIdx, 'obligatorio', e.target.checked)} /> Obligatorio
+                      <label className="local-check">
+                        <input
+                          type="checkbox"
+                          disabled={isSaving}
+                          checked={grupo.obligatorio}
+                          onChange={(e) => updateGrupoOpcion(gIdx, 'obligatorio', e.target.checked)}
+                        />
+                        Obligatorio
                       </label>
 
-                      <label style={{ backgroundColor: '#fff3bf', padding: '0.3rem 0.6rem', borderRadius: '4px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <label className="local-check">
                         <input
                           type="checkbox"
                           disabled={isSaving}
                           checked={grupo.permitir_cantidad || false}
                           onChange={(e) => updateGrupoOpcion(gIdx, 'permitir_cantidad', e.target.checked)}
-                        /> Acumular cantidad por opción
+                        />
+                        Acumular cantidad por opción
                       </label>
 
-                      <button type="button" disabled={isSaving} onClick={() => removeGrupoOpcion(gIdx)} style={{ backgroundColor: '#ffc9c9', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '4px', cursor: isSaving ? 'not-allowed' : 'pointer', marginLeft: 'auto' }}>Eliminar Grupo</button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => removeGrupoOpcion(gIdx)}
+                        className="local-btn local-btn--sm local-btn--danger-soft"
+                        style={{ marginLeft: 'auto' }}
+                      >
+                        <Icon name="trash" size={14} />
+                        Eliminar grupo
+                      </button>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '15px', marginBottom: '0.8rem' }}>
-                      <small>Min Selección: <input type="number" disabled={isSaving} value={grupo.min_seleccion} onChange={(e) => updateGrupoOpcion(gIdx, 'min_seleccion', Number(e.target.value))} style={{ width: '55px', padding: '0.2rem' }} /></small>
-                      <small>Max Selección: <input type="number" disabled={isSaving} value={grupo.max_seleccion} onChange={(e) => updateGrupoOpcion(gIdx, 'max_seleccion', Number(e.target.value))} style={{ width: '55px', padding: '0.2rem' }} /></small>
+                    <div className="local-group__limits">
+                      <label>
+                        Mín. selección
+                        <input
+                          type="number"
+                          disabled={isSaving}
+                          value={grupo.min_seleccion}
+                          onChange={(e) => updateGrupoOpcion(gIdx, 'min_seleccion', Number(e.target.value))}
+                          className="local-input local-input--sm"
+                        />
+                      </label>
+                      <label>
+                        Máx. selección
+                        <input
+                          type="number"
+                          disabled={isSaving}
+                          value={grupo.max_seleccion}
+                          onChange={(e) => updateGrupoOpcion(gIdx, 'max_seleccion', Number(e.target.value))}
+                          className="local-input local-input--sm"
+                        />
+                      </label>
                     </div>
 
-                    <div style={{ paddingLeft: '0.8rem', borderLeft: '3px solid #1c7ed6', marginTop: '0.6rem' }}>
-                      <h5 style={{ margin: '0 0 0.5rem 0' }}>Opciones / Sabores pertenecientes:</h5>
+                    <div className="local-group__options">
+                      <h5>Opciones / sabores pertenecientes</h5>
                       {grupo.opciones.map((opc, oIdx) => {
                         const opcDisponible = parseDisponible(opc.disponible) === 1;
 
                         return (
-                          <div key={oIdx} style={{ display: 'flex', gap: '10px', marginBottom: '0.4rem', alignItems: 'center' }}>
+                          <div key={oIdx} className="local-row local-row--option">
                             <input
                               placeholder="Ej: Dulce de Leche"
+                              aria-label="Nombre de la opción"
                               disabled={isSaving}
                               value={opc.nombre}
                               onChange={(e) => updateOpcionInGrupo(gIdx, oIdx, 'nombre', e.target.value)}
-                              style={{ flex: 2, padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                              className="local-input local-input--sm"
                             />
                             <input
                               type="number"
                               step="0.01"
                               disabled={isSaving}
-                              placeholder="Precio Adicional (+ $0)"
+                              placeholder="Adicional (+ $0)"
+                              aria-label="Precio adicional"
                               value={opc.precio_adicional}
                               onChange={(e) => updateOpcionInGrupo(gIdx, oIdx, 'precio_adicional', e.target.value)}
-                              style={{ flex: 1, padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                              className="local-input local-input--sm"
                             />
 
                             <button
@@ -656,61 +698,71 @@ export const GestionMenuLocal = ({ localId }) => {
                                 const nuevoEstado = opcDisponible ? 0 : 1;
                                 updateOpcionInGrupo(gIdx, oIdx, 'disponible', nuevoEstado);
                               }}
-                              style={{
-                                padding: '0.3rem 0.6rem',
-                                fontSize: '0.8rem',
-                                backgroundColor: opcDisponible ? '#e6fcf5' : '#fff5f5',
-                                color: opcDisponible ? '#0ca678' : '#e03131',
-                                border: `1px solid ${opcDisponible ? '#0ca678' : '#e03131'}`,
-                                borderRadius: '4px',
-                                cursor: isSaving ? 'not-allowed' : 'pointer'
-                              }}
+                              className={`local-btn local-btn--sm ${opcDisponible ? 'local-btn--success-soft' : 'local-btn--danger-soft'}`}
                             >
-                              {opcDisponible ? '🟢 Disponible' : '🔴 Agotado'}
+                              <Icon name={opcDisponible ? 'checkCircle' : 'xCircle'} size={14} />
+                              {opcDisponible ? 'Disponible' : 'Agotado'}
                             </button>
 
-                            <button type="button" disabled={isSaving} onClick={() => removeOpcionFromGrupo(gIdx, oIdx)} style={{ border: 'none', background: 'none', cursor: isSaving ? 'not-allowed' : 'pointer' }}>❌</button>
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => removeOpcionFromGrupo(gIdx, oIdx)}
+                              className="local-icon-btn local-icon-btn--danger"
+                              aria-label="Quitar opción"
+                            >
+                              <Icon name="x" size={16} />
+                            </button>
                           </div>
                         );
                       })}
-                      <button type="button" disabled={isSaving} onClick={() => addOpcionToGrupo(gIdx)} style={{ marginTop: '0.4rem', padding: '0.3rem 0.6rem', fontSize: '0.85rem', cursor: isSaving ? 'not-allowed' : 'pointer', borderRadius: '4px', border: '1px solid #ccc' }}>+ Añadir Sabor/Opción</button>
+                      <div>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => addOpcionToGrupo(gIdx)}
+                          className="local-btn local-btn--sm local-btn--outline"
+                        >
+                          <Icon name="plus" size={14} />
+                          Añadir sabor / opción
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
-                <button type="button" disabled={isSaving} onClick={addGrupoOpcion} style={{ padding: '0.5rem 1rem', backgroundColor: '#1c7ed6', color: '#fff', border: 'none', borderRadius: '4px', cursor: isSaving ? 'not-allowed' : 'pointer' }}>+ Crear Grupo de Opciones</button>
+                <div>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={addGrupoOpcion}
+                    className="local-btn local-btn--sm local-btn--navy"
+                  >
+                    <Icon name="plus" size={14} />
+                    Crear grupo de opciones
+                  </button>
+                </div>
               </div>
 
-              {/* Botones de Acción */}
-              <div style={{ marginTop: '1.8rem', display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+              {/* Botones de acción */}
+              <div className="local-modal__foot">
                 <button
                   type="button"
                   onClick={cerrarModal}
                   disabled={isSaving}
-                  style={{
-                    padding: '0.6rem 1.2rem',
-                    backgroundColor: '#6c757d',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: isSaving ? 'not-allowed' : 'pointer'
-                  }}
+                  className="local-btn local-btn--outline"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  style={{
-                    padding: '0.6rem 1.5rem',
-                    backgroundColor: isSaving ? '#6c757d' : '#007bff',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold'
-                  }}
+                  className="local-btn local-btn--primary"
                 >
-                  {isSaving ? '⏳ Guardando...' : '💾 Guardar Producto'}
+                  {isSaving ? (
+                    <><Spinner /> Guardando...</>
+                  ) : (
+                    <><Icon name="save" /> Guardar producto</>
+                  )}
                 </button>
               </div>
             </form>
@@ -718,236 +770,170 @@ export const GestionMenuLocal = ({ localId }) => {
         </div>
       )}
 
-      {/* 🟢 TABLA ORGANIZADA POR CATEGORÍAS COMERCIALES */}
+      {/* Aviso general: flota sobre el modal de formulario */}
+      {modalAviso && (
+        <AvisoModal
+          titulo={modalAviso.titulo}
+          mensaje={modalAviso.mensaje}
+          exito={modalAviso.titulo.includes('✓')}
+          onClose={() => setModalAviso(null)}
+        />
+      )}
+
+      {/* Productos organizados por categorías comerciales */}
       {loading ? (
-        <p>Cargando productos...</p>
+        <div className="local-state" role="status">
+          <Spinner />
+          Cargando productos...
+        </div>
       ) : Object.keys(productosAgrupados).length === 0 ? (
-        <p style={{ marginTop: '1rem', color: '#6c757d' }}>
-          No hay productos registrados en el menú.
-        </p>
+        <div className="local-state">
+          <Icon name="utensils" size={28} />
+          <p>No hay productos registrados en el menú.</p>
+        </div>
       ) : (
-        <div style={{ marginTop: '1.5rem' }}>
+        <div className="local-menu-list">
           {Object.entries(productosAgrupados).map(
             ([nombreCategoria, listaProductos]) => (
-              <div key={nombreCategoria} style={{ marginBottom: '2rem' }}>
-
-                {/* Encabezado desplegable de la Categoría Comercial */}
+              <div
+                key={nombreCategoria}
+                className={`local-cat ${categoriasAbiertas[nombreCategoria] ? 'is-open' : ''}`}
+              >
+                {/* Encabezado desplegable de la categoría comercial */}
                 <button
                   type="button"
                   onClick={() => toggleCategoria(nombreCategoria)}
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#f1f3f5',
-                    padding: '0.7rem 1rem',
-                    borderRadius: categoriasAbiertas[nombreCategoria]
-                      ? '6px 6px 0 0'
-                      : '6px',
-                    fontWeight: 'bold',
-                    fontSize: '1.05rem',
-                    color: '#343a40',
-                    border: 'none',
-                    borderLeft: '4px solid #007bff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    textAlign: 'left'
-                  }}
+                  className="local-cat__head"
+                  aria-expanded={Boolean(categoriasAbiertas[nombreCategoria])}
                 >
-                  <span>
-                    {categoriasAbiertas[nombreCategoria] ? '🔽' : '▶️'} 🏷️ {nombreCategoria}
+                  <span className="local-cat__title">
+                    <Icon name={categoriasAbiertas[nombreCategoria] ? 'chevronDown' : 'chevronRight'} size={18} />
+                    <span className="local-icon tag" style={{ display: 'inline-flex' }}><Icon name="tag" size={16} /></span>
+                    {nombreCategoria}
                   </span>
 
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.7rem',
-                      fontSize: '0.85rem',
-                      color: '#6c757d',
-                      fontWeight: 'normal'
-                    }}
-                  >
-                    ({listaProductos.length}{' '}
-                    {listaProductos.length === 1 ? 'producto' : 'productos'})
+                  <span className="local-badge local-badge--neutral">
+                    {listaProductos.length}{' '}
+                    {listaProductos.length === 1 ? 'producto' : 'productos'}
                   </span>
                 </button>
 
                 {/* Contenido desplegable de la categoría */}
                 {categoriasAbiertas[nombreCategoria] && (
-                  <div
-                    style={{
-                      border: '1px solid #dee2e6',
-                      borderTop: 'none',
-                      borderRadius: '0 0 6px 6px',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {/* Tabla de Productos pertenecientes a la categoría */}
-                    <table
-                  style={{
-                    width: '100%',
-                    borderCollapse: 'collapse'
-                  }}
-                >
-                  <thead>
-                    <tr
-                      style={{
-                        borderBottom: '2px solid #dee2e6',
-                        textAlign: 'left',
-                        color: '#495057',
-                        fontSize: '0.9rem'
-                      }}
-                    >
-                      <th style={{ padding: '0.6rem 0.8rem', width: '60px' }}>
-                        Imagen
-                      </th>
-                      <th>Producto</th>
-                      <th>Precio Venta (Neto Local)</th>
-                      <th>Prep.</th>
-                      <th>Estado</th>
-                      <th style={{ textAlign: 'right', paddingRight: '0.8rem' }}>
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {listaProductos.map((prod) => {
-                      const estaEditandoEste = editingId === prod.id;
-                      const estaCambiandoEste = isTogglingId === prod.id;
-                      const estaDisponible = parseDisponible(prod.disponible) === 1;
-
-                      const precioLocalVal =
-                        prod.precio_local !== undefined &&
-                        prod.precio_local !== null
-                          ? Number(prod.precio_local)
-                          : Number(
-                              (
-                                Number(prod.precio) *
-                                (1 - COMISION_PORCENTAJE)
-                              ).toFixed(2)
-                            );
-
-                      return (
-                        <tr
-                          key={prod.id}
-                          style={{
-                            borderBottom: '1px solid #e9ecef',
-                            backgroundColor: estaEditandoEste
-                              ? '#e7f5ff'
-                              : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '0.6rem 0.8rem' }}>
-                            <img
-                              src={
-                                prod.imagen_url &&
-                                prod.imagen_url.trim() !== ''
-                                  ? prod.imagen_url.startsWith('http')
-                                    ? prod.imagen_url
-                                    : `${API_BASE_URL}${prod.imagen_url}`
-                                  : 'https://placehold.co/50x50?text=Sin+Foto'
-                              }
-                              alt={prod.nombre}
-                              style={{
-                                width: '45px',
-                                height: '45px',
-                                borderRadius: '6px',
-                                objectFit: 'cover'
-                              }}
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src =
-                                  'https://placehold.co/50x50?text=Sin+Foto';
-                              }}
-                            />
-                          </td>
-
-                          <td>
-                            <strong>{prod.nombre}</strong>
-                          </td>
-
-                          <td>
-                            <strong>${Number(prod.precio).toFixed(2)}</strong>
-                            <div
-                              style={{
-                                fontSize: '0.78rem',
-                                color: '#6c757d'
-                              }}
-                            >
-                              (Neto local: ${precioLocalVal.toFixed(2)})
-                            </div>
-                          </td>
-
-                          <td>
-                            ⏱️ {prod.tiempo_preparacion_min || 15}m
-                          </td>
-
-                          <td>
-                            <span
-                              style={{
-                                color: estaDisponible ? '#2b8a3e' : '#e03131',
-                                fontWeight: 'bold',
-                                fontSize: '0.9rem'
-                              }}
-                            >
-                              {estaDisponible
-                                ? '🟢 Disponible'
-                                : '🔴 Pausado'}
-                            </span>
-                          </td>
-
-                          <td
-                            style={{
-                              textAlign: 'right',
-                              paddingRight: '0.8rem'
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'inline-flex',
-                                gap: '6px'
-                              }}
-                            >
-                              <button
-                                onClick={() => handleEditarClick(prod)}
-                                disabled={isSaving || Boolean(isTogglingId)}
-                                style={{
-                                  padding: '0.4rem 0.8rem',
-                                  cursor: 'pointer',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ccc'
-                                }}
-                              >
-                                ✏️ Editar
-                              </button>
-
-                              <button
-                                onClick={() => handleToggleDisponible(prod.id)}
-                                disabled={estaCambiandoEste || isSaving}
-                                style={{
-                                  padding: '0.4rem 0.8rem',
-                                  cursor:
-                                    estaCambiandoEste || isSaving
-                                      ? 'not-allowed'
-                                      : 'pointer',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ccc'
-                                }}
-                              >
-                                {estaCambiandoEste
-                                  ? '⏳ Procesando...'
-                                  : estaDisponible
-                                  ? '⏸️ Pausar'
-                                  : '▶️ Activar'}
-                              </button>
-                            </div>
-                          </td>
+                  <div className="local-table-wrap" style={{ border: 'none', borderRadius: 0, boxShadow: 'none' }}>
+                    <table className="local-table local-table--stack">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '72px' }}>Imagen</th>
+                          <th>Producto</th>
+                          <th>Precio venta (neto local)</th>
+                          <th>Prep.</th>
+                          <th>Estado</th>
+                          <th className="is-right">Acciones</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
+                      </thead>
+
+                      <tbody>
+                        {listaProductos.map((prod) => {
+                          const estaEditandoEste = editingId === prod.id;
+                          const estaCambiandoEste = isTogglingId === prod.id;
+                          const estaDisponible = parseDisponible(prod.disponible) === 1;
+
+                          const precioLocalVal =
+                            prod.precio_local !== undefined &&
+                            prod.precio_local !== null
+                              ? Number(prod.precio_local)
+                              : Number(
+                                  (
+                                    Number(prod.precio) *
+                                    (1 - COMISION_PORCENTAJE)
+                                  ).toFixed(2)
+                                );
+
+                          return (
+                            <tr key={prod.id} className={estaEditandoEste ? 'is-editing' : ''}>
+                              <td data-label="Imagen">
+                                <img
+                                  className="local-product-img"
+                                  src={
+                                    prod.imagen_url &&
+                                    prod.imagen_url.trim() !== ''
+                                      ? prod.imagen_url.startsWith('http')
+                                        ? prod.imagen_url
+                                        : `${API_BASE_URL}${prod.imagen_url}`
+                                      : 'https://placehold.co/50x50?text=Sin+Foto'
+                                  }
+                                  alt={prod.nombre}
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src =
+                                      'https://placehold.co/50x50?text=Sin+Foto';
+                                  }}
+                                />
+                              </td>
+
+                              <td data-label="Producto" className="is-strong">
+                                {prod.nombre}
+                              </td>
+
+                              <td data-label="Precio">
+                                <div className="local-price">
+                                  <strong>${Number(prod.precio).toFixed(2)}</strong>
+                                  <small>(Neto local: ${precioLocalVal.toFixed(2)})</small>
+                                </div>
+                              </td>
+
+                              <td data-label="Prep.">
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <Icon name="timer" size={14} />
+                                  {prod.tiempo_preparacion_min || 15}m
+                                </span>
+                              </td>
+
+                              <td data-label="Estado">
+                                {estaDisponible ? (
+                                  <span className="local-badge local-badge--success">
+                                    <Icon name="checkCircle" size={12} /> Disponible
+                                  </span>
+                                ) : (
+                                  <span className="local-badge local-badge--error">
+                                    <Icon name="pause" size={12} /> Pausado
+                                  </span>
+                                )}
+                              </td>
+
+                              <td data-label="Acciones" className="is-right local-table__actions">
+                                <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditarClick(prod)}
+                                    disabled={isSaving || Boolean(isTogglingId)}
+                                    className="local-btn local-btn--sm local-btn--outline"
+                                  >
+                                    <Icon name="pencil" size={14} />
+                                    Editar
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleDisponible(prod.id)}
+                                    disabled={estaCambiandoEste || isSaving}
+                                    className="local-btn local-btn--sm local-btn--outline"
+                                  >
+                                    {estaCambiandoEste ? (
+                                      <><Spinner /> Procesando...</>
+                                    ) : estaDisponible ? (
+                                      <><Icon name="pause" size={14} /> Pausar</>
+                                    ) : (
+                                      <><Icon name="play" size={14} /> Activar</>
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
                     </table>
                   </div>
                 )}
@@ -956,6 +942,6 @@ export const GestionMenuLocal = ({ localId }) => {
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 };

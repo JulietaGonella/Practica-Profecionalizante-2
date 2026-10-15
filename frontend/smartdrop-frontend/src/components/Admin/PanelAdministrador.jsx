@@ -1,3 +1,4 @@
+// src/components/Admin/PanelAdministrador.jsx
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogoutButton } from '../LogoutButton';
@@ -21,8 +22,9 @@ import {
   rechazarBajaVehiculoAdmin
 } from '../../api/adminService';
 import { BarraBusquedaFiltro } from './BarraBusquedaFiltro';
-import { CambiarPasswordModal } from '../CambiarPasswordModal'
+import { CambiarPasswordModal } from '../CambiarPasswordModal';
 import { TableroAdministrador } from './TableroAdministrador';
+import './CSS/Administrador.css';
 
 const DIAS_SEMANA = [
   'Domingo',
@@ -79,6 +81,78 @@ const TablaConScrollSuperior = ({ children, minWidth = '1100px' }) => {
   );
 };
 
+// --- Iconos (trazos estilo Lucide, sin dependencias adicionales) ---
+const ICONS = {
+  shield: <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />,
+  key: <><circle cx="7.5" cy="15.5" r="5.5" /><path d="m21 2-9.6 9.6" /><path d="m15.5 7.5 3 3L22 7l-3-3" /></>,
+  plus: <><path d="M5 12h14" /><path d="M12 5v14" /></>,
+  dashboard: <><rect width="7" height="9" x="3" y="3" rx="1" /><rect width="7" height="5" x="14" y="3" rx="1" /><rect width="7" height="9" x="14" y="12" rx="1" /><rect width="7" height="5" x="3" y="16" rx="1" /></>,
+  users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  user: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
+  store: <><path d="M3 9l1.5-5h15L21 9" /><path d="M4 9v11h16V9" /><path d="M3 9h18" /><path d="M9 20v-6h6v6" /></>,
+  bike: <><circle cx="18.5" cy="17.5" r="3.5" /><circle cx="5.5" cy="17.5" r="3.5" /><circle cx="15" cy="5" r="1" /><path d="M12 17.5V14l-3-3 4-3 2 3h2" /></>,
+  car: <><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /><circle cx="7" cy="17" r="2" /><path d="M9 17h6" /><circle cx="17" cy="17" r="2" /></>,
+  trash: <><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>,
+  pencil: <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />,
+  calendar: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>,
+  eye: <><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></>,
+  check: <path d="M20 6 9 17l-5-5" />,
+  checkCircle: <><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></>,
+  xCircle: <><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" /></>,
+  x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+  alert: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></>,
+  clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+  file: <><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></>,
+  pin: <><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></>,
+  external: <><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>,
+  chevronLeft: <path d="m15 18-6-6 6-6" />,
+  chevronRight: <path d="m9 18 6-6-6-6" />,
+  history: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></>,
+  info: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></>,
+  ban: <><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></>,
+  save: <><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /><path d="M7 3v4a1 1 0 0 0 1 1h7" /></>,
+  power: <><path d="M12 2v10" /><path d="M18.4 6.6a9 9 0 1 1-12.77.04" /></>,
+  inbox: <><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></>
+};
+
+const Icon = ({ name, size = 16 }) => (
+  <svg
+    className="admin-icon"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    {ICONS[name]}
+  </svg>
+);
+
+const Badge = ({ tone = 'neutral', icon, dot = false, children }) => (
+  <span className={`admin-badge admin-badge--${tone}`}>
+    {dot && <span className="admin-dot" aria-hidden="true" />}
+    {icon && <Icon name={icon} size={12} />}
+    {children}
+  </span>
+);
+
+const Spinner = () => <span className="admin-spinner" aria-hidden="true" />;
+
+// Solo visual: los textos de los avisos conservan sus emojis en la lógica,
+// pero se muestran sin ellos porque la interfaz usa iconos.
+const sinEmoji = (texto = '') =>
+  String(texto)
+    .replace(/[\u2300-\u23FF\u2600-\u27BF\u{1F300}-\u{1FAFF}\uFE0F\u200D]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+const inicialDe = (texto) => String(texto || '?').trim().charAt(0).toUpperCase() || '?';
+
 export const PanelAdministrador = () => {
   const navigate = useNavigate();
   const { user: usuarioActual } = useAuth();
@@ -124,6 +198,10 @@ export const PanelAdministrador = () => {
   const [motivoRechazoBaja, setMotivoRechazoBaja] = useState('');
   const [solicitudARechazar, setSolicitudARechazar] = useState(null);
   const [motivoRechazoSolicitud, setMotivoRechazoSolicitud] = useState('');
+
+  // Estados para modales estéticos
+  const [modalAviso, setModalAviso] = useState(null);
+  const [modalConfirmacion, setModalConfirmacion] = useState(null);
 
   // --- BÚSQUEDA Y FILTRADO DE DATOS ---
   const term = busqueda.trim().toLowerCase();
@@ -218,7 +296,7 @@ export const PanelAdministrador = () => {
         repartidoresData,
         clientesData,
         solicitudesPendientesData,
-        solicitudesDocData, // 👈 Solicitudes de nueva documentación
+        solicitudesDocData,
         alertasData,
         bajasData
       ] = await Promise.all([
@@ -227,12 +305,11 @@ export const PanelAdministrador = () => {
         getRepartidoresAdmin(),
         getClientesAdmin(),
         getSolicitudesVehiculosAdmin('PENDIENTE'),
-        getSolicitudesVehiculosAdmin('PENDIENTE_DOCUMENTACION'), // 👈 Petición específica para este estado
+        getSolicitudesVehiculosAdmin('PENDIENTE_DOCUMENTACION'),
         getAlertasDocumentacionAdmin(),
         getVehiculosPendientesBajaAdmin()
       ]);
 
-      // 👈 Combinamos ambos arrays de solicitudes en uno solo
       const solicitudesCombinadas = [
         ...(Array.isArray(solicitudesPendientesData) ? solicitudesPendientesData : []),
         ...(Array.isArray(solicitudesDocData) ? solicitudesDocData : [])
@@ -242,7 +319,7 @@ export const PanelAdministrador = () => {
       setLocales(Array.isArray(localesData) ? localesData : []);
       setRepartidores(Array.isArray(repartidoresData) ? repartidoresData : []);
       setClientes(Array.isArray(clientesData) ? clientesData : []);
-      setSolicitudesVehiculos(solicitudesCombinadas); // 👈 Guardamos el combinado
+      setSolicitudesVehiculos(solicitudesCombinadas);
       setAlertasDoc(Array.isArray(alertasData) ? alertasData : []);
       setVehiculosBaja(Array.isArray(bajasData) ? bajasData : []);
 
@@ -292,29 +369,36 @@ export const PanelAdministrador = () => {
 
   const handleEliminarUsuario = async (usuario) => {
     if (Number(usuario.id) === Number(usuarioActual?.id)) {
-      alert('No podés eliminar tu propia cuenta.');
+      setModalAviso({
+        titulo: '⚠️ Acción no permitida',
+        mensaje: 'No podés eliminar tu propia cuenta.'
+      });
       return;
     }
 
-    const confirmar = window.confirm(
-      `¿Seguro que querés eliminar al usuario "${usuario.username}"?`
-    );
-
-    if (!confirmar) return;
-
-    try {
-      setProcesandoId(`eliminar-usuario-${usuario.id}`);
-      await eliminarUsuarioAdmin(usuario.id);
-      await cargarDatos();
-      alert('Usuario eliminado correctamente.');
-    } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo eliminar el usuario.'
-      );
-    } finally {
-      setProcesandoId(null);
-    }
+    setModalConfirmacion({
+      titulo: '⚠️ Confirmar Eliminación',
+      mensaje: `¿Seguro que querés eliminar al usuario "${usuario.username}"?`,
+      onConfirm: async () => {
+        setModalConfirmacion(null);
+        try {
+          setProcesandoId(`eliminar-usuario-${usuario.id}`);
+          await eliminarUsuarioAdmin(usuario.id);
+          await cargarDatos();
+          setModalAviso({
+            titulo: '✅ Éxito',
+            mensaje: 'Usuario eliminado correctamente.'
+          });
+        } catch (err) {
+          setModalAviso({
+            titulo: '⚠️ Error',
+            mensaje: err.response?.data?.error || 'No se pudo eliminar el usuario.'
+          });
+        } finally {
+          setProcesandoId(null);
+        }
+      }
+    });
   };
 
   const handleToggleLocal = async (local) => {
@@ -323,10 +407,10 @@ export const PanelAdministrador = () => {
       await toggleActivoLocalAdmin(local.id);
       await cargarDatos();
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo cambiar el estado administrativo del local.'
-      );
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo cambiar el estado administrativo del local.'
+      });
     } finally {
       setProcesandoId(null);
     }
@@ -338,29 +422,39 @@ export const PanelAdministrador = () => {
       await validarRepartidorAdmin(repartidor.id, Number(repartidor.validado) === 0 ? 1 : 0);
       await cargarDatos();
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo cambiar la validación del repartidor.'
-      );
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo cambiar la validación del repartidor.'
+      });
     } finally {
       setProcesandoId(null);
     }
   };
 
   const handleAprobarBaja = async (idVehiculo) => {
-    const confirmar = window.confirm('¿Estás seguro de aprobar la baja definitiva de este vehículo? Se desvinculará del repartidor.');
-    if (!confirmar) return;
-
-    try {
-      setProcesandoId(`baja-${idVehiculo}`);
-      await aprobarBajaVehiculoAdmin(idVehiculo);
-      await cargarDatos();
-      alert('✅ Baja de vehículo aprobada correctamente.');
-    } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo procesar la baja del vehículo.');
-    } finally {
-      setProcesandoId(null);
-    }
+    setModalConfirmacion({
+      titulo: '⚠️ Aprobar Baja de Vehículo',
+      mensaje: '¿Estás seguro de aprobar la baja definitiva de este vehículo? Se desvinculará del repartidor.',
+      onConfirm: async () => {
+        setModalConfirmacion(null);
+        try {
+          setProcesandoId(`baja-${idVehiculo}`);
+          await aprobarBajaVehiculoAdmin(idVehiculo);
+          await cargarDatos();
+          setModalAviso({
+            titulo: '✅ Éxito',
+            mensaje: '✅ Baja de vehículo aprobada correctamente.'
+          });
+        } catch (err) {
+          setModalAviso({
+            titulo: '⚠️ Error',
+            mensaje: err.response?.data?.error || 'No se pudo procesar la baja del vehículo.'
+          });
+        } finally {
+          setProcesandoId(null);
+        }
+      }
+    });
   };
 
   const obtenerInfoVehiculo = (solicitudOVehiculo) => {
@@ -368,10 +462,8 @@ export const PanelAdministrador = () => {
       return { esBici: false, esMoto: false, esAuto: false, tieneDocumentacion: true, icono: '🚗', etiqueta: 'Vehículo' };
     }
 
-    // Extraemos el objeto vehículo si viene anidado
     const v = solicitudOVehiculo.vehiculo || solicitudOVehiculo.documentacion_nueva || solicitudOVehiculo;
 
-    // 1. Extraer ID del tipo
     const idTipo = Number(
       v.IDtipo_vehiculo ||
       v.id_tipo_vehiculo ||
@@ -381,14 +473,12 @@ export const PanelAdministrador = () => {
       (typeof v.tipo_vehiculo === 'object' ? v.tipo_vehiculo?.id : null)
     );
 
-    // 2. Extraer nombre/texto del tipo
     const rawTipo = typeof v.tipo_vehiculo === 'object'
       ? (v.tipo_vehiculo?.nombre || v.tipo_vehiculo?.tipo)
       : (v.tipo_vehiculo || v.nombre_tipo || v.tipo || solicitudOVehiculo.tipo_vehiculo || '');
 
     const tipoTexto = String(rawTipo).toLowerCase().trim();
 
-    // Evaluaciones
     const esBici = idTipo === 1 || idTipo === 2 || tipoTexto.includes('bici');
     const esMoto = idTipo === 3 || tipoTexto.includes('moto');
     const esAuto = idTipo === 4 || tipoTexto.includes('auto');
@@ -417,7 +507,10 @@ export const PanelAdministrador = () => {
   const confirmarRechazoBaja = async (e) => {
     e.preventDefault();
     if (!motivoRechazoBaja.trim()) {
-      alert('El motivo del rechazo es obligatorio.');
+      setModalAviso({
+        titulo: '⚠️ Dato Obligatorio',
+        mensaje: 'El motivo del rechazo es obligatorio.'
+      });
       return;
     }
 
@@ -427,9 +520,15 @@ export const PanelAdministrador = () => {
       await cargarDatos();
       setVehiculoARechazarBaja(null);
       setMotivoRechazoBaja('');
-      alert('❌ La solicitud de baja del vehículo fue rechazada correctamente.');
+      setModalAviso({
+        titulo: '✅ Solicitud Rechazada',
+        mensaje: '❌ La solicitud de baja del vehículo fue rechazada correctamente.'
+      });
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo rechazar la baja del vehículo.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo rechazar la baja del vehículo.'
+      });
     } finally {
       setProcesandoId(null);
     }
@@ -447,7 +546,6 @@ export const PanelAdministrador = () => {
     ruta ? (ruta.startsWith('http') ? ruta : `${API_BASE_URL}${ruta}`) : ''
   );
 
-  // En el cuerpo de PanelAdministrador.jsx (fuera del return JSX)
   const evaluarSolicitudVehiculo = async (solicitud, estado) => {
     if (estado === 'RECHAZADO') {
       setSolicitudARechazar(solicitud);
@@ -460,9 +558,15 @@ export const PanelAdministrador = () => {
       await evaluarSolicitudVehiculoAdmin(solicitud.id, estado, '');
       await cargarDatos();
       if (documentacionVehiculo?.id === solicitud.id) setDocumentacionVehiculo(null);
-      alert('✅ Solicitud procesada correctamente.');
+      setModalAviso({
+        titulo: '✅ Éxito',
+        mensaje: '✅ Solicitud procesada correctamente.'
+      });
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo evaluar la solicitud.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo evaluar la solicitud.'
+      });
     } finally {
       setProcesandoId(null);
     }
@@ -471,15 +575,16 @@ export const PanelAdministrador = () => {
   const confirmarRechazoSolicitud = async (e) => {
     e.preventDefault();
     if (!motivoRechazoSolicitud.trim()) {
-      alert('El motivo del rechazo es obligatorio.');
+      setModalAviso({
+        titulo: '⚠️ Dato Obligatorio',
+        mensaje: 'El motivo del rechazo es obligatorio.'
+      });
       return;
     }
 
     try {
       setProcesandoId(`vehiculo-${solicitudARechazar.id}`);
 
-      // Si la solicitud es de nueva documentación (PENDIENTE_DOCUMENTACION o no es vehículo nuevo),
-      // enviamos el estado 'RECHAZADO_DOCUMENTACION'
       const esNuevaDoc = solicitudARechazar.estado === 'PENDIENTE_DOCUMENTACION' || Number(solicitudARechazar.es_nuevo_vehiculo) === 0;
       const estadoEnvio = esNuevaDoc ? 'RECHAZADO_DOCUMENTACION' : 'RECHAZADO';
 
@@ -493,9 +598,15 @@ export const PanelAdministrador = () => {
       if (documentacionVehiculo?.id === solicitudARechazar.id) setDocumentacionVehiculo(null);
       setSolicitudARechazar(null);
       setMotivoRechazoSolicitud('');
-      alert('❌ La solicitud fue rechazada correctamente.');
+      setModalAviso({
+        titulo: '✅ Solicitud Rechazada',
+        mensaje: '❌ La solicitud fue rechazada correctamente.'
+      });
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo rechazar la solicitud.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo rechazar la solicitud.'
+      });
     } finally {
       setProcesandoId(null);
     }
@@ -549,15 +660,17 @@ export const PanelAdministrador = () => {
       await cargarDatos();
       cancelarEdicionLocal();
 
-      alert('✅ Local actualizado correctamente.');
+      setModalAviso({
+        titulo: '✅ Éxito',
+        mensaje: '✅ Local actualizado correctamente.'
+      });
     } catch (err) {
       console.error('Error al actualizar local:', err);
 
-      alert(
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        'No se pudieron guardar los cambios del local.'
-      );
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || err.response?.data?.message || 'No se pudieron guardar los cambios del local.'
+      });
     } finally {
       setProcesandoId(null);
     }
@@ -584,100 +697,79 @@ export const PanelAdministrador = () => {
     }
   };
 
+  const tabs = [
+    { id: 'tablero', etiqueta: 'Tablero general', icono: 'dashboard', total: null },
+    { id: 'usuarios', etiqueta: 'Usuarios', icono: 'users', total: usuarios.length },
+    { id: 'locales', etiqueta: 'Locales', icono: 'store', total: locales.length },
+    { id: 'repartidores', etiqueta: 'Repartidores', icono: 'bike', total: repartidores.length },
+    { id: 'clientes', etiqueta: 'Clientes', icono: 'user', total: clientes.length }
+  ];
+
+  const avisoExitoso = modalAviso?.titulo?.includes('✅');
+
   return (
-    <div style={{ maxWidth: '1150px', margin: '0 auto', padding: '2rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Panel de Administración 🛡️</h1>
-          <p style={{ color: '#666' }}>Gestión general del sistema SmartDrop</p>
+    <div className="admin-container">
+      <header className="admin-header">
+        <div className="admin-brand">
+          <span className="admin-brand__mark" aria-hidden="true">
+            <Icon name="shield" size={24} />
+          </span>
+          <div>
+            <h1>Panel de administración</h1>
+            <p>Gestión general del sistema SmartDrop</p>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="admin-header__actions">
           <button
             onClick={() => setMostrarCambioPass(true)}
-            style={{
-              padding: '0.6rem 1rem',
-              backgroundColor: '#495057',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
+            className="admin-btn admin-btn--outline"
           >
-            🔑 Cambiar Contraseña
+            <Icon name="key" />
+            Cambiar contraseña
           </button>
 
           <LogoutButton />
         </div>
       </header>
 
-      {/* 👈 4. BANNER DE ALERTAS DE DOCUMENTACIÓN VENCIDA O POR VENCER */}
+      {/* BANNER DE ALERTAS DE DOCUMENTACIÓN VENCIDA O POR VENCER */}
       {alertasDoc.length > 0 && (
-        <div
-          style={{
-            marginBottom: '1.5rem',
-            padding: '1rem',
-            border: '1px solid #ffc9c9',
-            borderRadius: '10px',
-            backgroundColor: '#fff5f5'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <h3 style={{ margin: 0, color: '#c92a2a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              ⚠️ Alertas de Documentación Vencida / Por Vencer
+        <div className="admin-alert-banner" role="alert">
+          <div className="admin-alert-banner__head">
+            <h3 className="admin-alert-banner__title">
+              <Icon name="alert" size={18} />
+              Alertas de documentación vencida o por vencer
             </h3>
-            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#c92a2a', backgroundColor: '#ffe3e3', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
-              {alertasDoc.length} Alerta(s)
-            </span>
+            <Badge tone="error">{alertasDoc.length} alerta(s)</Badge>
           </div>
 
-          <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.8rem' }}>
+          <div className="admin-alert-list">
             {alertasDoc.map((alerta, index) => {
               const esHoy = alerta.estado === 'VENCE_HOY';
 
               return (
                 <div
                   key={`${alerta.repartidor_id}-${alerta.documento}-${index}`}
-                  style={{
-                    display: 'flex',
-                    justify: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '0.8rem',
-                    padding: '0.75rem 1rem',
-                    backgroundColor: '#fff',
-                    borderLeft: `5px solid ${esHoy ? '#f59f00' : '#e03131'}`,
-                    borderTop: '1px solid #ffc9c9',
-                    borderRight: '1px solid #ffc9c9',
-                    borderBottom: '1px solid #ffc9c9',
-                    borderRadius: '6px'
-                  }}
+                  className={`admin-alert-item ${esHoy ? 'admin-alert-item--hoy' : ''}`}
                 >
                   <div>
-                    <strong style={{ fontSize: '0.95rem' }}>{alerta.repartidor}</strong>
-                    <small style={{ display: 'block', color: '#666' }}>
+                    <strong>{alerta.repartidor}</strong>
+                    <small style={{ display: 'block' }}>
                       {alerta.vehiculo} · {alerta.email}
                     </small>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
-                      📄 <strong>{alerta.documento}:</strong> {alerta.fecha_vencimiento}
+                  <div className="admin-alert-item__meta">
+                    <span>
+                      <Icon name="file" size={14} /> <strong>{alerta.documento}:</strong> {alerta.fecha_vencimiento}
                     </span>
 
-                    <span
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                        color: '#fff',
-                        backgroundColor: esHoy ? '#f59f00' : '#e03131'
-                      }}
-                    >
-                      {esHoy ? '⏳ VENCE HOY' : '❌ VENCIDO'}
-                    </span>
+                    {esHoy ? (
+                      <Badge tone="warning" icon="clock">Vence hoy</Badge>
+                    ) : (
+                      <Badge tone="error" icon="xCircle">Vencido</Badge>
+                    )}
                   </div>
                 </div>
               );
@@ -688,16 +780,8 @@ export const PanelAdministrador = () => {
 
       {/* Renderizado condicional del modal de cambio de clave */}
       {mostrarCambioPass && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justify: 'center',
-          alignItems: 'center',
-          zIndex: 3000
-        }}>
-          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', maxWidth: '400px', width: '100%' }}>
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-content" style={{ maxWidth: '400px' }}>
             <CambiarPasswordModal
               esObligatorio={false}
               onClose={() => setMostrarCambioPass(false)}
@@ -706,217 +790,131 @@ export const PanelAdministrador = () => {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          justify: 'flex-end',
-          gap: '10px',
-          marginBottom: '1.5rem'
-        }}
-      >
-        <button
-          onClick={() => navigate('/admin/crear-cuenta')}
-          style={{
-            padding: '0.7rem 1rem',
-            backgroundColor: '#1c7ed6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          ➕ Crear cuenta y perfil
-        </button>
+      <div className="admin-toolbar">
+        <nav className="admin-nav-tabs" aria-label="Secciones del panel">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setSeccion(tab.id)}
+              className={`admin-tab-btn ${seccion === tab.id ? 'active' : ''}`}
+              aria-current={seccion === tab.id ? 'page' : undefined}
+            >
+              <Icon name={tab.icono} />
+              {tab.etiqueta}
+              {!loading && tab.total !== null && (
+                <span className="admin-tab-count">{tab.total}</span>
+              )}
+            </button>
+          ))}
+        </nav>
 
-        <button
-          onClick={() => navigate('/admin/crear-admin')}
-          style={{
-            padding: '0.7rem 1rem',
-            backgroundColor: '#1c7ed6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          ➕ Crear admin
-        </button>
+        <div className="admin-toolbar__actions">
+          <button
+            onClick={() => navigate('/admin/crear-cuenta')}
+            className="admin-btn admin-btn--primary"
+          >
+            <Icon name="plus" />
+            Crear cuenta y perfil
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/crear-admin')}
+            className="admin-btn admin-btn--outline"
+          >
+            <Icon name="plus" />
+            Crear admin
+          </button>
+        </div>
       </div>
 
-      <nav
-        style={{
-          display: 'flex',
-          gap: '10px',
-          flexWrap: 'wrap',
-          marginBottom: '1.5rem'
-        }}
-      >
-        <button
-          onClick={() => setSeccion('tablero')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            backgroundColor: seccion === 'tablero' ? '#0b7285' : '#e9ecef',
-            color: seccion === 'tablero' ? '#fff' : '#333'
+      <div className="admin-search">
+        <BarraBusquedaFiltro
+          busqueda={busqueda}
+          setBusqueda={(valor) => {
+            setBusqueda(valor);
+            setPaginaUsuarios(1);
+            setPaginaRepartidores(1);
+            setPaginaClientes(1);
           }}
-        >
-          📊 Tablero General
-        </button>
-
-        <button
-          onClick={() => setSeccion('usuarios')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            backgroundColor: seccion === 'usuarios' ? '#1c7ed6' : '#e9ecef',
-            color: seccion === 'usuarios' ? '#fff' : '#333'
-          }}
-        >
-          👥 Usuarios
-        </button>
-
-        <button
-          onClick={() => setSeccion('locales')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            backgroundColor: seccion === 'locales' ? '#2b8a3e' : '#e9ecef',
-            color: seccion === 'locales' ? '#fff' : '#333'
-          }}
-        >
-          🏪 Locales
-        </button>
-
-        <button
-          onClick={() => setSeccion('repartidores')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            backgroundColor: seccion === 'repartidores' ? '#d9480f' : '#e9ecef',
-            color: seccion === 'repartidores' ? '#fff' : '#333'
-          }}
-        >
-          🚴 Repartidores
-        </button>
-
-        <button
-          onClick={() => setSeccion('clientes')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            backgroundColor: seccion === 'clientes' ? '#7048e8' : '#e9ecef',
-            color: seccion === 'clientes' ? '#fff' : '#333'
-          }}
-        >
-          🧑‍🤝‍🧑 Clientes
-        </button>
-      </nav>
-
-      <BarraBusquedaFiltro
-        busqueda={busqueda}
-        setBusqueda={(valor) => {
-          setBusqueda(valor);
-          setPaginaUsuarios(1);
-          setPaginaRepartidores(1);
-          setPaginaClientes(1);
-        }}
-        placeholder={`Buscar en ${seccion}...`}
-      />
+          placeholder={`Buscar en ${seccion}...`}
+        />
+      </div>
 
       {loading ? (
-        <p>⏳ Cargando información...</p>
+        <div className="admin-state" role="status">
+          <Spinner />
+          Cargando información...
+        </div>
       ) : error ? (
-        <p style={{ color: '#e03131' }}>{error}</p>
+        <div className="admin-state admin-state--error" role="alert">
+          <Icon name="alert" size={24} />
+          {error}
+        </div>
       ) : (
         <>
           {seccion === 'tablero' && <TableroAdministrador />}
 
           {seccion === 'usuarios' && (
             <section>
-              <h2>👥 Gestión de usuarios</h2>
+              <h2 className="admin-section-title">
+                <span className="admin-section-title__icon"><Icon name="users" size={20} /></span>
+                Gestión de usuarios
+              </h2>
 
               {usuarios.length === 0 ? (
-                <p>No hay usuarios registrados.</p>
+                <div className="admin-state">
+                  <Icon name="inbox" size={28} />
+                  No hay usuarios registrados.
+                </div>
               ) : (
                 <>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justify: 'space-between',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      flexWrap: 'wrap',
-                      margin: '1rem 0 0.5rem'
-                    }}
-                  >
-                    <small style={{ color: '#666' }}>
+                  <div className="admin-table-meta">
+                    <span>
                       Mostrando {(paginaUsuarios - 1) * registrosPorPagina + 1} - {Math.min(paginaUsuarios * registrosPorPagina, usuarios.length)} de {usuarios.length}
-                    </small>
-                    <label style={{ fontSize: '0.9rem' }}>
-                      Ver{' '}
-                      <select value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
+                    </span>
+                    <label>
+                      Ver
+                      <select className="admin-select" value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
                         <option value={5}>5</option>
                         <option value={10}>10</option>
                         <option value={20}>20</option>
-                      </select>{' '}
+                      </select>
                       registros
                     </label>
                   </div>
 
-                  <div style={{ overflowX: 'auto' }}>
-                    <table
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        marginTop: '1rem'
-                      }}
-                    >
+                  <div className="admin-table-container">
+                    <table className="admin-table admin-table--stack">
                       <thead>
-                        <tr style={{ backgroundColor: '#e9ecef' }}>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>ID</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Usuario</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Email</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Rol</th>
-                          <th style={{ padding: '0.8rem' }}>Acciones</th>
+                        <tr>
+                          <th>ID</th>
+                          <th>Usuario</th>
+                          <th>Email</th>
+                          <th>Rol</th>
+                          <th style={{ textAlign: 'right' }}>Acciones</th>
                         </tr>
                       </thead>
 
                       <tbody>
+                        {usuariosVisibles.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="admin-table__empty">No hay resultados para tu búsqueda.</td>
+                          </tr>
+                        )}
+
                         {usuariosVisibles.map((usuario) => (
-                          <tr
-                            key={usuario.id}
-                            style={{ borderBottom: '1px solid #dee2e6' }}
-                          >
-                            <td style={{ padding: '0.8rem' }}>{usuario.id}</td>
-                            <td style={{ padding: '0.8rem' }}>{usuario.username}</td>
-                            <td style={{ padding: '0.8rem' }}>{usuario.email}</td>
-                            <td style={{ padding: '0.8rem' }}>{usuario.rol}</td>
-                            <td style={{ padding: '0.8rem' }}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  gap: '0.5rem',
-                                  justifyContent: 'center',
-                                  flexWrap: 'wrap'
-                                }}
-                              >
+                          <tr key={usuario.id}>
+                            <td data-label="ID" className="admin-cell-num">{usuario.id}</td>
+                            <td data-label="Usuario">
+                              <div className="admin-user">
+                                <span className="admin-avatar" aria-hidden="true">{inicialDe(usuario.username)}</span>
+                                {usuario.username}
+                              </div>
+                            </td>
+                            <td data-label="Email">{usuario.email}</td>
+                            <td data-label="Rol"><Badge tone="neutral">{usuario.rol}</Badge></td>
+                            <td data-label="Acciones">
+                              <div className="admin-cell-actions-group">
                                 {Number(usuario.id) !== Number(usuarioActual?.id) && (
                                   <button
                                     type="button"
@@ -924,22 +922,13 @@ export const PanelAdministrador = () => {
                                     disabled={
                                       procesandoId === `eliminar-usuario-${usuario.id}`
                                     }
-                                    style={{
-                                      padding: '0.45rem 0.7rem',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      backgroundColor:
-                                        procesandoId === `eliminar-usuario-${usuario.id}`
-                                          ? '#868e96'
-                                          : '#e03131',
-                                      color: '#fff',
-                                      cursor: 'pointer',
-                                      fontWeight: 'bold'
-                                    }}
+                                    className="admin-btn admin-btn--sm admin-btn--danger-soft"
                                   >
-                                    {procesandoId === `eliminar-usuario-${usuario.id}`
-                                      ? '⏳ Eliminando...'
-                                      : '🗑️ Eliminar'}
+                                    {procesandoId === `eliminar-usuario-${usuario.id}` ? (
+                                      <><Spinner /> Eliminando...</>
+                                    ) : (
+                                      <><Icon name="trash" size={14} /> Eliminar</>
+                                    )}
                                   </button>
                                 )}
                               </div>
@@ -950,13 +939,13 @@ export const PanelAdministrador = () => {
                     </table>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
-                    <button type="button" onClick={() => setPaginaUsuarios((pagina) => Math.max(1, pagina - 1))} disabled={paginaUsuarios === 1}>
-                      Anterior
+                  <div className="admin-pagination">
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaUsuarios((pagina) => Math.max(1, pagina - 1))} disabled={paginaUsuarios === 1}>
+                      <Icon name="chevronLeft" size={14} /> Anterior
                     </button>
-                    <span>Página {paginaUsuarios} de {totalPaginasUsuarios}</span>
-                    <button type="button" onClick={() => setPaginaUsuarios((pagina) => Math.min(totalPaginasUsuarios, pagina + 1))} disabled={paginaUsuarios === totalPaginasUsuarios}>
-                      Siguiente
+                    <span>Página <strong>{paginaUsuarios}</strong> de {totalPaginasUsuarios}</span>
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaUsuarios((pagina) => Math.min(totalPaginasUsuarios, pagina + 1))} disabled={paginaUsuarios === totalPaginasUsuarios}>
+                      Siguiente <Icon name="chevronRight" size={14} />
                     </button>
                   </div>
                 </>
@@ -966,106 +955,89 @@ export const PanelAdministrador = () => {
 
           {seccion === 'locales' && (
             <section>
-              <h2>🏪 Gestión de locales</h2>
+              <h2 className="admin-section-title">
+                <span className="admin-section-title__icon"><Icon name="store" size={20} /></span>
+                Gestión de locales
+              </h2>
 
               {locales.length === 0 ? (
-                <p>No hay locales registrados.</p>
+                <div className="admin-state">
+                  <Icon name="inbox" size={28} />
+                  No hay locales registrados.
+                </div>
               ) : (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      'repeat(auto-fill, minmax(300px, 1fr))',
-                    gap: '1rem'
-                  }}
-                >
+                <div className="admin-card-grid">
                   {locales.map((local) => (
-                    <article
-                      key={local.id}
-                      style={{
-                        border: '1px solid #dee2e6',
-                        borderRadius: '10px',
-                        padding: '1rem',
-                        backgroundColor: '#fff'
-                      }}
-                    >
-                      <h3>{local.nombre}</h3>
-
-                      <p>
-                        <strong>Dirección:</strong> {local.direccion}
-                      </p>
-
-                      <p>
-                        <strong>Estado administrativo:</strong>{' '}
-                        <span
-                          style={{
-                            color: Number(local.es_activo) === 1
-                              ? '#2b8a3e'
-                              : '#e03131',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {Number(local.es_activo) === 1
-                            ? 'Activo'
-                            : 'Inactivo'}
-                        </span>
-                      </p>
-
-                      <p>
-                        <strong>Recepción:</strong>{' '}
-                        {Number(local.esta_operativo) === 1
-                          ? 'Operativa'
-                          : 'Cerrada temporalmente'}
-                      </p>
-
-                      <div
-                        style={{
-                          marginTop: '1rem',
-                          padding: '0.8rem',
-                          backgroundColor: '#f8f9fa',
-                          border: '1px solid #dee2e6',
-                          borderRadius: '7px'
-                        }}
-                      >
-                        <strong>Información del perfil del local</strong>
-
-                        <p style={{ margin: '0.5rem 0 0' }}>
-                          <strong>Teléfono:</strong>{' '}
-                          {local.telefono || 'No informado'}
-                        </p>
-
-                        <p style={{ margin: '0.35rem 0 0' }}>
-                          <strong>Costo de envío:</strong>{' '}
-                          {local.costo_envio_base !== null && local.costo_envio_base !== undefined
-                            ? `$${Number(local.costo_envio_base).toFixed(2)}`
-                            : 'No informado'}
-                        </p>
-
-                        <p style={{ margin: '0.35rem 0 0' }}>
-                          <strong>Preparación promedio:</strong>{' '}
-                          {local.tiempo_preparacion_promedio
-                            ? `${local.tiempo_preparacion_promedio} minutos`
-                            : 'No informado'}
-                        </p>
-
-                        <p style={{ margin: '0.35rem 0 0' }}>
-                          <strong>Horarios:</strong>{' '}
-                          {local.horarios?.length
-                            ? `${local.horarios.length} turno(s) configurado(s)`
-                            : 'Sin horarios configurados'}
+                    <article key={local.id} className="admin-card">
+                      <div>
+                        <div className="admin-card__head">
+                          <h3>{local.nombre}</h3>
+                          {Number(local.es_activo) === 1 ? (
+                            <Badge tone="success" icon="checkCircle">Activo</Badge>
+                          ) : (
+                            <Badge tone="error" icon="ban">Inactivo</Badge>
+                          )}
+                        </div>
+                        <p className="admin-card__address">
+                          <Icon name="pin" size={14} />
+                          {local.direccion}
                         </p>
                       </div>
 
-                      <div style={{ marginTop: '1rem' }}>
-                        <strong>Imágenes del perfil</strong>
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(3, 1fr)',
-                            gap: '0.5rem',
-                            marginTop: '0.5rem'
-                          }}
-                        >
+                      <dl className="admin-kv">
+                        <div>
+                          <dt>Estado administrativo</dt>
+                          <dd>{Number(local.es_activo) === 1 ? 'Activo' : 'Inactivo'}</dd>
+                        </div>
+                        <div>
+                          <dt>Recepción</dt>
+                          <dd>
+                            {Number(local.esta_operativo) === 1 ? (
+                              <Badge tone="success" dot>Operativa</Badge>
+                            ) : (
+                              <Badge tone="neutral" icon="clock">Cerrada temporalmente</Badge>
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <div className="admin-card__section">
+                        <h4 className="admin-section-label">Información del perfil del local</h4>
+                        <dl className="admin-kv">
+                          <div>
+                            <dt>Teléfono</dt>
+                            <dd>{local.telefono || 'No informado'}</dd>
+                          </div>
+                          <div>
+                            <dt>Costo de envío</dt>
+                            <dd>
+                              {local.costo_envio_base !== null && local.costo_envio_base !== undefined
+                                ? `$${Number(local.costo_envio_base).toFixed(2)}`
+                                : 'No informado'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Preparación promedio</dt>
+                            <dd>
+                              {local.tiempo_preparacion_promedio
+                                ? `${local.tiempo_preparacion_promedio} minutos`
+                                : 'No informado'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Horarios</dt>
+                            <dd>
+                              {local.horarios?.length
+                                ? `${local.horarios.length} turno(s) configurado(s)`
+                                : 'Sin horarios configurados'}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div className="admin-card__section">
+                        <h4 className="admin-section-label">Imágenes del perfil</h4>
+                        <div className="admin-thumbs">
                           {[
                             ['Logo', local.logo_url],
                             ['Banner', local.banner_url],
@@ -1074,7 +1046,7 @@ export const PanelAdministrador = () => {
                             const imagen = resolverImagenLocal(ruta);
 
                             return (
-                              <div key={etiqueta} style={{ textAlign: 'center' }}>
+                              <div key={etiqueta} className="admin-thumb">
                                 {imagen ? (
                                   <img
                                     src={imagen}
@@ -1082,71 +1054,33 @@ export const PanelAdministrador = () => {
                                     onError={(e) => {
                                       e.currentTarget.style.display = 'none';
                                     }}
-                                    style={{
-                                      width: '100%',
-                                      height: '70px',
-                                      objectFit: 'cover',
-                                      borderRadius: '5px',
-                                      border: '1px solid #dee2e6'
-                                    }}
                                   />
                                 ) : (
-                                  <div
-                                    style={{
-                                      height: '70px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      backgroundColor: '#e9ecef',
-                                      borderRadius: '5px',
-                                      color: '#868e96',
-                                      fontSize: '0.75rem'
-                                    }}
-                                  >
-                                    Sin imagen
-                                  </div>
+                                  <div className="admin-thumb__empty">Sin imagen</div>
                                 )}
-                                <small style={{ display: 'block', marginTop: '0.25rem' }}>
-                                  {etiqueta}
-                                </small>
+                                <small>{etiqueta}</small>
                               </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '0.7rem',
-                          flexWrap: 'wrap',
-                          marginTop: '1rem'
-                        }}
-                      >
+                      <div className="admin-card__actions">
                         <button
                           type="button"
                           onClick={() => handleToggleLocal(local)}
                           disabled={procesandoId === `local-${local.id}`}
-                          style={{
-                            flex: 1,
-                            minWidth: '140px',
-                            padding: '0.6rem 1rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor:
-                              Number(local.es_activo) === 1
-                                ? '#e03131'
-                                : '#2b8a3e',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                          }}
+                          className={`admin-btn admin-btn--sm admin-btn--grow ${
+                            Number(local.es_activo) === 1 ? 'admin-btn--danger-soft' : 'admin-btn--success'
+                          }`}
                         >
-                          {procesandoId === `local-${local.id}`
-                            ? '⏳ Procesando...'
-                            : Number(local.es_activo) === 1
-                              ? 'Deshabilitar local'
-                              : 'Habilitar local'}
+                          {procesandoId === `local-${local.id}` ? (
+                            <><Spinner /> Procesando...</>
+                          ) : Number(local.es_activo) === 1 ? (
+                            <><Icon name="power" size={14} /> Deshabilitar local</>
+                          ) : (
+                            <><Icon name="power" size={14} /> Habilitar local</>
+                          )}
                         </button>
 
                         <button
@@ -1155,19 +1089,10 @@ export const PanelAdministrador = () => {
                             setLocalHorariosAbiertos(null);
                             iniciarEdicionLocal(local);
                           }}
-                          style={{
-                            flex: 1,
-                            minWidth: '140px',
-                            padding: '0.6rem 1rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#1c7ed6',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                          }}
+                          className="admin-btn admin-btn--sm admin-btn--grow admin-btn--outline"
                         >
-                          ✏️ Editar datos administrativos
+                          <Icon name="pencil" size={14} />
+                          Editar datos administrativos
                         </button>
 
                         <button
@@ -1177,19 +1102,10 @@ export const PanelAdministrador = () => {
                             consultarHorariosLocal(local);
                           }}
                           disabled={loadingHorarios && localHorariosAbiertos === local.id}
-                          style={{
-                            flex: 1,
-                            minWidth: '140px',
-                            padding: '0.6rem 1rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#845ef7',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                          }}
+                          className="admin-btn admin-btn--sm admin-btn--grow admin-btn--outline"
                         >
-                          📅 Ver horarios
+                          <Icon name="calendar" size={14} />
+                          Ver horarios
                         </button>
                       </div>
                     </article>
@@ -1198,120 +1114,53 @@ export const PanelAdministrador = () => {
               )}
 
               {localEditando !== null && localSeleccionado && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem',
-                    zIndex: 2000
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '100%',
-                      maxWidth: '650px',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justify: 'space-between',
-                        alignItems: 'center',
-                        gap: '1rem',
-                        marginBottom: '1.2rem'
-                      }}
-                    >
+                <div className="admin-modal-overlay">
+                  <div className="admin-modal-content" role="dialog" aria-modal="true" aria-label="Editar datos administrativos">
+                    <div className="admin-modal-head">
                       <div>
-                        <h2 style={{ margin: 0 }}>✏️ Editar datos administrativos</h2>
-                        <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
-                          {localSeleccionado.nombre}
-                        </p>
+                        <h2>Editar datos administrativos</h2>
+                        <p>{localSeleccionado.nombre}</p>
                       </div>
 
                       <button
                         type="button"
                         onClick={cancelarEdicionLocal}
                         disabled={procesandoId === `editar-local-${localEditando}`}
-                        style={{
-                          border: 'none',
-                          backgroundColor: '#f1f3f5',
-                          borderRadius: '50%',
-                          width: '36px',
-                          height: '36px',
-                          fontSize: '1.1rem',
-                          cursor: 'pointer'
-                        }}
+                        className="admin-icon-btn"
+                        aria-label="Cerrar"
                       >
-                        ✕
+                        <Icon name="x" size={18} />
                       </button>
                     </div>
 
-                    <form
-                      onSubmit={guardarCambiosLocal}
-                      style={{
-                        display: 'grid',
-                        gap: '1rem'
-                      }}
-                    >
-                      <label>
-                        <strong>Nombre del local</strong>
+                    <form onSubmit={guardarCambiosLocal} className="admin-form">
+                      <label className="admin-field">
+                        <span>Nombre del local</span>
                         <input
                           name="nombre"
                           value={formLocal.nombre}
                           onChange={handleFormLocalChange}
                           disabled={procesandoId === `editar-local-${localEditando}`}
                           required
-                          style={{
-                            width: '100%',
-                            padding: '0.7rem',
-                            marginTop: '0.35rem',
-                            boxSizing: 'border-box',
-                            border: '1px solid #ced4da',
-                            borderRadius: '6px'
-                          }}
+                          className="admin-input"
                         />
                       </label>
 
-                      <label>
-                        <strong>Dirección</strong>
+                      <label className="admin-field">
+                        <span>Dirección</span>
                         <input
                           name="direccion"
                           value={formLocal.direccion}
                           onChange={handleFormLocalChange}
                           disabled={procesandoId === `editar-local-${localEditando}`}
                           required
-                          style={{
-                            width: '100%',
-                            padding: '0.7rem',
-                            marginTop: '0.35rem',
-                            boxSizing: 'border-box',
-                            border: '1px solid #ced4da',
-                            borderRadius: '6px'
-                          }}
+                          className="admin-input"
                         />
                       </label>
 
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                          gap: '0.8rem'
-                        }}
-                      >
-                        <label>
-                          <strong>Latitud</strong>
+                      <div className="admin-form-grid">
+                        <label className="admin-field">
+                          <span>Latitud</span>
                           <input
                             name="latitud"
                             type="number"
@@ -1320,19 +1169,12 @@ export const PanelAdministrador = () => {
                             onChange={handleFormLocalChange}
                             disabled={procesandoId === `editar-local-${localEditando}`}
                             required
-                            style={{
-                              width: '100%',
-                              padding: '0.7rem',
-                              marginTop: '0.35rem',
-                              boxSizing: 'border-box',
-                              border: '1px solid #ced4da',
-                              borderRadius: '6px'
-                            }}
+                            className="admin-input"
                           />
                         </label>
 
-                        <label>
-                          <strong>Longitud</strong>
+                        <label className="admin-field">
+                          <span>Longitud</span>
                           <input
                             name="longitud"
                             type="number"
@@ -1341,82 +1183,44 @@ export const PanelAdministrador = () => {
                             onChange={handleFormLocalChange}
                             disabled={procesandoId === `editar-local-${localEditando}`}
                             required
-                            style={{
-                              width: '100%',
-                              padding: '0.7rem',
-                              marginTop: '0.35rem',
-                              boxSizing: 'border-box',
-                              border: '1px solid #ced4da',
-                              borderRadius: '6px'
-                            }}
+                            className="admin-input"
                           />
                         </label>
                       </div>
 
-                      <div
-                        style={{
-                          padding: '0.8rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '6px',
-                          border: '1px solid #dee2e6'
-                        }}
-                      >
-                        <p style={{ margin: 0 }}>
-                          <strong>Usuario asociado:</strong>{' '}
+                      <div className="admin-info-item">
+                        <span>Usuario asociado</span>
+                        <div>
                           {localSeleccionado.usuario_admin ||
                             `ID ${localSeleccionado.IDusuario}`}
-                        </p>
-
-                        <p style={{ margin: '0.4rem 0 0' }}>
-                          <strong>Email:</strong>{' '}
-                          {localSeleccionado.email_admin || 'No informado'}
-                        </p>
+                        </div>
+                        <span style={{ marginTop: '8px' }}>Email</span>
+                        <div>{localSeleccionado.email_admin || 'No informado'}</div>
                       </div>
 
-                      <p
-                        style={{
-                          margin: 0,
-                          color: '#1864ab',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        Solo podés modificar el nombre, la dirección y la ubicación
-                        del local. El teléfono, las imágenes, el costo de envío y el
-                        tiempo de preparación se gestionan desde el perfil del local.
+                      <p className="admin-inline-note admin-inline-note--info">
+                        <Icon name="info" size={16} />
+                        <span>
+                          Solo podés modificar el nombre, la dirección y la ubicación
+                          del local. El teléfono, las imágenes, el costo de envío y el
+                          tiempo de preparación se gestionan desde el perfil del local.
+                        </span>
                       </p>
 
-                      <p
-                        style={{
-                          margin: 0,
-                          color: '#1864ab',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        📍 Por ahora podés modificar las coordenadas manualmente. En el
-                        futuro se seleccionarán colocando un pin en el mapa.
+                      <p className="admin-inline-note admin-inline-note--info">
+                        <Icon name="pin" size={16} />
+                        <span>
+                          Por ahora podés modificar las coordenadas manualmente. En el
+                          futuro se seleccionarán colocando un pin en el mapa.
+                        </span>
                       </p>
 
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '0.8rem',
-                          marginTop: '0.5rem'
-                        }}
-                      >
+                      <div className="admin-modal-foot">
                         <button
                           type="button"
                           onClick={cancelarEdicionLocal}
                           disabled={procesandoId === `editar-local-${localEditando}`}
-                          style={{
-                            flex: 1,
-                            padding: '0.8rem',
-                            border: 'none',
-                            borderRadius: '7px',
-                            backgroundColor: '#6c757d',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                          }}
+                          className="admin-btn admin-btn--outline admin-btn--grow"
                         >
                           Cancelar
                         </button>
@@ -1424,26 +1228,13 @@ export const PanelAdministrador = () => {
                         <button
                           type="submit"
                           disabled={procesandoId === `editar-local-${localEditando}`}
-                          style={{
-                            flex: 1,
-                            padding: '0.8rem',
-                            border: 'none',
-                            borderRadius: '7px',
-                            backgroundColor:
-                              procesandoId === `editar-local-${localEditando}`
-                                ? '#868e96'
-                                : '#2b8a3e',
-                            color: '#fff',
-                            cursor:
-                              procesandoId === `editar-local-${localEditando}`
-                                ? 'not-allowed'
-                                : 'pointer',
-                            fontWeight: 'bold'
-                          }}
+                          className="admin-btn admin-btn--primary admin-btn--grow"
                         >
-                          {procesandoId === `editar-local-${localEditando}`
-                            ? '⏳ Guardando...'
-                            : '💾 Guardar cambios'}
+                          {procesandoId === `editar-local-${localEditando}` ? (
+                            <><Spinner /> Guardando...</>
+                          ) : (
+                            <><Icon name="save" /> Guardar cambios</>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -1452,45 +1243,12 @@ export const PanelAdministrador = () => {
               )}
 
               {localHorariosAbiertos !== null && localSeleccionado && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem',
-                    zIndex: 2000
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '100%',
-                      maxWidth: '650px',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justify: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '1.2rem'
-                      }}
-                    >
+                <div className="admin-modal-overlay">
+                  <div className="admin-modal-content" role="dialog" aria-modal="true" aria-label="Horarios de atención">
+                    <div className="admin-modal-head">
                       <div>
-                        <h2 style={{ margin: 0 }}>📅 Horarios de atención</h2>
-                        <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
-                          {localSeleccionado.nombre}
-                        </p>
+                        <h2>Horarios de atención</h2>
+                        <p>{localSeleccionado.nombre}</p>
                       </div>
 
                       <button
@@ -1501,62 +1259,28 @@ export const PanelAdministrador = () => {
                           setErrorHorarios('');
                         }}
                         disabled={loadingHorarios}
-                        style={{
-                          border: 'none',
-                          backgroundColor: '#f1f3f5',
-                          borderRadius: '50%',
-                          width: '36px',
-                          height: '36px',
-                          fontSize: '1.1rem',
-                          cursor: loadingHorarios ? 'not-allowed' : 'pointer'
-                        }}
+                        className="admin-icon-btn"
+                        aria-label="Cerrar"
                       >
-                        ✕
+                        <Icon name="x" size={18} />
                       </button>
                     </div>
 
                     {loadingHorarios ? (
-                      <div
-                        style={{
-                          padding: '2rem',
-                          textAlign: 'center',
-                          color: '#7048e8',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        ⏳ Cargando horarios...
+                      <div className="admin-state" role="status" style={{ border: 'none' }}>
+                        <Spinner />
+                        Cargando horarios...
                       </div>
                     ) : errorHorarios ? (
-                      <div
-                        style={{
-                          padding: '1rem',
-                          backgroundColor: '#fff5f5',
-                          color: '#c92a2a',
-                          border: '1px solid #ffc9c9',
-                          borderRadius: '8px'
-                        }}
-                      >
+                      <div className="admin-inline-note admin-inline-note--error" role="alert">
                         {errorHorarios}
                       </div>
                     ) : horariosConsultados.length === 0 ? (
-                      <div
-                        style={{
-                          padding: '1rem',
-                          backgroundColor: '#f8f9fa',
-                          borderRadius: '8px',
-                          color: '#666'
-                        }}
-                      >
+                      <div className="admin-inline-note">
                         Este local todavía no tiene horarios configurados.
                       </div>
                     ) : (
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.6rem'
-                        }}
-                      >
+                      <div className="admin-day-list">
                         {DIAS_SEMANA.map((dia, diaIndex) => {
                           const horariosDelDia = horariosConsultados.filter(
                             (horario) =>
@@ -1564,36 +1288,21 @@ export const PanelAdministrador = () => {
                           );
 
                           return (
-                            <div
-                              key={dia}
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: '1rem',
-                                padding: '0.8rem',
-                                backgroundColor: '#f8f7ff',
-                                border: '1px solid #e5dbff',
-                                borderRadius: '7px'
-                              }}
-                            >
+                            <div key={dia} className="admin-day-row">
                               <strong>{dia}</strong>
 
                               {horariosDelDia.length === 0 ? (
-                                <span style={{ color: '#e03131' }}>
+                                <span className="admin-text-error" style={{ fontWeight: 600 }}>
                                   Cerrado
                                 </span>
                               ) : (
-                                <div style={{ textAlign: 'right' }}>
+                                <div className="admin-day-row__times">
                                   {horariosDelDia.map((horario) => (
                                     <div key={horario.id || `${diaIndex}-${horario.hora_apertura}`}>
                                       <span
-                                        style={{
-                                          color: Number(horario.es_activo) === 1
-                                            ? '#2b8a3e'
-                                            : '#d9480f',
-                                          fontWeight: 'bold'
-                                        }}
+                                        className={`admin-day-row__time ${
+                                          Number(horario.es_activo) === 1 ? '' : 'admin-day-row__time--off'
+                                        }`}
                                       >
                                         {String(horario.hora_apertura).slice(0, 5)}
                                         {' - '}
@@ -1601,12 +1310,7 @@ export const PanelAdministrador = () => {
                                       </span>
 
                                       {Number(horario.es_activo) !== 1 && (
-                                        <small
-                                          style={{
-                                            display: 'block',
-                                            color: '#d9480f'
-                                          }}
-                                        >
+                                        <small className="admin-day-row__note">
                                           Horario inactivo
                                         </small>
                                       )}
@@ -1620,28 +1324,20 @@ export const PanelAdministrador = () => {
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLocalHorariosAbiertos(null);
-                        setHorariosConsultados([]);
-                        setErrorHorarios('');
-                      }}
-                      disabled={loadingHorarios}
-                      style={{
-                        width: '100%',
-                        marginTop: '1.2rem',
-                        padding: '0.8rem',
-                        border: 'none',
-                        borderRadius: '7px',
-                        backgroundColor: '#6c757d',
-                        color: '#fff',
-                        cursor: loadingHorarios ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Cerrar
-                    </button>
+                    <div className="admin-modal-foot">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalHorariosAbiertos(null);
+                          setHorariosConsultados([]);
+                          setErrorHorarios('');
+                        }}
+                        disabled={loadingHorarios}
+                        className="admin-btn admin-btn--outline admin-btn--block"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1650,26 +1346,30 @@ export const PanelAdministrador = () => {
 
           {seccion === 'repartidores' && (
             <section>
-              <h2>🚴 Gestión de repartidores</h2>
+              <h2 className="admin-section-title">
+                <span className="admin-section-title__icon"><Icon name="bike" size={20} /></span>
+                Gestión de repartidores
+              </h2>
 
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #ffe066', borderRadius: '10px', backgroundColor: '#fff9db' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <div className="admin-panel">
+                <div className="admin-panel__head">
                   <div>
-                    <h3 style={{ margin: 0, color: '#795000' }}>📄 Solicitudes de vehículos pendientes</h3>
-                    <p style={{ margin: '0.35rem 0 0', color: '#856404' }}>
+                    <h3 className="admin-panel__title">
+                      <Icon name="file" size={18} />
+                      Solicitudes de vehículos pendientes
+                    </h3>
+                    <p className="admin-panel__desc">
                       Revisá la documentación antes de aprobar un vehículo.
                     </p>
                   </div>
-                  <strong style={{ color: '#795000' }}>{solicitudesVehiculos.length} pendiente(s)</strong>
+                  <Badge tone="warning">{solicitudesVehiculos.length} pendiente(s)</Badge>
                 </div>
 
                 {solicitudesVehiculos.length > 0 && (
-                  <div style={{ display: 'grid', gap: '0.7rem', marginTop: '1rem' }}>
+                  <div className="admin-request-list">
                     {solicitudesVehiculos.map((solicitud) => {
                       const vehiculoObjeto = solicitud.vehiculo || solicitud.documentacion_nueva || solicitud;
-
-                      // 1. Extraemos la bandera 'esBici' directamente de obtenerInfoVehiculo
-                      const { esBici, tieneDocumentacion } = obtenerInfoVehiculo(vehiculoObjeto);
+                      const { esBici } = obtenerInfoVehiculo(vehiculoObjeto);
 
                       const tipoVehiculo =
                         solicitud.vehiculo?.tipo_vehiculo ||
@@ -1695,14 +1395,12 @@ export const PanelAdministrador = () => {
                         solicitud.documentacion_nueva?.patente ||
                         '';
 
-                      // 2. Extracción segura del nombre del repartidor
                       const nombreRepartidor =
                         solicitud.repartidor?.nombre_completo ||
                         [solicitud.nombre, solicitud.apellido].filter(Boolean).join(' ') ||
                         solicitud.username ||
                         'Repartidor';
 
-                      // 3. Formateo dinámico: Si esBici es true, no se concatena la patente
                       const infoVehiculo =
                         [
                           tipoVehiculo,
@@ -1713,142 +1411,71 @@ export const PanelAdministrador = () => {
                           .join(' · ') || 'Sin datos de vehículo';
 
                       return (
-                        <div
-                          key={solicitud.id}
-                          style={{
-                            display: 'flex',
-                            justify: 'space-between',
-                            alignItems: 'center',
-                            gap: '1rem',
-                            flexWrap: 'wrap',
-                            padding: '0.8rem',
-                            backgroundColor: '#fff',
-                            border: '1px solid #ffe066',
-                            borderRadius: '8px'
-                          }}
-                        >
+                        <div key={solicitud.id} className="admin-request">
                           <div>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                marginBottom: '0.2rem'
-                              }}
-                            >
+                            <div className="admin-request__title">
                               <strong>{nombreRepartidor}</strong>
 
-                              {/* 🏷️ Badge distintivo según el estado o tipo de solicitud */}
                               {solicitud.estado === 'PENDIENTE_BAJA' ? (
-                                <span
-                                  style={{
-                                    backgroundColor: '#ffe3e3',
-                                    color: '#e03131',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  ❌ Solicitud de Baja
-                                </span>
+                                <Badge tone="error" icon="xCircle">Solicitud de baja</Badge>
                               ) : solicitud.estado === 'PENDIENTE_DOCUMENTACION' ||
                                 Number(solicitud.es_nuevo_vehiculo) === 0 ? (
-                                <span
-                                  style={{
-                                    backgroundColor: '#fff9db',
-                                    color: '#f59f00',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  📄 Solicitud de Nueva Documentación
-                                </span>
+                                <Badge tone="warning" icon="file">Nueva documentación</Badge>
                               ) : (
-                                <span
-                                  style={{
-                                    backgroundColor: '#e7f5ff',
-                                    color: '#1c7ed6',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  🆕 Solicitud de Nuevo Vehículo
-                                </span>
+                                <Badge tone="info" icon="plus">Nuevo vehículo</Badge>
                               )}
                             </div>
 
-                            <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                            <div className="admin-muted" style={{ fontSize: '0.875rem' }}>
                               {infoVehiculo}
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <div className="admin-request__actions">
                             <button
                               type="button"
+                              className="admin-btn admin-btn--sm admin-btn--outline"
                               onClick={() => setDocumentacionVehiculo(solicitud)}
                             >
-                              👁️ Ver detalle
+                              <Icon name="eye" size={14} />
+                              Ver detalle
                             </button>
 
                             <button
                               type="button"
                               onClick={() => evaluarSolicitudVehiculo(solicitud, 'APROBADO')}
                               disabled={procesandoId === `vehiculo-${solicitud.id}`}
-                              style={{
-                                backgroundColor:
-                                  procesandoId === `vehiculo-${solicitud.id}`
-                                    ? '#868e96'
-                                    : solicitud.estado === 'PENDIENTE_BAJA'
-                                      ? '#e03131'
-                                      : '#2b8a3e',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '5px',
-                                padding: '0.5rem 0.7rem',
-                                fontWeight: 'bold',
-                                cursor:
-                                  procesandoId === `vehiculo-${solicitud.id}` ? 'not-allowed' : 'pointer'
-                              }}
+                              className={`admin-btn admin-btn--sm ${
+                                solicitud.estado === 'PENDIENTE_BAJA' ? 'admin-btn--danger' : 'admin-btn--success'
+                              }`}
                             >
-                              {procesandoId === `vehiculo-${solicitud.id}`
-                                ? '⏳ Cargando...'
-                                : solicitud.estado === 'PENDIENTE_BAJA'
-                                  ? '✅ Confirmar Baja'
-                                  : '✅ Aprobar'}
+                              {procesandoId === `vehiculo-${solicitud.id}` ? (
+                                <><Spinner /> Cargando...</>
+                              ) : solicitud.estado === 'PENDIENTE_BAJA' ? (
+                                <><Icon name="check" size={14} /> Confirmar baja</>
+                              ) : (
+                                <><Icon name="check" size={14} /> Aprobar</>
+                              )}
                             </button>
 
                             <button
                               type="button"
                               onClick={() => evaluarSolicitudVehiculo(solicitud, 'RECHAZADO')}
                               disabled={procesandoId === `vehiculo-${solicitud.id}`}
-                              style={{
-                                backgroundColor:
-                                  procesandoId === `vehiculo-${solicitud.id}`
-                                    ? '#868e96'
-                                    : solicitud.estado === 'PENDIENTE_BAJA'
-                                      ? '#d9480f'
-                                      : '#e03131',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '5px',
-                                padding: '0.5rem 0.7rem',
-                                fontWeight: 'bold',
-                                cursor:
-                                  procesandoId === `vehiculo-${solicitud.id}` ? 'not-allowed' : 'pointer'
-                              }}
+                              className="admin-btn admin-btn--sm admin-btn--danger-soft"
                             >
-                              {procesandoId === `vehiculo-${solicitud.id}`
-                                ? '⏳ Cargando...'
-                                : solicitud.estado === 'PENDIENTE_BAJA'
-                                  ? '❌ Rechazar Baja'
-                                  : Number(solicitud.es_nuevo_vehiculo) === 1
-                                    ? '❌ Rechazar Vehículo Nuevo'
-                                    : '❌ Rechazar Solicitud'}
+                              {procesandoId === `vehiculo-${solicitud.id}` ? (
+                                <><Spinner /> Cargando...</>
+                              ) : (
+                                <>
+                                  <Icon name="x" size={14} />
+                                  {solicitud.estado === 'PENDIENTE_BAJA'
+                                    ? 'Rechazar baja'
+                                    : Number(solicitud.es_nuevo_vehiculo) === 1
+                                      ? 'Rechazar vehículo nuevo'
+                                      : 'Rechazar solicitud'}
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1858,37 +1485,36 @@ export const PanelAdministrador = () => {
                 )}
               </div>
 
-              {/* ❌ SECCIÓN DE SOLICITUDES DE BAJA DE VEHÍCULOS */}
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #ffc9c9', borderRadius: '10px', backgroundColor: '#fff5f5' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              {/* SECCIÓN DE SOLICITUDES DE BAJA DE VEHÍCULOS */}
+              <div className="admin-panel admin-panel--danger">
+                <div className="admin-panel__head">
                   <div>
-                    <h3 style={{ margin: 0, color: '#c92a2a' }}>❌ Solicitudes de Baja de Vehículos</h3>
-                    <p style={{ margin: '0.35rem 0 0', color: '#666' }}>
+                    <h3 className="admin-panel__title">
+                      <Icon name="xCircle" size={18} />
+                      Solicitudes de baja de vehículos
+                    </h3>
+                    <p className="admin-panel__desc">
                       Vehículos que los repartidores solicitaron dar de baja.
                     </p>
                   </div>
-                  <strong style={{ color: '#c92a2a' }}>{vehiculosBaja.length} pendiente(s)</strong>
+                  <Badge tone="error">{vehiculosBaja.length} pendiente(s)</Badge>
                 </div>
 
                 {vehiculosBaja.length > 0 && (
-                  <div style={{ display: 'grid', gap: '0.7rem', marginTop: '1rem' }}>
+                  <div className="admin-request-list">
                     {vehiculosBaja.map((baja) => {
                       const idVehiculoBaja = baja.id || baja.IDvehiculo;
 
                       return (
-                        <div
-                          key={idVehiculoBaja}
-                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.8rem', backgroundColor: '#fff', border: '1px solid #ffc9c9', borderRadius: '8px' }}
-                        >
+                        <div key={idVehiculoBaja} className="admin-request">
                           <div>
                             <strong>{[baja.nombre, baja.apellido].filter(Boolean).join(' ') || baja.username}</strong>
-                            <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                            <div className="admin-muted" style={{ fontSize: '0.875rem' }}>
                               {baja.tipo_vehiculo} · {baja.marca || ''} {baja.modelo || ''} {baja.patente ? `(${baja.patente})` : ''} · Email: {baja.email}
                             </div>
                           </div>
 
-                          {/* Contenedor de Botones de Acción */}
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <div className="admin-request__actions">
                             <button
                               type="button"
                               onClick={() => handleAprobarBaja(idVehiculoBaja)}
@@ -1896,21 +1522,13 @@ export const PanelAdministrador = () => {
                                 procesandoId === `baja-${idVehiculoBaja}` ||
                                 procesandoId === `baja-rechazar-${idVehiculoBaja}`
                               }
-                              style={{
-                                backgroundColor:
-                                  procesandoId === `baja-${idVehiculoBaja}` ? '#868e96' : '#2b8a3e',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '5px',
-                                padding: '0.5rem 0.9rem',
-                                fontWeight: 'bold',
-                                cursor:
-                                  procesandoId === `baja-${idVehiculoBaja}` ? 'not-allowed' : 'pointer'
-                              }}
+                              className="admin-btn admin-btn--sm admin-btn--success"
                             >
-                              {procesandoId === `baja-${idVehiculoBaja}`
-                                ? '⏳ Cargando...'
-                                : '✅ Aprobar Baja'}
+                              {procesandoId === `baja-${idVehiculoBaja}` ? (
+                                <><Spinner /> Cargando...</>
+                              ) : (
+                                <><Icon name="check" size={14} /> Aprobar baja</>
+                              )}
                             </button>
 
                             <button
@@ -1920,21 +1538,13 @@ export const PanelAdministrador = () => {
                                 procesandoId === `baja-${idVehiculoBaja}` ||
                                 procesandoId === `baja-rechazar-${idVehiculoBaja}`
                               }
-                              style={{
-                                backgroundColor:
-                                  procesandoId === `baja-rechazar-${idVehiculoBaja}` ? '#868e96' : '#e03131',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '5px',
-                                padding: '0.5rem 0.9rem',
-                                fontWeight: 'bold',
-                                cursor:
-                                  procesandoId === `baja-rechazar-${idVehiculoBaja}` ? 'not-allowed' : 'pointer'
-                              }}
+                              className="admin-btn admin-btn--sm admin-btn--danger-soft"
                             >
-                              {procesandoId === `baja-rechazar-${idVehiculoBaja}`
-                                ? '⏳ Cargando...'
-                                : '❌ Rechazar Baja'}
+                              {procesandoId === `baja-rechazar-${idVehiculoBaja}` ? (
+                                <><Spinner /> Cargando...</>
+                              ) : (
+                                <><Icon name="x" size={14} /> Rechazar baja</>
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1943,90 +1553,45 @@ export const PanelAdministrador = () => {
                   </div>
                 )}
               </div>
+
               {vehiculoARechazarBaja !== null && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem',
-                    zIndex: 3500
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '100%',
-                      maxWidth: '500px',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ margin: 0, color: '#c92a2a' }}>
+                <div className="admin-modal-overlay" style={{ zIndex: 3500 }}>
+                  <div className="admin-modal-content" role="dialog" aria-modal="true" style={{ maxWidth: '500px' }}>
+                    <div className="admin-modal-head">
+                      <h3 className="admin-text-error">
                         {solicitudARechazar?.es_nuevo_vehiculo
-                          ? '❌ Rechazar Alta de Vehículo Nuevo'
-                          : '❌ Motivo del rechazo de la solicitud'}
+                          ? 'Rechazar alta de vehículo nuevo'
+                          : 'Motivo del rechazo de la solicitud'}
                       </h3>
 
                       <button
                         type="button"
-                        onClick={() => setSolicitudARechazar(null)}
-                        style={{
-                          border: 'none',
-                          backgroundColor: '#f1f3f5',
-                          borderRadius: '50%',
-                          width: '32px',
-                          height: '32px',
-                          cursor: 'pointer'
-                        }}
+                        onClick={() => setVehiculoARechazarBaja(null)}
+                        className="admin-icon-btn"
+                        aria-label="Cerrar"
                       >
-                        ✕
+                        <Icon name="x" size={18} />
                       </button>
                     </div>
 
                     <form onSubmit={confirmarRechazoBaja}>
-                      <label style={{ display: 'block', marginBottom: '1rem' }}>
-                        <span style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                          Ingresá el motivo por el cual se rechaza la baja del vehículo:
-                        </span>
+                      <label className="admin-field">
+                        <span>Ingresá el motivo por el cual se rechaza la baja del vehículo:</span>
                         <textarea
                           value={motivoRechazoBaja}
                           onChange={(e) => setMotivoRechazoBaja(e.target.value)}
                           rows={4}
                           required
                           placeholder="Ej: La documentación presentada sigue vigente..."
-                          style={{
-                            width: '100%',
-                            padding: '0.7rem',
-                            boxSizing: 'border-box',
-                            border: '1px solid #ced4da',
-                            borderRadius: '6px',
-                            fontFamily: 'inherit'
-                          }}
+                          className="admin-textarea"
                         />
                       </label>
 
-                      <div style={{ display: 'flex', gap: '0.8rem' }}>
+                      <div className="admin-modal-foot">
                         <button
                           type="button"
                           onClick={() => setVehiculoARechazarBaja(null)}
-                          style={{
-                            flex: 1,
-                            padding: '0.7rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#6c757d',
-                            color: '#fff',
-                            fontWeight: 'bold',
-                            cursor: 'pointer'
-                          }}
+                          className="admin-btn admin-btn--outline admin-btn--grow"
                         >
                           Cancelar
                         </button>
@@ -2034,18 +1599,13 @@ export const PanelAdministrador = () => {
                         <button
                           type="submit"
                           disabled={procesandoId === `baja-rechazar-${vehiculoARechazarBaja}`}
-                          style={{
-                            flex: 1,
-                            padding: '0.7rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#e03131',
-                            color: '#fff',
-                            fontWeight: 'bold',
-                            cursor: 'pointer'
-                          }}
+                          className="admin-btn admin-btn--danger admin-btn--grow"
                         >
-                          {procesandoId === `baja-rechazar-${vehiculoARechazarBaja}` ? '⏳ Procesando...' : 'Confirmar Rechazo'}
+                          {procesandoId === `baja-rechazar-${vehiculoARechazarBaja}` ? (
+                            <><Spinner /> Procesando...</>
+                          ) : (
+                            'Confirmar rechazo'
+                          )}
                         </button>
                       </div>
                     </form>
@@ -2054,77 +1614,38 @@ export const PanelAdministrador = () => {
               )}
 
               {solicitudARechazar !== null && (
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem',
-                    zIndex: 3500
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '100%',
-                      maxWidth: '500px',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ margin: 0, color: '#c92a2a' }}>❌ Motivo del rechazo de la solicitud</h3>
+                <div className="admin-modal-overlay" style={{ zIndex: 3500 }}>
+                  <div className="admin-modal-content" role="dialog" aria-modal="true" style={{ maxWidth: '500px' }}>
+                    <div className="admin-modal-head">
+                      <h3 className="admin-text-error">Motivo del rechazo de la solicitud</h3>
                       <button
                         type="button"
                         onClick={() => setSolicitudARechazar(null)}
-                        style={{ border: 'none', backgroundColor: '#f1f3f5', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}
+                        className="admin-icon-btn"
+                        aria-label="Cerrar"
                       >
-                        ✕
+                        <Icon name="x" size={18} />
                       </button>
                     </div>
 
                     <form onSubmit={confirmarRechazoSolicitud}>
-                      <label style={{ display: 'block', marginBottom: '1rem' }}>
-                        <span style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                          Ingresá el motivo por el cual se rechaza esta solicitud:
-                        </span>
+                      <label className="admin-field">
+                        <span>Ingresá el motivo por el cual se rechaza esta solicitud:</span>
                         <textarea
                           value={motivoRechazoSolicitud}
                           onChange={(e) => setMotivoRechazoSolicitud(e.target.value)}
                           rows={4}
                           required
                           placeholder="Ej: La documentación adjunta no es legible..."
-                          style={{
-                            width: '100%',
-                            padding: '0.7rem',
-                            boxSizing: 'border-box',
-                            border: '1px solid #ced4da',
-                            borderRadius: '6px',
-                            fontFamily: 'inherit'
-                          }}
+                          className="admin-textarea"
                         />
                       </label>
 
-                      <div style={{ display: 'flex', gap: '0.8rem' }}>
+                      <div className="admin-modal-foot">
                         <button
                           type="button"
                           onClick={() => setSolicitudARechazar(null)}
-                          style={{
-                            flex: 1,
-                            padding: '0.7rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#6c757d',
-                            color: '#fff',
-                            fontWeight: 'bold',
-                            cursor: 'pointer'
-                          }}
+                          className="admin-btn admin-btn--outline admin-btn--grow"
                         >
                           Cancelar
                         </button>
@@ -2132,18 +1653,13 @@ export const PanelAdministrador = () => {
                         <button
                           type="submit"
                           disabled={procesandoId === `vehiculo-${solicitudARechazar.id}`}
-                          style={{
-                            flex: 1,
-                            padding: '0.7rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#e03131',
-                            color: '#fff',
-                            fontWeight: 'bold',
-                            cursor: 'pointer'
-                          }}
+                          className="admin-btn admin-btn--danger admin-btn--grow"
                         >
-                          {procesandoId === `vehiculo-${solicitudARechazar.id}` ? '⏳ Procesando...' : 'Confirmar Rechazo'}
+                          {procesandoId === `vehiculo-${solicitudARechazar.id}` ? (
+                            <><Spinner /> Procesando...</>
+                          ) : (
+                            'Confirmar rechazo'
+                          )}
                         </button>
                       </div>
                     </form>
@@ -2152,200 +1668,145 @@ export const PanelAdministrador = () => {
               )}
 
               {repartidores.length === 0 ? (
-                <p>No hay repartidores registrados.</p>
+                <div className="admin-state">
+                  <Icon name="inbox" size={28} />
+                  No hay repartidores registrados.
+                </div>
               ) : (
                 <>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justify: 'space-between',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      flexWrap: 'wrap',
-                      margin: '1rem 0 0.5rem'
-                    }}
-                  >
-                    <small style={{ color: '#666' }}>
+                  <div className="admin-table-meta">
+                    <span>
                       Mostrando {(paginaRepartidores - 1) * registrosPorPagina + 1} - {Math.min(paginaRepartidores * registrosPorPagina, repartidores.length)} de {repartidores.length}
-                    </small>
-                    <label style={{ fontSize: '0.9rem' }}>
-                      Ver{' '}
-                      <select value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
+                    </span>
+                    <label>
+                      Ver
+                      <select className="admin-select" value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
                         <option value={5}>5</option>
                         <option value={10}>10</option>
                         <option value={20}>20</option>
-                      </select>{' '}
+                      </select>
                       registros
                     </label>
                   </div>
 
                   <TablaConScrollSuperior minWidth="1150px">
-                    <table
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        marginTop: '1rem'
-                      }}
-                    >
-                      <thead>
-                        <tr style={{ backgroundColor: '#e9ecef' }}>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            ID
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Usuario
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Email
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            DNI
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Vehículo
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Disponibilidad
-                          </th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>
-                            Validación
-                          </th>
-                          <th style={{ padding: '0.8rem' }}>
-                            Acciones
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {repartidoresVisibles.map((rep) => (
-                          <tr
-                            key={rep.id}
-                            style={{ borderBottom: '1px solid #dee2e6' }}
-                          >
-                            <td style={{ padding: '0.8rem' }}>{rep.id}</td>
-                            <td style={{ padding: '0.8rem' }}>{rep.username}</td>
-                            <td style={{ padding: '0.8rem' }}>{rep.email}</td>
-                            <td style={{ padding: '0.8rem' }}>{rep.dni}</td>
-
-                            {/* Visualización ajustada en tabla principal */}
-                            <td style={{ padding: '0.8rem' }}>
-                              {rep.tipo_vehiculo ? (
-                                <div>
-                                  <strong>{rep.tipo_vehiculo}</strong>
-                                  {(() => {
-                                    const esBici = rep.tipo_vehiculo.toLowerCase().includes('bici');
-                                    const detalles = [rep.marca, rep.modelo].filter(Boolean).join(' ');
-
-                                    if (esBici) {
-                                      return detalles ? (
-                                        <small style={{ display: 'block', color: '#666' }}>
-                                          {detalles}
-                                        </small>
-                                      ) : null;
-                                    }
-
-                                    return (
-                                      <small style={{ display: 'block', color: '#666' }}>
-                                        {detalles} {rep.patente ? `(${rep.patente})` : ''}
-                                      </small>
-                                    );
-                                  })()}
-                                </div>
-                              ) : (
-                                <span style={{ color: '#868e96' }}>Sin vehículo</span>
-                              )}
-                            </td>
-
-                            <td style={{ padding: '0.8rem' }}>
-                              <span
-                                style={{
-                                  color:
-                                    Number(rep.disponible) === 1
-                                      ? '#2b8a3e'
-                                      : '#6c757d',
-                                  fontWeight: 'bold'
-                                }}
-                              >
-                                {Number(rep.disponible) === 1
-                                  ? '🟢 Disponible'
-                                  : '⚪ No disponible'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.8rem' }}>
-                              <span
-                                style={{
-                                  color: Number(rep.validado) === 1 ? '#2b8a3e' : '#d9480f',
-                                  fontWeight: 'bold'
-                                }}
-                              >
-                                {Number(rep.validado) === 1 ? 'Sí' : 'No'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '0.8rem' }}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  gap: '0.5rem',
-                                  flexWrap: 'wrap'
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => abrirDetalleRepartidor(rep)}
-                                  style={{
-                                    padding: '0.45rem 0.7rem',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    backgroundColor: '#1c7ed6',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  👁️ Ver detalle
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleValidarRepartidor(rep)}
-                                  disabled={procesandoId === `repartidor-${rep.id}`}
-                                  style={{
-                                    padding: '0.45rem 0.7rem',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    backgroundColor:
-                                      Number(rep.validado) === 1
-                                        ? '#e03131'
-                                        : '#2b8a3e',
-                                    color: '#fff',
-                                    cursor:
-                                      procesandoId === `repartidor-${rep.id}`
-                                        ? 'not-allowed'
-                                        : 'pointer',
-                                    fontWeight: 'bold'
-                                  }}
-                                >
-                                  {procesandoId === `repartidor-${rep.id}`
-                                    ? '⏳ Procesando...'
-                                    : Number(rep.validado) === 1
-                                      ? '❌ Invalidar'
-                                      : '✅ Validar'}
-                                </button>
-                              </div>
-                            </td>
+                    <div className="admin-table-container">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Email</th>
+                            <th>DNI</th>
+                            <th>Vehículo</th>
+                            <th>Disponibilidad</th>
+                            <th>Validación</th>
+                            <th style={{ textAlign: 'right' }}>Acciones</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+
+                        <tbody>
+                          {repartidoresVisibles.length === 0 && (
+                            <tr>
+                              <td colSpan={8} className="admin-table__empty">No hay resultados para tu búsqueda.</td>
+                            </tr>
+                          )}
+
+                          {repartidoresVisibles.map((rep) => (
+                            <tr key={rep.id}>
+                              <td className="admin-cell-num">{rep.id}</td>
+                              <td>
+                                <div className="admin-user">
+                                  <span className="admin-avatar" aria-hidden="true">{inicialDe(rep.username)}</span>
+                                  {rep.username}
+                                </div>
+                              </td>
+                              <td>{rep.email}</td>
+                              <td>{rep.dni}</td>
+
+                              <td>
+                                {rep.tipo_vehiculo ? (
+                                  <div>
+                                    <strong>{rep.tipo_vehiculo}</strong>
+                                    {(() => {
+                                      const esBici = rep.tipo_vehiculo.toLowerCase().includes('bici');
+                                      const detalles = [rep.marca, rep.modelo].filter(Boolean).join(' ');
+
+                                      if (esBici) {
+                                        return detalles ? (
+                                          <small className="admin-cell-sub">{detalles}</small>
+                                        ) : null;
+                                      }
+
+                                      return (
+                                        <small className="admin-cell-sub">
+                                          {detalles} {rep.patente ? `(${rep.patente})` : ''}
+                                        </small>
+                                      );
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <span className="admin-muted">Sin vehículo</span>
+                                )}
+                              </td>
+
+                              <td>
+                                {Number(rep.disponible) === 1 ? (
+                                  <Badge tone="success" dot>Disponible</Badge>
+                                ) : (
+                                  <Badge tone="neutral" dot>No disponible</Badge>
+                                )}
+                              </td>
+                              <td>
+                                {Number(rep.validado) === 1 ? (
+                                  <Badge tone="success" icon="checkCircle">Validado</Badge>
+                                ) : (
+                                  <Badge tone="warning" icon="clock">Sin validar</Badge>
+                                )}
+                              </td>
+                              <td>
+                                <div className="admin-cell-actions-group">
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirDetalleRepartidor(rep)}
+                                    className="admin-btn admin-btn--sm admin-btn--info-soft"
+                                  >
+                                    <Icon name="eye" size={14} />
+                                    Ver detalle
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleValidarRepartidor(rep)}
+                                    disabled={procesandoId === `repartidor-${rep.id}`}
+                                    className={`admin-btn admin-btn--sm ${
+                                      Number(rep.validado) === 1 ? 'admin-btn--danger-soft' : 'admin-btn--success'
+                                    }`}
+                                  >
+                                    {procesandoId === `repartidor-${rep.id}` ? (
+                                      <><Spinner /> Procesando...</>
+                                    ) : Number(rep.validado) === 1 ? (
+                                      <><Icon name="x" size={14} /> Invalidar</>
+                                    ) : (
+                                      <><Icon name="check" size={14} /> Validar</>
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </TablaConScrollSuperior>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
-                    <button type="button" onClick={() => setPaginaRepartidores((pagina) => Math.max(1, pagina - 1))} disabled={paginaRepartidores === 1}>
-                      Anterior
+                  <div className="admin-pagination">
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaRepartidores((pagina) => Math.max(1, pagina - 1))} disabled={paginaRepartidores === 1}>
+                      <Icon name="chevronLeft" size={14} /> Anterior
                     </button>
-                    <span>Página {paginaRepartidores} de {totalPaginasRepartidores}</span>
-                    <button type="button" onClick={() => setPaginaRepartidores((pagina) => Math.min(totalPaginasRepartidores, pagina + 1))} disabled={paginaRepartidores === totalPaginasRepartidores}>
-                      Siguiente
+                    <span>Página <strong>{paginaRepartidores}</strong> de {totalPaginasRepartidores}</span>
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaRepartidores((pagina) => Math.min(totalPaginasRepartidores, pagina + 1))} disabled={paginaRepartidores === totalPaginasRepartidores}>
+                      Siguiente <Icon name="chevronRight" size={14} />
                     </button>
                   </div>
                 </>
@@ -2363,7 +1824,7 @@ export const PanelAdministrador = () => {
                 } = documentacionVehiculo;
 
                 const vehiculoObjeto = vehiculo || documentacion_nueva || documentacionVehiculo;
-                const { esBici, tieneDocumentacion, icono, etiqueta } = obtenerInfoVehiculo(vehiculoObjeto);
+                const { esBici, tieneDocumentacion, etiqueta } = obtenerInfoVehiculo(vehiculoObjeto);
 
                 const formatearFecha = (fecha) => {
                   if (!tieneDocumentacion || !fecha) return null;
@@ -2371,14 +1832,12 @@ export const PanelAdministrador = () => {
                   return isNaN(d.getTime()) ? null : d.toLocaleDateString('es-AR');
                 };
 
-                // Identificar si es una solicitud de actualización de documentación
                 const esActualizacionDoc = estado === 'PENDIENTE_DOCUMENTACION' || Number(es_nuevo_vehiculo) === 0;
 
-                // 1. Mapeo de campos incluyendo el motivo de rechazo de documentación
                 let camposDocumento = tieneDocumentacion ? [
                   {
                     clave: 'cedula',
-                    titulo: '📄 Cédula Verde / Azul',
+                    titulo: 'Cédula verde / azul',
                     actualUrl: documentacion_actual?.cedula_url,
                     actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_cedula),
                     nuevaUrl: documentacion_nueva?.cedula_url || vehiculo?.cedula_url || documentacionVehiculo.cedula_url,
@@ -2390,7 +1849,7 @@ export const PanelAdministrador = () => {
                   },
                   {
                     clave: 'seguro',
-                    titulo: '🛡️ Seguro Obligatorio',
+                    titulo: 'Seguro obligatorio',
                     actualUrl: documentacion_actual?.seguro_url,
                     actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_seguro),
                     nuevaUrl: documentacion_nueva?.seguro_url || vehiculo?.seguro_url || documentacionVehiculo.seguro_url,
@@ -2402,7 +1861,7 @@ export const PanelAdministrador = () => {
                   },
                   {
                     clave: 'licencia',
-                    titulo: '🪪 Licencia de Conducir',
+                    titulo: 'Licencia de conducir',
                     actualUrl: documentacion_actual?.licencia_url,
                     actualVenc: formatearFecha(documentacion_actual?.fecha_vencimiento_licencia),
                     nuevaUrl: documentacion_nueva?.licencia_url || vehiculo?.licencia_url || documentacionVehiculo.licencia_url,
@@ -2414,14 +1873,11 @@ export const PanelAdministrador = () => {
                   }
                 ] : [];
 
-                // 2. Si es estado PENDIENTE_DOCUMENTACION, se filtran solo los documentos actualizados
                 if (esActualizacionDoc && tieneDocumentacion) {
                   camposDocumento = camposDocumento.filter(doc => {
-                    // Comparación directa de fecha y URL entre la versión nueva y la anterior
                     const cambioVencimiento = Boolean(doc.rawNuevaVenc) && doc.rawNuevaVenc !== doc.rawActualVenc;
                     const cambioUrl = Boolean(doc.rawNuevaUrl) && doc.rawNuevaUrl !== doc.rawActualUrl;
 
-                    // Verificación directa en el objeto documentacion_nueva
                     const existeEnObjetoNuevo = Boolean(
                       documentacion_nueva && (
                         (doc.clave === 'cedula' && (documentacion_nueva.fecha_vencimiento_cedula || documentacion_nueva.cedula_url)) ||
@@ -2435,29 +1891,32 @@ export const PanelAdministrador = () => {
                 }
 
                 return (
-                  <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 4000, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
-                    <div style={{ width: '100%', maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem' }}>
+                  <div className="admin-modal-overlay" style={{ zIndex: 4000 }}>
+                    <div className="admin-modal-content" role="dialog" aria-modal="true" style={{ maxWidth: '850px' }}>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3 style={{ margin: 0 }}>
+                      <div className="admin-modal-head">
+                        <h3>
                           {esActualizacionDoc
-                            ? '📄 Evaluación de Actualización de Documentación'
-                            : '🆕 Evaluación de Alta de Vehículo Nuevo'}
+                            ? 'Evaluación de actualización de documentación'
+                            : 'Evaluación de alta de vehículo nuevo'}
                         </h3>
-                        <button type="button" onClick={() => setDocumentacionVehiculo(null)} style={{ border: 'none', background: '#f1f3f5', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}>✕</button>
+                        <button type="button" onClick={() => setDocumentacionVehiculo(null)} className="admin-icon-btn" aria-label="Cerrar">
+                          <Icon name="x" size={18} />
+                        </button>
                       </div>
 
-                      {/* Info del Repartidor y Vehículo */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.2rem', backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px' }}>
-                        <div>
-                          <strong>Repartidor:</strong>
+                      <div className="admin-info-grid" style={{ marginBottom: '20px' }}>
+                        <div className="admin-info-item">
+                          <span>Repartidor</span>
                           <div>{repartidor?.nombre_completo || [documentacionVehiculo.nombre, documentacionVehiculo.apellido].filter(Boolean).join(' ') || documentacionVehiculo.username}</div>
-                          <small style={{ color: '#666' }}>{repartidor?.email || documentacionVehiculo.email}</small>
+                          <small className="admin-cell-sub">{repartidor?.email || documentacionVehiculo.email}</small>
                         </div>
-                        <div>
-                          <strong>Vehículo:</strong>
-                          <div>{icono} {etiqueta} - {vehiculo?.marca || documentacionVehiculo.marca || ''} {vehiculo?.modelo || documentacionVehiculo.modelo || ''}</div>
-                          <small style={{ color: '#666' }}>
+                        <div className="admin-info-item">
+                          <span>Vehículo</span>
+                          <div>
+                            <Icon name={esBici ? 'bike' : 'car'} size={16} /> {etiqueta} - {vehiculo?.marca || documentacionVehiculo.marca || ''} {vehiculo?.modelo || documentacionVehiculo.modelo || ''}
+                          </div>
+                          <small className="admin-cell-sub">
                             {tieneDocumentacion
                               ? `Patente: ${vehiculo?.patente || documentacionVehiculo.patente || 'Sin registrar'}`
                               : 'Sin patente requerida (Bicicleta)'}
@@ -2465,34 +1924,34 @@ export const PanelAdministrador = () => {
                         </div>
                       </div>
 
-                      {/* CONDICIONAL PRINCIPAL: BICICLETA vs MOTO/AUTO */}
                       {!tieneDocumentacion ? (
-                        <div style={{ padding: '1.2rem', backgroundColor: '#e7f5ff', border: '1px solid #a5d8ff', borderRadius: '8px', color: '#1864ab', margin: '1rem 0', textAlign: 'center' }}>
-                          🚲 <strong>Vehículo tipo Bicicleta:</strong> No requiere patente, documentación obligatoria ni fechas de vencimiento.
+                        <div className="admin-inline-note admin-inline-note--info admin-inline-note--center" style={{ justifyContent: 'center' }}>
+                          <Icon name="bike" size={16} />
+                          <span><strong>Vehículo tipo bicicleta:</strong> no requiere patente, documentación obligatoria ni fechas de vencimiento.</span>
                         </div>
                       ) : camposDocumento.length === 0 ? (
-                        <div style={{ padding: '1.2rem', backgroundColor: '#fff9db', border: '1px solid #ffe066', borderRadius: '8px', color: '#856404', margin: '1rem 0', textAlign: 'center' }}>
-                          ⚠️ No se detectaron documentos nuevos o modificados para esta solicitud.
+                        <div className="admin-inline-note admin-inline-note--center" style={{ backgroundColor: 'var(--sd-tint-warning)', borderColor: 'var(--sd-line-warning)', color: 'var(--sd-warning)' }}>
+                          <Icon name="alert" size={16} /> No se detectaron documentos nuevos o modificados para esta solicitud.
                         </div>
                       ) : (
-                        <div style={{ display: 'grid', gap: '1.2rem' }}>
+                        <div className="admin-stack">
                           {camposDocumento.map((doc) => {
                             const urlArchivo = doc.nuevaUrl || doc.actualUrl;
                             const vencimiento = doc.nuevaVenc || doc.actualVenc;
 
                             return (
-                              <div key={doc.titulo} style={{ border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', backgroundColor: '#fff' }}>
-                                <h4 style={{ margin: '0 0 0.8rem 0', color: '#343a40' }}>{doc.titulo}</h4>
-                                <div style={{ padding: '0.8rem', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
-                                  <p style={{ margin: '0 0 0.4rem 0' }}>
-                                    <strong>Fecha Vencimiento:</strong> {vencimiento || 'No especificada'}
+                              <div key={doc.titulo} className="admin-doc-card">
+                                <h4><Icon name="file" size={16} /> {doc.titulo}</h4>
+                                <div className="admin-doc-card__body">
+                                  <p>
+                                    <strong>Fecha de vencimiento:</strong> {vencimiento || 'No especificada'}
                                   </p>
                                   {urlArchivo ? (
-                                    <a href={resolverDocumento(urlArchivo)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', fontWeight: 'bold' }}>
-                                      🔗 Ver archivo adjunto
+                                    <a href={resolverDocumento(urlArchivo)} target="_blank" rel="noreferrer" className="admin-link">
+                                      <Icon name="external" size={14} /> Ver archivo adjunto
                                     </a>
                                   ) : (
-                                    <span style={{ color: '#868e96' }}>Sin archivo adjunto</span>
+                                    <span className="admin-muted">Sin archivo adjunto</span>
                                   )}
                                 </div>
                               </div>
@@ -2501,13 +1960,12 @@ export const PanelAdministrador = () => {
                         </div>
                       )}
 
-                      {/* Acciones */}
-                      <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem' }}>
-                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')} disabled={procesandoId === `vehiculo-${id}`} style={{ flex: 1, backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                          ✅ Aprobar Solicitud
+                      <div className="admin-modal-foot">
+                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'APROBADO')} disabled={procesandoId === `vehiculo-${id}`} className="admin-btn admin-btn--success admin-btn--grow">
+                          <Icon name="check" /> Aprobar solicitud
                         </button>
-                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')} disabled={procesandoId === `vehiculo-${id}`} style={{ flex: 1, backgroundColor: '#e03131', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                          ❌ Rechazar Solicitud
+                        <button type="button" onClick={() => evaluarSolicitudVehiculo(documentacionVehiculo, 'RECHAZADO')} disabled={procesandoId === `vehiculo-${id}`} className="admin-btn admin-btn--danger admin-btn--grow">
+                          <Icon name="x" /> Rechazar solicitud
                         </button>
                       </div>
 
@@ -2515,7 +1973,7 @@ export const PanelAdministrador = () => {
                   </div>
                 );
               })()}
-              {/* Modal de detalle de repartidor ajustado */}
+
               {repartidorSeleccionado && (() => {
                 const vehiculoActivo = repartidorSeleccionado.vehiculos?.find(
                   (v) => Number(v.id) === Number(repartidorSeleccionado.IDvehiculo_activo)
@@ -2529,146 +1987,96 @@ export const PanelAdministrador = () => {
                     role="dialog"
                     aria-modal="true"
                     onClick={cerrarDetalleRepartidor}
-                    style={{
-                      position: 'fixed',
-                      inset: 0,
-                      zIndex: 3000,
-                      backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                      display: 'flex',
-                      justify: 'center',
-                      alignItems: 'center',
-                      padding: '1rem'
-                    }}
+                    className="admin-modal-overlay"
+                    style={{ zIndex: 3000 }}
                   >
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      style={{
-                        width: '100%',
-                        maxWidth: '650px',
-                        maxHeight: '90vh',
-                        overflowY: 'auto',
-                        backgroundColor: '#fff',
-                        borderRadius: '12px',
-                        padding: '1.5rem',
-                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                      }}
+                      className="admin-modal-content"
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justify: 'space-between',
-                          alignItems: 'center',
-                          gap: '1rem',
-                          marginBottom: '1.2rem'
-                        }}
-                      >
+                      <div className="admin-modal-head">
                         <div>
-                          <h2 style={{ margin: 0 }}>🚴 Detalle del repartidor</h2>
-                          <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
-                            Repartidor #{repartidorSeleccionado.id}
-                          </p>
+                          <h2>Detalle del repartidor</h2>
+                          <p>Repartidor #{repartidorSeleccionado.id}</p>
                         </div>
 
                         <button
                           type="button"
                           onClick={cerrarDetalleRepartidor}
-                          style={{
-                            border: 'none',
-                            backgroundColor: '#f1f3f5',
-                            borderRadius: '50%',
-                            width: '36px',
-                            height: '36px',
-                            fontSize: '1.1rem',
-                            cursor: 'pointer'
-                          }}
+                          className="admin-icon-btn"
+                          aria-label="Cerrar"
                         >
-                          ✕
+                          <Icon name="x" size={18} />
                         </button>
                       </div>
 
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                          gap: '0.8rem'
-                        }}
-                      >
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Usuario</strong>
-                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.username || 'No informado'}</p>
+                      <div className="admin-info-grid">
+                        <div className="admin-info-item">
+                          <span>Usuario</span>
+                          <p>{repartidorSeleccionado.username || 'No informado'}</p>
                         </div>
 
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Email</strong>
-                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.email || 'No informado'}</p>
+                        <div className="admin-info-item">
+                          <span>Email</span>
+                          <p>{repartidorSeleccionado.email || 'No informado'}</p>
                         </div>
 
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>DNI</strong>
-                          <p style={{ margin: '0.3rem 0 0' }}>{repartidorSeleccionado.dni || 'No informado'}</p>
+                        <div className="admin-info-item">
+                          <span>DNI</span>
+                          <p>{repartidorSeleccionado.dni || 'No informado'}</p>
                         </div>
 
-                        {/* Tipo de Vehículo Activo */}
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Tipo de vehículo</strong>
-                          <p style={{ margin: '0.3rem 0 0' }}>{tipoVehiculo || 'No informado'}</p>
+                        <div className="admin-info-item">
+                          <span>Tipo de vehículo</span>
+                          <p>{tipoVehiculo || 'No informado'}</p>
                         </div>
 
-                        {/* Marca: en Auto/Moto siempre; en Bici SOLO si tiene valor */}
                         {(!esBici || vehiculoActivo?.marca) && (
-                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                            <strong>Marca</strong>
-                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.marca || 'No informada'}</p>
+                          <div className="admin-info-item">
+                            <span>Marca</span>
+                            <p>{vehiculoActivo?.marca || 'No informada'}</p>
                           </div>
                         )}
 
-                        {/* Modelo: en Auto/Moto siempre; en Bici SOLO si tiene valor */}
                         {(!esBici || vehiculoActivo?.modelo) && (
-                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                            <strong>Modelo</strong>
-                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.modelo || 'No informado'}</p>
+                          <div className="admin-info-item">
+                            <span>Modelo</span>
+                            <p>{vehiculoActivo?.modelo || 'No informado'}</p>
                           </div>
                         )}
 
-                        {/* Patente: se muestra SOLO en Auto / Moto */}
                         {!esBici && (
-                          <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                            <strong>Patente</strong>
-                            <p style={{ margin: '0.3rem 0 0' }}>{vehiculoActivo?.patente || 'No informada'}</p>
+                          <div className="admin-info-item">
+                            <span>Patente</span>
+                            <p>{vehiculoActivo?.patente || 'No informada'}</p>
                           </div>
                         )}
 
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Disponibilidad</strong>
-                          <p
-                            style={{
-                              margin: '0.3rem 0 0',
-                              color: Number(repartidorSeleccionado.disponible) === 1 ? '#2b8a3e' : '#6c757d',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {Number(repartidorSeleccionado.disponible) === 1 ? '🟢 Disponible' : '⚪ No disponible'}
-                          </p>
+                        <div className="admin-info-item">
+                          <span>Disponibilidad</span>
+                          <div style={{ marginTop: '4px' }}>
+                            {Number(repartidorSeleccionado.disponible) === 1 ? (
+                              <Badge tone="success" dot>Disponible</Badge>
+                            ) : (
+                              <Badge tone="neutral" dot>No disponible</Badge>
+                            )}
+                          </div>
                         </div>
 
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Estado de validación</strong>
-                          <p
-                            style={{
-                              margin: '0.3rem 0 0',
-                              color: Number(repartidorSeleccionado.validado) === 1
-                                ? '#2b8a3e'
-                                : '#f59f00', /* 🟡 Cambiado a amarillo para pendiente */
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {Number(repartidorSeleccionado.validado) === 1 ? '✅ Validado' : '⏳ Pendiente de validación'}
-                          </p>
+                        <div className="admin-info-item">
+                          <span>Estado de validación</span>
+                          <div style={{ marginTop: '4px' }}>
+                            {Number(repartidorSeleccionado.validado) === 1 ? (
+                              <Badge tone="success" icon="checkCircle">Validado</Badge>
+                            ) : (
+                              <Badge tone="warning" icon="clock">Pendiente de validación</Badge>
+                            )}
+                          </div>
                         </div>
 
-                        <div style={{ padding: '0.9rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                          <strong>Fecha de registro</strong>
-                          <p style={{ margin: '0.3rem 0 0' }}>
+                        <div className="admin-info-item">
+                          <span>Fecha de registro</span>
+                          <p>
                             {repartidorSeleccionado.creado_en
                               ? new Date(repartidorSeleccionado.creado_en).toLocaleString('es-AR')
                               : 'No informada'}
@@ -2678,17 +2086,9 @@ export const PanelAdministrador = () => {
 
                       {(repartidorSeleccionado.latitud !== null ||
                         repartidorSeleccionado.longitud !== null) && (
-                          <div
-                            style={{
-                              marginTop: '1rem',
-                              padding: '1rem',
-                              backgroundColor: '#e7f5ff',
-                              borderRadius: '8px',
-                              color: '#1864ab'
-                            }}
-                          >
-                            <strong>Última ubicación registrada</strong>
-                            <p style={{ margin: '0.4rem 0 0', fontFamily: 'monospace' }}>
+                          <div className="admin-location">
+                            <strong><Icon name="pin" size={14} /> Última ubicación registrada</strong>
+                            <p className="admin-mono" style={{ marginTop: '4px' }}>
                               Latitud: {repartidorSeleccionado.latitud ?? 'No disponible'}<br />
                               Longitud: {repartidorSeleccionado.longitud ?? 'No disponible'}
                             </p>
@@ -2701,23 +2101,22 @@ export const PanelAdministrador = () => {
                           </div>
                         )}
 
-                      {/* Lista de todos los vehículos asociados */}
-                      <div style={{ marginTop: '1.2rem' }}>
-                        <h3 style={{ margin: '0 0 0.8rem 0', fontSize: '1.1rem' }}>
-                          🚗 Vehículos Asociados y Estado Documental
+                      <div>
+                        <h3 className="admin-subtitle">
+                          <Icon name="car" size={18} />
+                          Vehículos asociados y estado documental
                         </h3>
 
                         {(!repartidorSeleccionado.vehiculos || repartidorSeleccionado.vehiculos.length === 0) ? (
-                          <div style={{ padding: '0.8rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
+                          <div className="admin-inline-note">
                             El repartidor no posee vehículos registrados.
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <div className="admin-vehicle-list">
                             {repartidorSeleccionado.vehiculos.map((v) => {
                               const esActivo = Number(repartidorSeleccionado.IDvehiculo_activo) === Number(v.id);
                               const esBici = v.tipo_vehiculo?.toLowerCase().includes('bici');
 
-                              // Detectamos si el vehículo está dado de baja o rechazado
                               const esDeshabilitado =
                                 v.estado === 'BAJA' ||
                                 Number(v.activo) === 0 ||
@@ -2727,163 +2126,100 @@ export const PanelAdministrador = () => {
                               return (
                                 <div
                                   key={v.id}
-                                  style={{
-                                    padding: '1rem',
-                                    borderRadius: '8px',
-                                    border: esActivo
-                                      ? '2px solid #1c7ed6'
-                                      : esDeshabilitado
-                                        ? '1px solid #adb5bd'
-                                        : '1px solid #dee2e6',
-                                    backgroundColor: esDeshabilitado
-                                      ? '#e9ecef'
-                                      : esActivo
-                                        ? '#f8f9fa'
-                                        : '#ffffff',
-                                    color: esDeshabilitado ? '#495057' : 'inherit',
-                                    opacity: esDeshabilitado ? 0.9 : 1
-                                  }}
+                                  className={`admin-vehicle ${esActivo ? 'admin-vehicle--active' : ''} ${esDeshabilitado ? 'admin-vehicle--disabled' : ''}`}
                                 >
-                                  {/* CABECERA DEL VEHÍCULO */}
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      flexWrap: 'wrap',
-                                      gap: '0.5rem'
-                                    }}
-                                  >
-                                    <strong style={{ fontSize: '1rem' }}>
+                                  <div className="admin-vehicle__head">
+                                    <strong>
                                       {v.tipo_vehiculo} · {v.marca} {v.modelo}{' '}
                                       {v.patente ? `(${v.patente})` : ''}
                                     </strong>
 
-                                    {/* Badges de Estado */}
-                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <div className="admin-vehicle__badges">
                                       {esActivo && (
-                                        <span style={{ backgroundColor: '#1c7ed6', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          ACTIVO ACTUAL
+                                        <span className="admin-badge admin-badge--solid-info">
+                                          <Icon name="check" size={12} /> Activo actual
                                         </span>
                                       )}
 
                                       {v.estado === 'BAJA' || (Number(v.activo) === 0 && !v.motivo_rechazo) ? (
-                                        <span style={{ backgroundColor: '#ffe3e3', color: '#e03131', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          ❌ Vehículo dado de baja
-                                        </span>
+                                        <Badge tone="error" icon="xCircle">Vehículo dado de baja</Badge>
                                       ) : v.estado === 'RECHAZADO' || v.motivo_rechazo ? (
-                                        <span style={{ backgroundColor: '#fff5f5', color: '#c92a2a', border: '1px solid #ffc9c9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          🚫 Vehículo Rechazado
-                                        </span>
+                                        <Badge tone="error" icon="ban">Vehículo rechazado</Badge>
                                       ) : v.estado === 'PENDIENTE' || !v.estado ? (
-                                        /* 🟡 Badge amarillo exclusivo para pendientes dentro del modal */
-                                        <span style={{ backgroundColor: '#fff9db', color: '#f59f00', border: '1px solid #ffe066', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          ⏳ Pendiente
-                                        </span>
+                                        <Badge tone="warning" icon="clock">Pendiente</Badge>
                                       ) : (
-                                        <span style={{ backgroundColor: '#d3f9d8', color: '#2b8a3e', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                          Activo ({v.estado})
-                                        </span>
+                                        <Badge tone="success" icon="checkCircle">Activo ({v.estado})</Badge>
                                       )}
                                     </div>
                                   </div>
 
-                                  {/* MOTIVO DE RECHAZO DEL VEHÍCULO GENERAL */}
                                   {v.motivo_rechazo && (
-                                    <p style={{ margin: '0.5rem 0 0', color: '#e03131', fontSize: '0.85rem' }}>
+                                    <p className="admin-text-error" style={{ marginTop: '8px', fontSize: '0.8125rem' }}>
                                       <strong>Motivo de rechazo del vehículo:</strong> {v.motivo_rechazo}
                                     </p>
                                   )}
 
-                                  {/* SECCIÓN DE DOCUMENTACIÓN Y FECHAS DE VENCIMIENTO */}
                                   {!esBici && (
-                                    <div style={{ marginTop: '0.8rem', borderTop: '1px solid #dee2e6', paddingTop: '0.8rem' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <small style={{ fontWeight: 'bold', color: esDeshabilitado ? '#6c757d' : '#495057', fontSize: '0.9rem' }}>
-                                          Estado de Documentación:
-                                        </small>
+                                    <div className="admin-vehicle__docs">
+                                      <div className="admin-vehicle__docs-head">
+                                        <span>Estado de documentación</span>
 
-                                        <span
-                                          style={{
-                                            fontSize: '0.8rem',
-                                            fontWeight: 'bold',
-                                            padding: '0.15rem 0.5rem',
-                                            borderRadius: '4px',
-                                            backgroundColor: esDeshabilitado ? '#e2e6ea' : (v.documentacion_valida ? '#e6fcf5' : '#fff5f5'),
-                                            color: esDeshabilitado ? '#495057' : (v.documentacion_valida ? '#0ca678' : '#e03131'),
-                                            border: `1px solid ${esDeshabilitado ? '#ced4da' : (v.documentacion_valida ? '#96f2d7' : '#ffc9c9')}`
-                                          }}
-                                        >
-                                          {esDeshabilitado ? '⚪ VEHÍCULO DESHABILITADO' : (v.documentacion_valida ? '✅ VÁLIDA / VIGENTE' : '⚠️ INVÁLIDA O CON VENCIMIENTOS')}
-                                        </span>
+                                        {esDeshabilitado ? (
+                                          <Badge tone="neutral" icon="ban">Vehículo deshabilitado</Badge>
+                                        ) : v.documentacion_valida ? (
+                                          <Badge tone="success" icon="checkCircle">Válida / vigente</Badge>
+                                        ) : (
+                                          <Badge tone="error" icon="alert">Inválida o con vencimientos</Badge>
+                                        )}
                                       </div>
 
-                                      {/* MOTIVO DE RECHAZO DE DOCUMENTACIÓN (Ubicarlo aquí mejora la lectura) */}
                                       {v.motivo_rechazo_documentacion && (
-                                        <div style={{ margin: '0.5rem 0 0.8rem 0', color: '#c92a2a', fontSize: '0.85rem', backgroundColor: '#fff5f5', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #ffc9c9' }}>
-                                          <strong>📄 Motivo de rechazo de documentación:</strong> {v.motivo_rechazo_documentacion}
+                                        <div className="admin-reject-note">
+                                          <Icon name="file" size={14} />
+                                          <span><strong>Motivo de rechazo de documentación:</strong> {v.motivo_rechazo_documentacion}</span>
                                         </div>
                                       )}
 
-                                      {/* GRILLA DE DOCUMENTOS */}
-                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', fontSize: '0.85rem' }}>
-                                        {/* Licencia */}
-                                        <div style={{
-                                          padding: '0.5rem',
-                                          borderRadius: '6px',
-                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.licencia_vencida ? '#fff5f5' : '#ffffff'),
-                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.licencia_vencida ? '#ffc9c9' : '#dee2e6')}`
-                                        }}>
-                                          <div><strong>Licencia:</strong></div>
-                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.licencia_vencida ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                      <div className="admin-doc-grid" style={{ marginTop: v.motivo_rechazo_documentacion ? '12px' : 0 }}>
+                                        <div className={`admin-doc-tile ${esDeshabilitado ? 'admin-doc-tile--disabled' : v.licencia_vencida ? 'admin-doc-tile--expired' : ''}`}>
+                                          <div className="admin-doc-tile__name">Licencia</div>
+                                          <div className="admin-doc-tile__date">
                                             Vence: {v.fecha_vencimiento_licencia || 'N/A'} {v.licencia_vencida && !esDeshabilitado ? '(VENCIDA)' : ''}
                                           </div>
                                           {v.licencia_url ? (
-                                            <a href={resolverDocumento(v.licencia_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
-                                              🔗 Ver archivo
+                                            <a href={resolverDocumento(v.licencia_url)} target="_blank" rel="noreferrer" className="admin-link" style={{ fontSize: '0.8125rem' }}>
+                                              <Icon name="external" size={12} /> Ver archivo
                                             </a>
                                           ) : (
-                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                            <span className="admin-muted">Sin adjunto</span>
                                           )}
                                         </div>
 
-                                        {/* Seguro */}
-                                        <div style={{
-                                          padding: '0.5rem',
-                                          borderRadius: '6px',
-                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.seguro_vencido ? '#fff5f5' : '#ffffff'),
-                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.seguro_vencido ? '#ffc9c9' : '#dee2e6')}`
-                                        }}>
-                                          <div><strong>Seguro:</strong></div>
-                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.seguro_vencido ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                        <div className={`admin-doc-tile ${esDeshabilitado ? 'admin-doc-tile--disabled' : v.seguro_vencido ? 'admin-doc-tile--expired' : ''}`}>
+                                          <div className="admin-doc-tile__name">Seguro</div>
+                                          <div className="admin-doc-tile__date">
                                             Vence: {v.fecha_vencimiento_seguro || 'N/A'} {v.seguro_vencido && !esDeshabilitado ? '(VENCIDO)' : ''}
                                           </div>
                                           {v.seguro_url ? (
-                                            <a href={resolverDocumento(v.seguro_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
-                                              🔗 Ver archivo
+                                            <a href={resolverDocumento(v.seguro_url)} target="_blank" rel="noreferrer" className="admin-link" style={{ fontSize: '0.8125rem' }}>
+                                              <Icon name="external" size={12} /> Ver archivo
                                             </a>
                                           ) : (
-                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                            <span className="admin-muted">Sin adjunto</span>
                                           )}
                                         </div>
 
-                                        {/* Cédula */}
-                                        <div style={{
-                                          padding: '0.5rem',
-                                          borderRadius: '6px',
-                                          backgroundColor: esDeshabilitado ? '#f8f9fa' : (v.cedula_vencida ? '#fff5f5' : '#ffffff'),
-                                          border: `1px solid ${esDeshabilitado ? '#dee2e6' : (v.cedula_vencida ? '#ffc9c9' : '#dee2e6')}`
-                                        }}>
-                                          <div><strong>Cédula:</strong></div>
-                                          <div style={{ color: esDeshabilitado ? '#6c757d' : (v.cedula_vencida ? '#e03131' : '#2b8a3e'), fontWeight: 'bold' }}>
+                                        <div className={`admin-doc-tile ${esDeshabilitado ? 'admin-doc-tile--disabled' : v.cedula_vencida ? 'admin-doc-tile--expired' : ''}`}>
+                                          <div className="admin-doc-tile__name">Cédula</div>
+                                          <div className="admin-doc-tile__date">
                                             Vence: {v.fecha_vencimiento_cedula || 'N/A'} {v.cedula_vencida && !esDeshabilitado ? '(VENCIDA)' : ''}
                                           </div>
                                           {v.cedula_url ? (
-                                            <a href={resolverDocumento(v.cedula_url)} target="_blank" rel="noreferrer" style={{ color: '#1c7ed6', textDecoration: 'underline', fontSize: '0.8rem' }}>
-                                              🔗 Ver archivo
+                                            <a href={resolverDocumento(v.cedula_url)} target="_blank" rel="noreferrer" className="admin-link" style={{ fontSize: '0.8125rem' }}>
+                                              <Icon name="external" size={12} /> Ver archivo
                                             </a>
                                           ) : (
-                                            <span style={{ color: '#868e96', fontSize: '0.8rem' }}>Sin adjunto</span>
+                                            <span className="admin-muted">Sin adjunto</span>
                                           )}
                                         </div>
                                       </div>
@@ -2895,23 +2231,16 @@ export const PanelAdministrador = () => {
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={cerrarDetalleRepartidor}
-                        style={{
-                          width: '100%',
-                          marginTop: '1.2rem',
-                          padding: '0.8rem',
-                          border: 'none',
-                          borderRadius: '7px',
-                          backgroundColor: '#6c757d',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        Cerrar
-                      </button>
+
+                      <div className="admin-modal-foot">
+                        <button
+                          type="button"
+                          onClick={cerrarDetalleRepartidor}
+                          className="admin-btn admin-btn--outline admin-btn--block"
+                        >
+                          Cerrar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2921,170 +2250,149 @@ export const PanelAdministrador = () => {
 
           {seccion === 'clientes' && (
             <section>
-              <h2>🧑‍🤝‍🧑 Gestión de clientes</h2>
+              <h2 className="admin-section-title">
+                <span className="admin-section-title__icon"><Icon name="user" size={20} /></span>
+                Gestión de clientes
+              </h2>
 
               {clientes.length === 0 ? (
-                <p>No hay clientes registrados.</p>
+                <div className="admin-state">
+                  <Icon name="inbox" size={28} />
+                  No hay clientes registrados.
+                </div>
               ) : (
                 <>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justify: 'space-between',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      flexWrap: 'wrap',
-                      margin: '1rem 0 0.5rem'
-                    }}
-                  >
-                    <small style={{ color: '#666' }}>
+                  <div className="admin-table-meta">
+                    <span>
                       Mostrando {(paginaClientes - 1) * registrosPorPagina + 1} - {Math.min(paginaClientes * registrosPorPagina, clientes.length)} de {clientes.length}
-                    </small>
-                    <label style={{ fontSize: '0.9rem' }}>
-                      Ver{' '}
-                      <select value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
+                    </span>
+                    <label>
+                      Ver
+                      <select className="admin-select" value={registrosPorPagina} onChange={cambiarRegistrosPorPagina}>
                         <option value={5}>5</option>
                         <option value={10}>10</option>
                         <option value={20}>20</option>
-                      </select>{' '}
+                      </select>
                       registros
                     </label>
                   </div>
 
                   <TablaConScrollSuperior minWidth="1150px">
-                    <table
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        marginTop: '1rem'
-                      }}
-                    >
-                      <thead>
-                        <tr style={{ backgroundColor: '#e9ecef' }}>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>ID</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Usuario</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Nombre completo</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Email</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Teléfono</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Dirección</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Coordenadas</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>Registro</th>
-                          <th style={{ padding: '0.8rem', textAlign: 'center' }}>Acciones</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {clientesVisibles.map((cliente) => (
-                          <tr
-                            key={cliente.id}
-                            style={{ borderBottom: '1px solid #dee2e6' }}
-                          >
-                            <td style={{ padding: '0.8rem' }}>{cliente.id}</td>
-                            <td style={{ padding: '0.8rem' }}>{cliente.username}</td>
-                            <td style={{ padding: '0.8rem' }}>
-                              {[cliente.nombre, cliente.apellido].filter(Boolean).join(' ') || 'No informado'}
-                            </td>
-                            <td style={{ padding: '0.8rem' }}>{cliente.email}</td>
-                            <td style={{ padding: '0.8rem' }}>{cliente.telefono || 'No informado'}</td>
-                            <td style={{ padding: '0.8rem' }}>
-                              <div>{cliente.direccion}</div>
-                              {(cliente.piso || cliente.departamento) && (
-                                <small style={{ color: '#666' }}>
-                                  {cliente.piso ? `Piso ${cliente.piso}` : ''}
-                                  {cliente.departamento ? ` - Depto. ${cliente.departamento}` : ''}
-                                </small>
-                              )}
-                              {cliente.referencia && (
-                                <small style={{ display: 'block', color: '#666' }}>
-                                  Ref.: {cliente.referencia}
-                                </small>
-                              )}
-                            </td>
-                            <td style={{ padding: '0.8rem' }}>
-                              {cliente.latitud !== null && cliente.longitud !== null ? (
-                                <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                                  {Number(cliente.latitud).toFixed(6)}<br />
-                                  {Number(cliente.longitud).toFixed(6)}
-                                </span>
-                              ) : (
-                                <span style={{ color: '#868e96' }}>No asignadas</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '0.8rem' }}>
-                              {cliente.creado_en
-                                ? new Date(cliente.creado_en).toLocaleDateString('es-AR')
-                                : 'No informado'}
-                            </td>
-                            <td style={{ padding: '0.8rem', textAlign: 'center' }}>
-                              <button
-                                type="button"
-                                onClick={() => consultarHistorialCliente(cliente)}
-                                style={{
-                                  padding: '0.45rem 0.7rem',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#7048e8',
-                                  color: '#fff',
-                                  cursor: 'pointer',
-                                  fontWeight: 'bold',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                📜 Ver pedidos
-                              </button>
-                            </td>
+                    <div className="admin-table-container">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Nombre completo</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Dirección</th>
+                            <th>Coordenadas</th>
+                            <th>Registro</th>
+                            <th style={{ textAlign: 'right' }}>Acciones</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+
+                        <tbody>
+                          {clientesVisibles.length === 0 && (
+                            <tr>
+                              <td colSpan={9} className="admin-table__empty">No hay resultados para tu búsqueda.</td>
+                            </tr>
+                          )}
+
+                          {clientesVisibles.map((cliente) => (
+                            <tr key={cliente.id}>
+                              <td className="admin-cell-num">{cliente.id}</td>
+                              <td>
+                                <div className="admin-user">
+                                  <span className="admin-avatar" aria-hidden="true">{inicialDe(cliente.username)}</span>
+                                  {cliente.username}
+                                </div>
+                              </td>
+                              <td>
+                                {[cliente.nombre, cliente.apellido].filter(Boolean).join(' ') || 'No informado'}
+                              </td>
+                              <td>{cliente.email}</td>
+                              <td>{cliente.telefono || 'No informado'}</td>
+                              <td>
+                                <div>{cliente.direccion}</div>
+                                {(cliente.piso || cliente.departamento) && (
+                                  <small className="admin-cell-sub">
+                                    {cliente.piso ? `Piso ${cliente.piso}` : ''}
+                                    {cliente.departamento ? ` - Depto. ${cliente.departamento}` : ''}
+                                  </small>
+                                )}
+                                {cliente.referencia && (
+                                  <small className="admin-cell-sub">
+                                    Ref.: {cliente.referencia}
+                                  </small>
+                                )}
+                              </td>
+                              <td>
+                                {cliente.latitud !== null && cliente.longitud !== null ? (
+                                  <span className="admin-mono">
+                                    {Number(cliente.latitud).toFixed(6)}<br />
+                                    {Number(cliente.longitud).toFixed(6)}
+                                  </span>
+                                ) : (
+                                  <span className="admin-muted">No asignadas</span>
+                                )}
+                              </td>
+                              <td>
+                                {cliente.creado_en
+                                  ? new Date(cliente.creado_en).toLocaleDateString('es-AR')
+                                  : 'No informado'}
+                              </td>
+                              <td>
+                                <div className="admin-cell-actions-group">
+                                  <button
+                                    type="button"
+                                    onClick={() => consultarHistorialCliente(cliente)}
+                                    className="admin-btn admin-btn--sm admin-btn--info-soft"
+                                    style={{ whiteSpace: 'nowrap' }}
+                                  >
+                                    <Icon name="history" size={14} />
+                                    Ver pedidos
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </TablaConScrollSuperior>
 
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
-                    <button type="button" onClick={() => setPaginaClientes((pagina) => Math.max(1, pagina - 1))} disabled={paginaClientes === 1}>
-                      Anterior
+                  <div className="admin-pagination">
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaClientes((pagina) => Math.max(1, pagina - 1))} disabled={paginaClientes === 1}>
+                      <Icon name="chevronLeft" size={14} /> Anterior
                     </button>
-                    <span>Página {paginaClientes} de {totalPaginasClientes}</span>
-                    <button type="button" onClick={() => setPaginaClientes((pagina) => Math.min(totalPaginasClientes, pagina + 1))} disabled={paginaClientes === totalPaginasClientes}>
-                      Siguiente
+                    <span>Página <strong>{paginaClientes}</strong> de {totalPaginasClientes}</span>
+                    <button type="button" className="admin-btn admin-btn--outline admin-btn--sm" onClick={() => setPaginaClientes((pagina) => Math.min(totalPaginasClientes, pagina + 1))} disabled={paginaClientes === totalPaginasClientes}>
+                      Siguiente <Icon name="chevronRight" size={14} />
                     </button>
                   </div>
                 </>
               )}
 
-              {/* Modal del Historial de Pedidos */}
               {clienteHistorialSeleccionado && (
                 <div
                   role="dialog"
                   aria-modal="true"
                   onClick={cerrarHistorialCliente}
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 3000,
-                    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                    display: 'flex',
-                    justify: 'center',
-                    alignItems: 'center',
-                    padding: '1rem'
-                  }}
+                  className="admin-modal-overlay"
+                  style={{ zIndex: 3000 }}
                 >
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    style={{
-                      width: '100%',
-                      maxWidth: '700px',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      padding: '1.5rem',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)'
-                    }}
+                    className="admin-modal-content"
+                    style={{ maxWidth: '700px' }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+                    <div className="admin-modal-head">
                       <div>
-                        <h2 style={{ margin: 0 }}>📜 Historial de Pedidos</h2>
-                        <p style={{ margin: '0.3rem 0 0', color: '#666' }}>
+                        <h2>Historial de pedidos</h2>
+                        <p>
                           Cliente: {[clienteHistorialSeleccionado.nombre, clienteHistorialSeleccionado.apellido].filter(Boolean).join(' ') || clienteHistorialSeleccionado.username}
                         </p>
                       </div>
@@ -3092,97 +2400,132 @@ export const PanelAdministrador = () => {
                       <button
                         type="button"
                         onClick={cerrarHistorialCliente}
-                        style={{
-                          border: 'none',
-                          backgroundColor: '#f1f3f5',
-                          borderRadius: '50%',
-                          width: '36px',
-                          height: '36px',
-                          fontSize: '1.1rem',
-                          cursor: 'pointer'
-                        }}
+                        className="admin-icon-btn"
+                        aria-label="Cerrar"
                       >
-                        ✕
+                        <Icon name="x" size={18} />
                       </button>
                     </div>
 
                     {loadingHistorial ? (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: '#7048e8', fontWeight: 'bold' }}>
-                        ⏳ Cargando historial de pedidos...
+                      <div className="admin-state" role="status" style={{ border: 'none' }}>
+                        <Spinner />
+                        Cargando historial de pedidos...
                       </div>
                     ) : errorHistorial ? (
-                      <div style={{ padding: '1rem', backgroundColor: '#fff5f5', color: '#c92a2a', borderRadius: '8px' }}>
+                      <div className="admin-inline-note admin-inline-note--error" role="alert">
                         {errorHistorial}
                       </div>
                     ) : historialPedidos.length === 0 ? (
-                      <div style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', color: '#666', textAlign: 'center' }}>
+                      <div className="admin-inline-note admin-inline-note--center">
                         Este cliente aún no ha realizado ningún pedido.
                       </div>
                     ) : (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f1f3f5' }}>
-                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Orden #</th>
-                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Fecha</th>
-                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Local(es)</th>
-                            <th style={{ padding: '0.6rem', textAlign: 'left' }}>Estado</th>
-                            <th style={{ padding: '0.6rem', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {historialPedidos.map((pedido) => (
-                            <tr key={pedido.id} style={{ borderBottom: '1px solid #dee2e6' }}>
-                              <td style={{ padding: '0.6rem', fontWeight: 'bold' }}>#{pedido.id}</td>
-                              <td style={{ padding: '0.6rem', fontSize: '0.9rem' }}>
-                                {pedido.creado_en ? new Date(pedido.creado_en).toLocaleString('es-AR') : '-'}
-                              </td>
-                              <td style={{ padding: '0.6rem', fontSize: '0.9rem' }}>{pedido.locales || 'N/A'}</td>
-                              <td style={{ padding: '0.6rem' }}>
-                                <span
-                                  style={{
-                                    padding: '0.2rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 'bold',
-                                    backgroundColor: pedido.estado === 'Entregado' ? '#d3f9d8' : pedido.estado === 'Cancelado' ? '#ffe3e3' : '#e7f5ff',
-                                    color: pedido.estado === 'Entregado' ? '#2b8a3e' : pedido.estado === 'Cancelado' ? '#e03131' : '#1c7ed6'
-                                  }}
-                                >
-                                  {pedido.estado}
-                                </span>
-                              </td>
-                              <td style={{ padding: '0.6rem', textAlign: 'right', fontWeight: 'bold' }}>
-                                ${Number(pedido.total || 0).toFixed(2)}
-                              </td>
+                      <div className="admin-table-container">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Orden #</th>
+                              <th>Fecha</th>
+                              <th>Local(es)</th>
+                              <th>Estado</th>
+                              <th style={{ textAlign: 'right' }}>Total</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {historialPedidos.map((pedido) => (
+                              <tr key={pedido.id}>
+                                <td style={{ fontWeight: 700 }}>#{pedido.id}</td>
+                                <td>
+                                  {pedido.creado_en ? new Date(pedido.creado_en).toLocaleString('es-AR') : '-'}
+                                </td>
+                                <td>{pedido.locales || 'N/A'}</td>
+                                <td>
+                                  {pedido.estado === 'Entregado' ? (
+                                    <Badge tone="success" icon="checkCircle">{pedido.estado}</Badge>
+                                  ) : pedido.estado === 'Cancelado' ? (
+                                    <Badge tone="error" icon="xCircle">{pedido.estado}</Badge>
+                                  ) : (
+                                    <Badge tone="info" icon="clock">{pedido.estado}</Badge>
+                                  )}
+                                </td>
+                                <td className="admin-cell-right" style={{ fontWeight: 700 }}>
+                                  ${Number(pedido.total || 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={cerrarHistorialCliente}
-                      style={{
-                        width: '100%',
-                        marginTop: '1.2rem',
-                        padding: '0.8rem',
-                        border: 'none',
-                        borderRadius: '7px',
-                        backgroundColor: '#6c757d',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Cerrar
-                    </button>
+                    <div className="admin-modal-foot">
+                      <button
+                        type="button"
+                        onClick={cerrarHistorialCliente}
+                        className="admin-btn admin-btn--outline admin-btn--block"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </section>
           )}
         </>
+      )}
+
+      {/* MODAL ESTÉTICO DE AVISOS / ALERTAS */}
+      {modalAviso && (
+        <div className="admin-modal-aviso-overlay">
+          <div className="admin-modal-aviso-box" role="alertdialog" aria-modal="true">
+            <div className={`admin-modal-aviso-icon ${avisoExitoso ? 'admin-modal-aviso-icon--success' : 'admin-modal-aviso-icon--error'}`}>
+              <Icon name={avisoExitoso ? 'checkCircle' : 'alert'} size={26} />
+            </div>
+            <h3>{sinEmoji(modalAviso.titulo)}</h3>
+            <p>{sinEmoji(modalAviso.mensaje)}</p>
+            <div className="admin-modal-aviso-actions">
+              <button
+                className="admin-btn admin-btn--navy"
+                onClick={() => {
+                  const cb = modalAviso.callback;
+                  setModalAviso(null);
+                  if (cb) cb();
+                }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ESTÉTICO DE CONFIRMACIÓN */}
+      {modalConfirmacion && (
+        <div className="admin-modal-aviso-overlay">
+          <div className="admin-modal-aviso-box" role="alertdialog" aria-modal="true">
+            <div className="admin-modal-aviso-icon admin-modal-aviso-icon--warning">
+              <Icon name="alert" size={26} />
+            </div>
+            <h3>{sinEmoji(modalConfirmacion.titulo)}</h3>
+            <p>{sinEmoji(modalConfirmacion.mensaje)}</p>
+            <div className="admin-modal-aviso-actions">
+              <button
+                className="admin-btn admin-btn--outline"
+                onClick={() => setModalConfirmacion(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                onClick={modalConfirmacion.onConfirm}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

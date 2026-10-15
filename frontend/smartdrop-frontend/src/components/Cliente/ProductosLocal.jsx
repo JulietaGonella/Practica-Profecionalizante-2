@@ -1,6 +1,8 @@
+// src/components/Cliente/ProductosLocal.jsx
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { estaLocalAbierto } from '../../utils/horarios';
+import './CSS/Cliente.css'; // 👈 Importación de los estilos unificados
 
 const API_URL = 'http://localhost:3000';
 
@@ -97,15 +99,9 @@ export const ProductosLocal = ({ locales, productos }) => {
   // ⏳ Cargando
   if (cargandoLocales || cargandoProductos) {
     return (
-      <div
-        style={{
-          textAlign: 'center',
-          padding: '3rem 1rem',
-          color: '#495057'
-        }}
-      >
-        <h2>⏳ Cargando catálogo del local...</h2>
-        <p>Por favor aguarde un momento.</p>
+      <div className="sd-state">
+        <div className="sd-spinner"></div>
+        <p>Cargando catálogo del local...</p>
       </div>
     );
   }
@@ -113,143 +109,57 @@ export const ProductosLocal = ({ locales, productos }) => {
   // ❌ Local inexistente
   if (!local) {
     return (
-      <div
-        style={{
-          textAlign: 'center',
-          padding: '2rem 1rem',
-          color: '#e03131'
-        }}
-      >
-        <p>
-          El local solicitado no existe o se encuentra inactivo.
-        </p>
+      <div className="sd-state sd-state--error">
+        <p>El local solicitado no existe o se encuentra inactivo.</p>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="sd-container">
       {/* Banner del Local */}
-      <div
-        style={{
-          marginBottom: '1.5rem',
-          padding: '1rem',
-          backgroundColor: estaAbiertoPorHorario
-            ? '#e6fcf5'
-            : '#fff5f5',
-          borderLeft: `5px solid ${
-            estaAbiertoPorHorario
-              ? '#099268'
-              : '#e03131'
-          }`,
-          borderRadius: '8px'
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              color: '#2c3e50'
-            }}
-          >
-            {local.nombre}
-          </h2>
-
-          <span
-            style={{
-              fontWeight: 'bold',
-              color: estaAbiertoPorHorario
-                ? '#099268'
-                : '#e03131'
-            }}
-          >
-            {estaAbiertoPorHorario
-              ? '🟢 Abierto'
-              : '🔴 Cerrado fuera de horario'}
+      <div className={`sd-local-banner ${estaAbiertoPorHorario ? 'sd-local-banner--open' : 'sd-local-banner--closed'}`}>
+        <div className="sd-local-banner__head">
+          <h2 className="sd-local-banner__title">{local.nombre}</h2>
+          <span className={estaAbiertoPorHorario ? 'admin-badge admin-badge--success' : 'admin-badge admin-badge--error'}>
+            {estaAbiertoPorHorario ? '🟢 Abierto' : '🔴 Cerrado fuera de horario'}
           </span>
         </div>
 
-        <p
-          style={{
-            margin: '0.3rem 0 0 0',
-            color: '#495057'
-          }}
-        >
+        <p className="sd-local-banner__address">
           📍 {local.direccion}
         </p>
 
         {!estaAbiertoPorHorario && (
-          <p
-            style={{
-              margin: '0.5rem 0 0 0',
-              color: '#e03131',
-              fontSize: '0.85rem',
-              fontWeight: 'bold'
-            }}
-          >
+          <p className="admin-text-error" style={{ fontSize: '0.8125rem', fontWeight: 'bold' }}>
             ⚠️ El local se encuentra fuera de su horario de atención.
-            Puedes explorar la carta, pero los botones de compra se
-            encuentran inactivos.
+            Puedes explorar la carta, pero los botones de compra se encuentran inactivos.
           </p>
         )}
       </div>
 
       {/* 🔎 Búsqueda y Categorías */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap',
-          alignItems: 'center'
-        }}
-      >
-        <input
-          type="text"
-          placeholder="🔍 Buscar productos (Ej: Hamburguesa, Pizza)..."
-          value={busqueda}
-          onChange={(e) =>
-            setBusqueda(e.target.value)
-          }
-          style={{
-            flex: '1',
-            minWidth: '220px',
-            padding: '0.6rem 1rem',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-            fontSize: '0.95rem'
-          }}
-        />
+      <div className="sd-filters-bar">
+        <div className="sd-search-input-wrapper">
+          <span className="admin-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar productos (Ej: Hamburguesa, Pizza)..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="sd-search-input"
+          />
+        </div>
 
         {categoriasComerciales.length > 1 && (
           <select
             value={categoriaSeleccionada}
-            onChange={(e) =>
-              setCategoriaSeleccionada(e.target.value)
-            }
-            style={{
-              padding: '0.6rem 1rem',
-              border: '1px solid #ccc',
-              borderRadius: '6px',
-              fontSize: '0.95rem',
-              backgroundColor: '#fff',
-              cursor: 'pointer'
-            }}
+            onChange={(e) => setCategoriaSeleccionada(e.target.value)}
+            className="sd-select-filter"
           >
             {categoriasComerciales.map((cat) => (
-              <option
-                key={cat}
-                value={cat}
-              >
-                {cat === 'todas'
-                  ? '🏷️ Todas las Categorías'
-                  : cat}
+              <option key={cat} value={cat}>
+                {cat === 'todas' ? '🏷️ Todas las Categorías' : cat}
               </option>
             ))}
           </select>
@@ -258,55 +168,22 @@ export const ProductosLocal = ({ locales, productos }) => {
 
       {/* Listado de Productos Agrupados por Categoría */}
       {Object.keys(productosAgrupados).length === 0 ? (
-        <p
-          style={{
-            textAlign: 'center',
-            color: '#666',
-            margin: '2rem 0'
-          }}
-        >
-          🚫 No se encontraron productos que coincidan
-          con los filtros aplicados.
-        </p>
+        <div className="sd-state">
+          <p className="admin-muted">🚫 No se encontraron productos que coincidan con los filtros aplicados.</p>
+        </div>
       ) : (
         Object.entries(productosAgrupados).map(([categoria, prods]) => (
-          <div
-            key={categoria}
-            style={{ marginBottom: '2.5rem' }}
-          >
+          <div key={categoria} className="sd-category-section">
             {/* Encabezado de la Categoría Comercial */}
-            <h3
-              style={{
-                color: '#2c3e50',
-                borderBottom: '2px solid #e9ecef',
-                paddingBottom: '0.5rem',
-                marginBottom: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
+            <h3 className="sd-category-title">
               🏷️ {categoria}
-              <span
-                style={{
-                  fontSize: '0.85rem',
-                  color: '#6c757d',
-                  fontWeight: 'normal'
-                }}
-              >
+              <span className="sd-category-count">
                 ({prods.length} {prods.length === 1 ? 'producto' : 'productos'})
               </span>
             </h3>
 
             {/* Grid de Productos dentro de la Categoría */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns:
-                  'repeat(auto-fill, minmax(250px, 1fr))',
-                gap: '1rem'
-              }}
-            >
+            <div className="sd-products-grid">
               {prods.map((producto) => {
                 const imagenCompleta = producto.imagen_url
                   ? `${API_URL}${producto.imagen_url}`
@@ -315,103 +192,43 @@ export const ProductosLocal = ({ locales, productos }) => {
                 return (
                   <div
                     key={producto.id}
-                    style={{
-                      border: '1px solid #ddd',
-                      borderRadius: '8px',
-                      padding: '1rem',
-                      opacity: estaAbiertoPorHorario ? 1 : 0.7,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      backgroundColor: '#fff'
-                    }}
+                    className={`sd-product-card ${!estaAbiertoPorHorario ? 'sd-product-card--closed' : ''}`}
                   >
                     <div>
                       {/* 🖼️ Imagen del producto / Placeholder cuando no hay foto */}
-                      {imagenCompleta ? (
-                        <img
-                          src={imagenCompleta}
-                          alt={producto.nombre}
-                          style={{
-                            width: '100%',
-                            height: '150px',
-                            objectFit: 'cover',
-                            borderRadius: '6px',
-                            marginBottom: '0.8rem'
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: '100%',
-                            height: '150px',
-                            borderRadius: '6px',
-                            marginBottom: '0.8rem',
-                            backgroundColor: '#f8f9fa',
-                            border: '1px dashed #ced4da',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#adb5bd',
-                            fontSize: '0.85rem',
-                            userSelect: 'none'
-                          }}
-                        >
-                          <span>Imagen no disponible</span>
-                        </div>
-                      )}
+                      <div className="sd-product-card__img-container">
+                        {imagenCompleta ? (
+                          <img
+                            src={imagenCompleta}
+                            alt={producto.nombre}
+                            className="sd-product-card__img"
+                          />
+                        ) : (
+                          <div className="sd-product-card__fallback">
+                            <span>Imagen no disponible</span>
+                          </div>
+                        )}
+                      </div>
 
                       {/* Nombre del producto */}
-                      <h4
-                        style={{
-                          margin: '0 0 0.5rem 0',
-                          color: '#333'
-                        }}
-                      >
+                      <h4 className="sd-product-card__title" style={{ marginTop: '12px' }}>
                         {producto.nombre}
                       </h4>
 
                       {/* Precio */}
-                      <p
-                        style={{
-                          fontWeight: 'bold',
-                          color: '#2b8a3e',
-                          margin: '0.3rem 0',
-                          fontSize: '1.1rem'
-                        }}
-                      >
+                      <p className="sd-product-card__price" style={{ marginTop: '6px' }}>
                         ${Number(producto.precio).toFixed(2)}
                       </p>
                     </div>
 
                     {/* Botón ver detalles */}
                     <button
-                      onClick={() =>
-                        navigate(
-                          `/cliente/locales/producto/${producto.id}`
-                        )
-                      }
+                      onClick={() => navigate(`/cliente/locales/producto/${producto.id}`)}
                       disabled={!estaAbiertoPorHorario}
-                      style={{
-                        marginTop: '0.8rem',
-                        width: '100%',
-                        padding: '0.5rem',
-                        backgroundColor: estaAbiertoPorHorario
-                          ? '#1c7ed6'
-                          : '#adb5bd',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: estaAbiertoPorHorario
-                          ? 'pointer'
-                          : 'not-allowed',
-                        fontWeight: 'bold'
-                      }}
+                      className={`admin-btn admin-btn--sm admin-btn--block ${estaAbiertoPorHorario ? 'admin-btn--primary' : ''}`}
+                      style={{ marginTop: '8px' }}
                     >
-                      {estaAbiertoPorHorario
-                        ? '👁️ Ver detalles'
-                        : '🚫 No disponible (Cerrado)'}
+                      {estaAbiertoPorHorario ? '👁️ Ver detalles' : '🚫 No disponible (Cerrado)'}
                     </button>
                   </div>
                 );

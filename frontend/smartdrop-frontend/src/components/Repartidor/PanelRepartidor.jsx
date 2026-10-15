@@ -1,3 +1,4 @@
+// src/components/Repartidor/PanelRepartidor.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -17,6 +18,7 @@ import {
 import { LogoutButton } from '../LogoutButton';
 import { CambiarPasswordModal } from '../CambiarPasswordModal';
 import { NotificationMenu } from '../Common/NotificationMenu';
+import './CSS/Repartidor.css';
 
 export const PanelRepartidor = () => {
   const navigate = useNavigate();
@@ -44,11 +46,11 @@ export const PanelRepartidor = () => {
   });
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
 
-  // 🟢 Estados de carga específicos para botones genéricos y select de vehículos
+  const [modalAviso, setModalAviso] = useState(null);
+  const [modalConfirmacion, setModalConfirmacion] = useState(null);
   const [cargandoAccionBtn, setCargandoAccionBtn] = useState(null);
   const [cambiandoVehiculo, setCambiandoVehiculo] = useState(false);
 
-  // 🟢 Estado para editar/actualizar un vehículo con documentación vencida
   const [vehiculoEditando, setVehiculoEditando] = useState(null);
   const [formRenovacion, setFormRenovacion] = useState({
     cedula: null,
@@ -100,7 +102,6 @@ export const PanelRepartidor = () => {
       }
 
       const pedidos = Array.isArray(asignados) ? asignados : [];
-
       setPedidosDisponibles(Array.isArray(disponibles) ? disponibles : []);
 
       const pedidosEnCurso = pedidos.filter((pedido) => {
@@ -136,12 +137,18 @@ export const PanelRepartidor = () => {
 
   const handleAceptarPedido = async (ordenId) => {
     if (!vehiculoActivo) {
-      alert('⚠️ Debes seleccionar un vehículo activo para poder aceptar pedidos.');
+      setModalAviso({
+        titulo: '⚠️ Vehículo Requerido',
+        mensaje: 'Debes seleccionar un vehículo activo para poder aceptar pedidos.'
+      });
       return;
     }
 
     if (docActivaVencida) {
-      alert('⚠️ Tienes documentación vencida en tu vehículo activo. Actualízala en "Mi Vehículo" para poder tomar pedidos.');
+      setModalAviso({
+        titulo: '⚠️ Documentación Vencida',
+        mensaje: 'Tienes documentación vencida en tu vehículo activo. Actualízala en "Mi Vehículo" para poder tomar pedidos.'
+      });
       return;
     }
 
@@ -151,7 +158,10 @@ export const PanelRepartidor = () => {
       await cargarTodo();
       setVista('aceptados');
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al aceptar el pedido');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'Error al aceptar el pedido'
+      });
     } finally {
       setAceptandoId(null);
     }
@@ -165,7 +175,10 @@ export const PanelRepartidor = () => {
       const resultado = await actualizarDisponibilidadRepartidor(nuevoEstado);
       setDisponible(Boolean(resultado.disponible));
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo actualizar tu disponibilidad.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo actualizar tu disponibilidad.'
+      });
     } finally {
       setActualizandoDisponibilidad(false);
     }
@@ -187,7 +200,10 @@ export const PanelRepartidor = () => {
       await seleccionarVehiculoActivo(IDvehiculo);
       await cargarTodo();
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo seleccionar el vehículo.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo seleccionar el vehículo.'
+      });
     } finally {
       setCambiandoVehiculo(false);
     }
@@ -206,7 +222,10 @@ export const PanelRepartidor = () => {
 
     const vehiculoId = vehiculoEditando?.IDvehiculo || vehiculoEditando?.id;
     if (!vehiculoId) {
-      alert('Error: No se pudo identificar el vehículo a actualizar.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: 'No se pudo identificar el vehículo a actualizar.'
+      });
       return;
     }
 
@@ -214,33 +233,27 @@ export const PanelRepartidor = () => {
     try {
       const formData = new FormData();
 
-      if (formRenovacion.cedula instanceof File) {
-        formData.append('cedula', formRenovacion.cedula);
-      }
-      if (formRenovacion.seguro instanceof File) {
-        formData.append('seguro', formRenovacion.seguro);
-      }
-      if (formRenovacion.licencia instanceof File) {
-        formData.append('licencia', formRenovacion.licencia);
-      }
+      if (formRenovacion.cedula instanceof File) formData.append('cedula', formRenovacion.cedula);
+      if (formRenovacion.seguro instanceof File) formData.append('seguro', formRenovacion.seguro);
+      if (formRenovacion.licencia instanceof File) formData.append('licencia', formRenovacion.licencia);
 
-      if (formRenovacion.fecha_vencimiento_cedula) {
-        formData.append('fecha_vencimiento_cedula', formRenovacion.fecha_vencimiento_cedula);
-      }
-      if (formRenovacion.fecha_vencimiento_seguro) {
-        formData.append('fecha_vencimiento_seguro', formRenovacion.fecha_vencimiento_seguro);
-      }
-      if (formRenovacion.fecha_vencimiento_licencia) {
-        formData.append('fecha_vencimiento_licencia', formRenovacion.fecha_vencimiento_licencia);
-      }
+      if (formRenovacion.fecha_vencimiento_cedula) formData.append('fecha_vencimiento_cedula', formRenovacion.fecha_vencimiento_cedula);
+      if (formRenovacion.fecha_vencimiento_seguro) formData.append('fecha_vencimiento_seguro', formRenovacion.fecha_vencimiento_seguro);
+      if (formRenovacion.fecha_vencimiento_licencia) formData.append('fecha_vencimiento_licencia', formRenovacion.fecha_vencimiento_licencia);
 
       await actualizarVehiculoExistente(vehiculoId, formData);
-      alert('Solicitud enviada. El vehículo pasó a estado PENDIENTE a la espera de aprobación del administrador.');
+      setModalAviso({
+        titulo: '✅ Solicitud Enviada',
+        mensaje: 'Solicitud enviada. El vehículo pasó a estado PENDIENTE a la espera de aprobación del administrador.'
+      });
 
       setVehiculoEditando(null);
       await cargarTodo();
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo enviar la actualización.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo enviar la actualización.'
+      });
     } finally {
       setEnviandoSolicitud(false);
     }
@@ -253,7 +266,10 @@ export const PanelRepartidor = () => {
       const data = await getMiPerfilRepartidor();
       setPerfil(data);
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo cargar la información del perfil');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo cargar la información del perfil'
+      });
     } finally {
       setCargandoPerfil(false);
     }
@@ -309,18 +325,18 @@ export const PanelRepartidor = () => {
       });
 
       await cargarTodo();
-      alert('Solicitud enviada. Quedará pendiente de revisión administrativa.');
+      setModalAviso({
+        titulo: '✅ Solicitud Enviada',
+        mensaje: 'Solicitud enviada. Quedará pendiente de revisión administrativa.'
+      });
     } catch (err) {
-      alert(err.response?.data?.error || 'No se pudo enviar la solicitud.');
+      setModalAviso({
+        titulo: '⚠️ Error',
+        mensaje: err.response?.data?.error || 'No se pudo enviar la solicitud.'
+      });
     } finally {
       setEnviandoSolicitud(false);
     }
-  };
-
-  const estiloEstadoVehiculo = {
-    APROBADO: { color: '#087f5b', backgroundColor: '#e6fcf5' },
-    PENDIENTE: { color: '#946b00', backgroundColor: '#fff3bf' },
-    RECHAZADO: { color: '#c92a2a', backgroundColor: '#fff5f5' }
   };
 
   const evaluarDocumento = (fechaStr, urlDoc) => {
@@ -338,7 +354,6 @@ export const PanelRepartidor = () => {
     const partes = formatoIso.split('-');
 
     if (partes.length !== 3) {
-      console.error("Formato de fecha no reconocido:", fechaStr);
       return { vencido: true, texto: 'Fecha Inválida' };
     }
 
@@ -369,7 +384,6 @@ export const PanelRepartidor = () => {
     )
   );
 
-  // 🟡 Evaluación de vehículos NO ACTIVOS con documentación vencida
   const otrosVehiculosConDocVencida = vehiculos.filter((vehiculo) => {
     const esElActivo = vehiculoActivo && Number(vehiculo.IDvehiculo) === Number(vehiculoActivo.IDvehiculo);
     if (esElActivo) return false;
@@ -402,76 +416,37 @@ export const PanelRepartidor = () => {
     const estado = pedido.estado_orden || (esAceptado ? 'Asignado' : tipo === 'historial' ? 'Entregado' : 'Disponible');
 
     return (
-      <div
-        key={ordenId}
-        style={{
-          border: '1px solid #e0e0e0',
-          borderRadius: '12px',
-          padding: '1.2rem',
-          backgroundColor: '#fff',
-          boxShadow: '0 4px 10px rgba(0,0,0,0.04)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}
-      >
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1rem'
-            }}
-          >
-            <div>
-              <p style={{ margin: 0, color: '#6c757d', fontSize: '0.8rem' }}>Pedido</p>
-              <h3 style={{ margin: '0.2rem 0 0 0' }}>#{ordenId}</h3>
+      <div key={ordenId} className="repartidor-card">
+        <div className="repartidor-card__body">
+          <div className="repartidor-card__head">
+            <div className="repartidor-card__title">
+              <small>Pedido</small>
+              <h3>#{ordenId}</h3>
             </div>
 
-            <span
-              style={{
-                padding: '0.35rem 0.7rem',
-                borderRadius: '999px',
-                backgroundColor: tipo === 'historial' ? '#f1f3f5' : esAceptado ? '#e7f5ff' : '#e6fcf5',
-                color: tipo === 'historial' ? '#495057' : esAceptado ? '#1c7ed6' : '#099268',
-                fontSize: '0.8rem',
-                fontWeight: 'bold',
-                border: `1px solid ${tipo === 'historial' ? '#ced4da' : esAceptado ? '#a5d8ff' : '#90f2c8'}`
-              }}
-            >
+            <span className={`repartidor-badge ${tipo === 'historial' ? 'repartidor-badge--neutral' : esAceptado ? 'repartidor-badge--info' : 'repartidor-badge--success'}`}>
+              <span className="repartidor-dot"></span>
               {estado}
             </span>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              rowGap: '0.45rem',
-              columnGap: '1rem',
-              marginBottom: '1rem'
-            }}
-          >
+          <div className="repartidor-card__money">
             <span>Subtotal</span>
             <strong>$ {Number(pedido.subtotal || 0).toFixed(2)}</strong>
 
             <span>Envío</span>
             <strong>$ {Number(pedido.costo_envio || 0).toFixed(2)}</strong>
 
-            <span>Total</span>
-            <strong style={{ color: '#1c7ed6' }}>
+            <span className="is-total">Total</span>
+            <strong className="is-total">
               $ {Number(pedido.total || 0).toFixed(2)}
             </strong>
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <strong style={{ display: 'block', marginBottom: '0.5rem' }}>
-              Productos
-            </strong>
-
+          <div className="repartidor-card__products">
+            <strong>Productos</strong>
             {pedido.productos && pedido.productos.length > 0 ? (
-              <ul style={{ margin: 0, paddingLeft: '1.1rem', listStyleType: 'disc' }}>
+              <ul>
                 {pedido.productos.map((producto, index) => {
                   const estadoDetalle = Number(
                     producto.IDestado_detalle ??
@@ -480,9 +455,7 @@ export const PanelRepartidor = () => {
                     producto.id_estado ??
                     0
                   );
-
                   const textoEstado = (producto.estado_detalle || producto.estado_item || '').toLowerCase();
-
                   const esCancelado =
                     estadoDetalle === 6 ||
                     textoEstado === 'cancelado' ||
@@ -493,161 +466,109 @@ export const PanelRepartidor = () => {
                   return (
                     <li
                       key={`${ordenId}-${producto.IDdetalle || index}`}
-                      style={{
-                        marginBottom: '0.35rem',
-                        color: esCancelado ? '#e03131' : '#495057',
-                        textDecoration: esCancelado ? 'line-through' : 'none',
-                        fontWeight: '500'
-                      }}
+                      className={esCancelado ? 'is-cancelled' : ''}
                     >
-                      <span>
-                        {producto.cantidad}x {producto.producto || producto.nombre}
-                      </span>
-                      {esCancelado && (
-                        <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem', fontStyle: 'italic' }}>
-                          (Cancelado)
-                        </span>
-                      )}
+                      <span>{producto.cantidad}x {producto.producto || producto.nombre}</span>
+                      {esCancelado && <em>(Cancelado)</em>}
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <p style={{ margin: 0, color: '#868e96', fontSize: '0.85rem' }}>
+              <p className="repartidor-muted" style={{ fontSize: '0.85rem' }}>
                 Sin productos asociados al pedido.
               </p>
             )}
           </div>
         </div>
 
-        {tipo === 'disponible' && (
-          <button
-            onClick={() => handleAceptarPedido(ordenId)}
-            disabled={aceptandoId === ordenId || docActivaVencida || !vehiculoActivo}
-            style={{
-              width: '100%',
-              padding: '0.8rem 1rem',
-              border: 'none',
-              borderRadius: '8px',
-              backgroundColor: (aceptandoId === ordenId || docActivaVencida || !vehiculoActivo) ? '#868e96' : '#2b8a3e',
-              color: '#fff',
-              fontWeight: 'bold',
-              cursor: (aceptandoId === ordenId || docActivaVencida || !vehiculoActivo) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {!vehiculoActivo
-              ? '🚫 Sin vehículo activo'
-              : docActivaVencida
-                ? '🚫 Doc. Vencida en vehículo actual'
-                : aceptandoId === ordenId
-                  ? '⏳ Aceptando...'
-                  : 'Aceptar pedido'}
-          </button>
-        )}
+        <div className="repartidor-card__actions">
+          {tipo === 'disponible' && (
+            <button
+              onClick={() => handleAceptarPedido(ordenId)}
+              disabled={aceptandoId === ordenId || docActivaVencida || !vehiculoActivo}
+              className="repartidor-btn repartidor-btn--success repartidor-btn--block"
+            >
+              {!vehiculoActivo
+                ? '🚫 Sin vehículo activo'
+                : docActivaVencida
+                  ? '🚫 Doc. Vencida en vehículo actual'
+                  : aceptandoId === ordenId
+                    ? '⏳ Aceptando...'
+                    : 'Aceptar pedido'}
+            </button>
+          )}
 
-        {mostrarDetalle && (
-          <button
-            onClick={() => {
-              setCargandoAccionBtn(`detalle-${ordenId}`);
-              navigate(`/repartidor/orden/${ordenId}`);
-            }}
-            disabled={cargandoAccionBtn === `detalle-${ordenId}`}
-            style={{
-              width: '100%',
-              padding: '0.8rem 1rem',
-              border: 'none',
-              borderRadius: '8px',
-              backgroundColor: cargandoAccionBtn === `detalle-${ordenId}` ? '#868e96' : '#1c7ed6',
-              color: '#fff',
-              fontWeight: 'bold',
-              cursor: cargandoAccionBtn === `detalle-${ordenId}` ? 'not-allowed' : 'pointer',
-              marginTop: tipo === 'disponible' ? '0.8rem' : '0'
-            }}
-          >
-            {cargandoAccionBtn === `detalle-${ordenId}` ? '⏳ Cargando detalle...' : '📋 Ver detalle del pedido'}
-          </button>
-        )}
+          {mostrarDetalle && (
+            <button
+              onClick={() => {
+                setCargandoAccionBtn(`detalle-${ordenId}`);
+                navigate(`/repartidor/orden/${ordenId}`);
+              }}
+              disabled={cargandoAccionBtn === `detalle-${ordenId}`}
+              className="repartidor-btn repartidor-btn--primary repartidor-btn--block"
+            >
+              {cargandoAccionBtn === `detalle-${ordenId}` ? '⏳ Cargando detalle...' : '📋 Ver detalle del pedido'}
+            </button>
+          )}
+        </div>
       </div>
     );
   };
 
-  const historialVisible = mostrarTodoHistorial
-    ? historialPedidos
-    : historialPedidos.slice(0, 3);
+  const historialVisible = mostrarTodoHistorial ? historialPedidos : historialPedidos.slice(0, 3);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
+    <div className="repartidor-container">
 
-      {/* 🔴 Alerta cuando el vehículo ACTIVO tiene documentación vencida */}
       {docActivaVencida && (
-        <div style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', color: '#c92a2a', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>
-          ⚠️ Posees documentación vencida en tu vehículo activo. No podrás ponerte en línea ni aceptar pedidos hasta actualizar tus documentos en <strong>"Mi Vehículo"</strong>.
+        <div className="repartidor-alert repartidor-alert--danger">
+          <span>⚠️</span>
+          <div>
+            Posees documentación vencida en tu vehículo activo. No podrás ponerte en línea ni aceptar pedidos hasta actualizar tus documentos en <strong>"Mi Vehículo"</strong>.
+          </div>
         </div>
       )}
 
-      {/* 🟡 Alerta cuando hay documentación vencida en vehículos SECUNDARIOS / NO ACTIVOS */}
       {tieneOtrosVehiculosVencidos && !docActivaVencida && (
-        <div style={{ padding: '1rem', backgroundColor: '#fff9db', border: '1px solid #ffe066', color: '#856404', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>
-          ⚠️ Tienes documentación vencida en uno o más vehículos de tu lista (no activo/s). Puedes seguir trabajando con tu vehículo actual, pero recuerda actualizar los documentos vencidos en <strong>"Mi Vehículo"</strong> antes de cambiar de vehículo.
+        <div className="repartidor-alert repartidor-alert--warning">
+          <span>⚠️</span>
+          <div>
+            Tienes documentación vencida en uno o más vehículos de tu lista. Puedes seguir trabajando, pero recuerda actualizar los documentos en <strong>"Mi Vehículo"</strong>.
+          </div>
         </div>
       )}
 
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap',
-          gap: '10px'
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0 }}>Panel de Reparto 🚴</h1>
-          <p style={{ margin: '0.3rem 0 0 0', color: '#666' }}>
-            Pedidos disponibles y en curso
-          </p>
+      <header className="repartidor-header">
+        <div className="repartidor-header__top">
+          <div className="repartidor-brand">
+            <div className="repartidor-brand__mark">🚴</div>
+            <div>
+              <h1>Panel de Reparto</h1>
+              <p>Pedidos disponibles y en curso</p>
+            </div>
+          </div>
+
+          <div className="repartidor-header__actions">
+            <NotificationMenu />
+            <LogoutButton />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* 🔔 COMPONENTE DE NOTIFICACIONES INCORPORADO */}
-          <NotificationMenu />
-          
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.55rem',
-              padding: '0.55rem 0.8rem',
-              borderRadius: '999px',
-              backgroundColor: disponible ? '#e6fcf5' : '#f1f3f5',
-              color: disponible ? '#087f5b' : '#495057',
-              border: `1px solid ${disponible ? '#96f2d7' : '#ced4da'}`,
-              fontWeight: 'bold',
-              cursor: (actualizandoDisponibilidad || docActivaVencida) ? 'not-allowed' : 'pointer'
-            }}
-          >
+        <div className="repartidor-toolbar">
+          <label className={`repartidor-switch ${disponible ? 'repartidor-switch--on' : ''} ${docActivaVencida ? 'is-disabled' : ''}`}>
             <input
               type="checkbox"
               checked={disponible}
               onChange={handleCambiarDisponibilidad}
               disabled={actualizandoDisponibilidad || docActivaVencida}
-              style={{ width: '18px', height: '18px', accentColor: '#2b8a3e' }}
             />
-            {actualizandoDisponibilidad ? 'Cambiando...' : disponible ? 'En línea' : 'Offline'}
+            <span>{actualizandoDisponibilidad ? 'Cambiando...' : disponible ? 'En línea' : 'Offline'}</span>
           </label>
 
           <button
             onClick={() => setMostrarVehiculos(true)}
-            style={{
-              padding: '0.6rem 1rem',
-              backgroundColor: docActivaVencida ? '#ffe3e3' : (tieneOtrosVehiculosVencidos ? '#fff9db' : '#fff3bf'),
-              border: `1px solid ${docActivaVencida ? '#ffa8a8' : (tieneOtrosVehiculosVencidos ? '#ffe066' : '#ffe066')}`,
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              color: docActivaVencida ? '#c92a2a' : (tieneOtrosVehiculosVencidos ? '#856404' : '#795000')
-            }}
+            className="repartidor-btn repartidor-btn--outline repartidor-btn--sm"
           >
             🚘 Mi Vehículo {docActivaVencida ? '❌' : (tieneOtrosVehiculosVencidos ? '⚠️' : '')}
           </button>
@@ -655,15 +576,7 @@ export const PanelRepartidor = () => {
           <button
             onClick={handleAbrirPerfil}
             disabled={cargandoAccionBtn === 'perfil'}
-            style={{
-              padding: '0.6rem 1rem',
-              backgroundColor: cargandoAccionBtn === 'perfil' ? '#ccc' : '#e7f5ff',
-              border: '1px solid #a5d8ff',
-              borderRadius: '6px',
-              cursor: cargandoAccionBtn === 'perfil' ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              color: '#1864ab'
-            }}
+            className="repartidor-btn repartidor-btn--outline repartidor-btn--sm"
           >
             {cargandoPerfil ? '⏳ Abriendo...' : '👤 Mi Perfil'}
           </button>
@@ -674,173 +587,134 @@ export const PanelRepartidor = () => {
               navigate('/repartidor/tablero');
             }}
             disabled={cargandoAccionBtn === 'estadisticas'}
-            style={{
-              padding: '0.6rem 1rem',
-              backgroundColor: cargandoAccionBtn === 'estadisticas' ? '#ccc' : '#e9ecef',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: cargandoAccionBtn === 'estadisticas' ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              color: '#333'
-            }}
+            className="repartidor-btn repartidor-btn--ghost repartidor-btn--sm"
           >
             {cargandoAccionBtn === 'estadisticas' ? '⏳ Cargando...' : '📊 Ver Estadísticas'}
           </button>
-
-          <LogoutButton />
         </div>
       </header>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem'
-        }}
-      >
-        <div style={{ padding: '1rem', backgroundColor: '#e6fcf5', borderRadius: '10px', border: '1px solid #96f2d7' }}>
-          <span style={{ fontSize: '0.85rem', color: '#087f5b', fontWeight: 'bold' }}>
-            💰 Ganancias por Envíos (Hoy)
-          </span>
-          <h2 style={{ margin: '0.3rem 0 0 0', color: '#087f5b' }}>
-            $ {Number(resumenGanancias.gananciasEnvioHoy || 0).toFixed(2)}
-          </h2>
+      <div className="repartidor-kpi-grid">
+        <div className="repartidor-kpi repartidor-kpi--success">
+          <div className="repartidor-kpi__top">
+            <div className="repartidor-kpi__icon">💰</div>
+            <span className="repartidor-kpi__label">Ganancias por Envíos (Hoy)</span>
+          </div>
+          <div className="repartidor-kpi__value">$ {Number(resumenGanancias.gananciasEnvioHoy || 0).toFixed(2)}</div>
         </div>
 
-        <div style={{ padding: '1rem', backgroundColor: '#fff9db', borderRadius: '10px', border: '1px solid #ffe066' }}>
-          <span style={{ fontSize: '0.85rem', color: '#f59f00', fontWeight: 'bold' }}>
-            💵 Efectivo Cobrado (Bruto)
-          </span>
-          <h2 style={{ margin: '0.3rem 0 0 0', color: '#f59f00' }}>
-            $ {Number(resumenGanancias.efectivoRecaudadoHoy || 0).toFixed(2)}
-          </h2>
+        <div className="repartidor-kpi repartidor-kpi--warning">
+          <div className="repartidor-kpi__top">
+            <div className="repartidor-kpi__icon">💵</div>
+            <span className="repartidor-kpi__label">Efectivo Cobrado (Bruto)</span>
+          </div>
+          <div className="repartidor-kpi__value">$ {Number(resumenGanancias.efectivoRecaudadoHoy || 0).toFixed(2)}</div>
         </div>
 
-        <div style={{ padding: '1rem', backgroundColor: '#fff0f6', borderRadius: '10px', border: '1px solid #ffdeeb' }}>
-          <span style={{ fontSize: '0.85rem', color: '#d6336c', fontWeight: 'bold' }}>
-            🏦 Efectivo a Rendir (Nivel Central/Local)
-          </span>
-          <h2 style={{ margin: '0.3rem 0 0 0', color: '#d6336c' }}>
-            $ {Number(resumenGanancias.efectivoARendirHoy || 0).toFixed(2)}
-          </h2>
+        <div className="repartidor-kpi repartidor-kpi--danger">
+          <div className="repartidor-kpi__top">
+            <div className="repartidor-kpi__icon">🏦</div>
+            <span className="repartidor-kpi__label">Efectivo a Rendir</span>
+          </div>
+          <div className="repartidor-kpi__value">$ {Number(resumenGanancias.efectivoARendirHoy || 0).toFixed(2)}</div>
         </div>
 
-        <div style={{ padding: '1rem', backgroundColor: '#e7f5ff', borderRadius: '10px', border: '1px solid #a5d8ff' }}>
-          <span style={{ fontSize: '0.85rem', color: '#1c7ed6', fontWeight: 'bold' }}>
-            📦 Entregas Realizadas
-          </span>
-          <h2 style={{ margin: '0.3rem 0 0 0', color: '#1c7ed6' }}>
-            {resumenGanancias.totalPedidosHoy || 0}
-          </h2>
+        <div className="repartidor-kpi repartidor-kpi--info">
+          <div className="repartidor-kpi__top">
+            <div className="repartidor-kpi__icon">📦</div>
+            <span className="repartidor-kpi__label">Entregas Realizadas</span>
+          </div>
+          <div className="repartidor-kpi__value">{resumenGanancias.totalPedidosHoy || 0}</div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+      <div className="repartidor-tabs">
         <button
           onClick={() => setVista('disponibles')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            backgroundColor: vista === 'disponibles' ? '#2b8a3e' : '#e9ecef',
-            color: vista === 'disponibles' ? '#fff' : '#333',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={`repartidor-tab-btn ${vista === 'disponibles' ? 'active' : ''}`}
         >
           🚴 Pedidos disponibles
+          <span className="repartidor-tab-count">{pedidosDisponibles.length}</span>
         </button>
 
         <button
           onClick={() => setVista('aceptados')}
-          style={{
-            padding: '0.8rem 1.2rem',
-            border: 'none',
-            borderRadius: '8px',
-            backgroundColor: vista === 'aceptados' ? '#1c7ed6' : '#e9ecef',
-            color: vista === 'aceptados' ? '#fff' : '#333',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={`repartidor-tab-btn ${vista === 'aceptados' ? 'active' : ''}`}
         >
           📦 Mis pedidos en curso
+          <span className="repartidor-tab-count">{misPedidos.length}</span>
         </button>
       </div>
 
       {loading ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#555' }}>
-          ⏳ Cargando pedidos...
+        <div className="repartidor-state">
+          <div className="repartidor-spinner"></div>
+          <p>Cargando pedidos...</p>
         </div>
       ) : error ? (
-        <div style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', color: '#e03131', borderRadius: '8px' }}>
-          {error}
-        </div>
+        <div className="repartidor-alert repartidor-alert--danger">{error}</div>
       ) : vista === 'disponibles' ? (
         <section>
           {pedidosDisponibles.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: '10px', color: '#666' }}>
-              No hay pedidos disponibles para repartir en este momento.
+            <div className="repartidor-state">
+              <p>No hay pedidos disponibles para repartir en este momento.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
+            <div className="repartidor-grid-cards">
               {pedidosDisponibles.map((pedido) => renderCardPedido(pedido, 'disponible', false))}
             </div>
           )}
         </section>
       ) : (
-        <section>
-          <h3>🚴 Pedidos actuales</h3>
+        <section className="repartidor-stack">
+          <div>
+            <h3 className="repartidor-section-title">🚴 Pedidos actuales</h3>
 
-          {misPedidos.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '10px', color: '#666' }}>
-              No tenés pedidos en curso.
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
-              {misPedidos.map((pedido) => renderCardPedido(pedido, 'aceptado', true))}
-            </div>
-          )}
-
-          <h3 style={{ marginTop: '2rem' }}>📜 Historial de entregas</h3>
-
-          {historialPedidos.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '10px', color: '#666' }}>
-              Todavía no tenés pedidos entregados.
-            </div>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '1.25rem' }}>
-                {historialVisible.map((pedido) => renderCardPedido(pedido, 'historial', true))}
+            {misPedidos.length === 0 ? (
+              <div className="repartidor-state">
+                <p>No tenés pedidos en curso.</p>
               </div>
+            ) : (
+              <div className="repartidor-grid-cards">
+                {misPedidos.map((pedido) => renderCardPedido(pedido, 'aceptado', true))}
+              </div>
+            )}
+          </div>
 
-              {historialPedidos.length > 3 && (
-                <button
-                  onClick={() => setMostrarTodoHistorial((prev) => !prev)}
-                  style={{
-                    marginTop: '1rem',
-                    padding: '0.7rem 1.2rem',
-                    backgroundColor: '#e9ecef',
-                    border: '1px solid #ced4da',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {mostrarTodoHistorial ? '⬆️ Ver menos' : '📜 Ver más entregas'}
-                </button>
-              )}
-            </>
-          )}
+          <div style={{ marginTop: '1rem' }}>
+            <h3 className="repartidor-section-title">📜 Historial de entregas</h3>
+
+            {historialPedidos.length === 0 ? (
+              <div className="repartidor-state">
+                <p>Todavía no tenés pedidos entregados.</p>
+              </div>
+            ) : (
+              <div className="repartidor-stack">
+                <div className="repartidor-grid-cards">
+                  {historialVisible.map((pedido) => renderCardPedido(pedido, 'historial', true))}
+                </div>
+
+                {historialPedidos.length > 3 && (
+                  <button
+                    onClick={() => setMostrarTodoHistorial((prev) => !prev)}
+                    className="repartidor-btn repartidor-btn--outline"
+                    style={{ width: 'fit-content' }}
+                  >
+                    {mostrarTodoHistorial ? '⬆️ Ver menos' : '📜 Ver más entregas'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
       {/* MODAL VEHÍCULOS */}
       {mostrarVehiculos && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
-          <div style={{ width: '100%', maxWidth: '760px', maxHeight: '92vh', overflowY: 'auto', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 style={{ margin: 0 }}>🚘 Mis vehículos</h2>
+        <div className="repartidor-modal-overlay">
+          <div className="repartidor-modal-content">
+            <div className="repartidor-modal-head">
+              <h2>🚘 Mis vehículos</h2>
               <button
                 type="button"
                 onClick={() => setMostrarVehiculos(false)}
@@ -850,29 +724,26 @@ export const PanelRepartidor = () => {
               </button>
             </div>
 
-            <section style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', marginBottom: '1rem' }}>
+            <section className="repartidor-subbox">
               <h3 style={{ marginTop: 0 }}>Vehículo actual</h3>
               {vehiculoActivo ? (
                 <p>
                   <strong>{vehiculoActivo.tipo_vehiculo}</strong>{' '}
                   {vehiculoActivo.marca} {vehiculoActivo.modelo} {vehiculoActivo.patente ? `(${vehiculoActivo.patente})` : ''}{' '}
-                  <span style={{ color: docActivaVencida ? '#e03131' : '#087f5b', fontWeight: 'bold' }}>
+                  <span style={{ color: docActivaVencida ? 'var(--sd-rep-error)' : 'var(--sd-rep-success)', fontWeight: 'bold' }}>
                     {docActivaVencida ? '❌ Documentación Vencida' : '✓ Verificado'}
                   </span>
                 </p>
               ) : (
-                <p style={{ color: '#666' }}>No tenés un vehículo activo seleccionado.</p>
+                <p className="repartidor-muted">No tenés un vehículo activo seleccionado.</p>
               )}
-              <label>
-                {cambiandoVehiculo ? '⏳ Cambiando vehículo...' : 'Vehículo para trabajar:'}{' '}
+              <div className="repartidor-field" style={{ marginTop: '1rem' }}>
+                <span>{cambiandoVehiculo ? '⏳ Cambiando vehículo...' : 'Vehículo para trabajar:'}</span>
                 <select
                   value={vehiculoActivo?.IDvehiculo || ''}
                   onChange={handleSeleccionarVehiculo}
                   disabled={cambiandoVehiculo}
-                  style={{
-                    backgroundColor: cambiandoVehiculo ? '#e9ecef' : '#fff',
-                    cursor: cambiandoVehiculo ? 'not-allowed' : 'pointer'
-                  }}
+                  className="repartidor-select"
                 >
                   <option value="">
                     {cambiandoVehiculo ? 'Cargando cambio...' : 'Seleccionar vehículo aprobado'}
@@ -883,84 +754,36 @@ export const PanelRepartidor = () => {
                     </option>
                   ))}
                 </select>
-              </label>
+              </div>
             </section>
 
             <section style={{ marginBottom: '1.2rem' }}>
-              <h3>Mis vehículos registrados</h3>
-              <div style={{ display: 'grid', gap: '0.7rem' }}>
+              <h3 className="repartidor-section-title" style={{ fontSize: '1rem' }}>Mis vehículos registrados</h3>
+              <div className="repartidor-vehicle-list">
                 {vehiculos.length === 0 ? (
-                  <p style={{ color: '#666' }}>Todavía no tenés vehículos registrados.</p>
+                  <p className="repartidor-muted">Todavía no tenés vehículos registrados.</p>
                 ) : (
                   vehiculos.map((vehiculo) => {
                     const estaActivo = Number(vehiculo.activo) === 1;
-
                     const esRechazadoTotal = vehiculo.estado === 'RECHAZADO';
                     const esRechazadoDoc = vehiculo.estado === 'RECHAZADO_DOCUMENTACION';
                     const esBajaReal = vehiculo.estado === 'BAJA';
                     const esPendienteGeneral = String(vehiculo.estado).includes('PENDIENTE');
 
-                    const esBaja = esBajaReal || (!estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral);
+                    const lic = evaluarDocumento(vehiculo.fecha_vencimiento_licencia, vehiculo.licencia_url || vehiculo.licencia);
+                    const seg = evaluarDocumento(vehiculo.fecha_vencimiento_seguro, vehiculo.seguro_url || vehiculo.seguro);
+                    const ced = evaluarDocumento(vehiculo.fecha_vencimiento_cedula, vehiculo.cedula_url || vehiculo.cedula);
 
-                    const estilo = esBaja || (!esPendienteGeneral && (esRechazadoDoc || esRechazadoTotal))
-                      ? { color: '#c92a2a', backgroundColor: '#fff5f5' }
-                      : (esPendienteGeneral
-                        ? { color: '#f59f00', backgroundColor: '#fff9db' }
-                        : (estaActivo && !esBaja
-                          ? (estiloEstadoVehiculo[vehiculo.estado] || estiloEstadoVehiculo.PENDIENTE)
-                          : {
-                            color: '#c92a2a',
-                            backgroundColor: '#fff5f5'
-                          }));
-
-                    const lic = evaluarDocumento(
-                      vehiculo.fecha_vencimiento_licencia,
-                      vehiculo.licencia_url || vehiculo.licencia
-                    );
-
-                    const seg = evaluarDocumento(
-                      vehiculo.fecha_vencimiento_seguro,
-                      vehiculo.seguro_url || vehiculo.seguro
-                    );
-
-                    const ced = evaluarDocumento(
-                      vehiculo.fecha_vencimiento_cedula,
-                      vehiculo.cedula_url || vehiculo.cedula
-                    );
-
-                    const tieneVencidos =
-                      estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral &&
-                      (lic.vencido || seg.vencido || ced.vencido);
+                    const tieneVencidos = estaActivo && !esRechazadoTotal && !esRechazadoDoc && !esPendienteGeneral && (lic.vencido || seg.vencido || ced.vencido);
 
                     return (
                       <div
                         key={vehiculo.IDvehiculo}
-                        style={{
-                          padding: '0.8rem',
-                          borderRadius: '8px',
-                          backgroundColor: estilo.backgroundColor,
-                          border: `1px solid ${esBaja
-                            ? '#ffc9c9'
-                            : tieneVencidos || esRechazadoDoc || esRechazadoTotal
-                              ? '#e03131'
-                              : estilo.color
-                            }`,
-                          opacity: (estaActivo && !esRechazadoTotal) ? 1 : 0.75
-                        }}
+                        className={`repartidor-vehicle ${(!estaActivo || esRechazadoTotal) ? 'repartidor-vehicle--off' : ''}`}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '1rem'
-                          }}
-                        >
+                        <div className="repartidor-vehicle__head">
                           <strong>
-                            {vehiculo.tipo_vehiculo} -{' '}
-                            {vehiculo.marca || 'Sin marca'}{' '}
-                            {vehiculo.modelo || ''}
-
+                            {vehiculo.tipo_vehiculo} - {vehiculo.marca || 'Sin marca'} {vehiculo.modelo || ''}
                             {esBajaReal && ' (DADO DE BAJA)'}
                             {vehiculo.estado === 'PENDIENTE_BAJA' && ' (PENDIENTE DE BAJA)'}
                             {esRechazadoTotal && ' (RECHAZADO)'}
@@ -969,187 +792,61 @@ export const PanelRepartidor = () => {
                           {estaActivo && vehiculo.estado === 'APROBADO' && (
                             <button
                               type="button"
-                              onClick={async () => {
-                                const confirmar = window.confirm(
-                                  '¿Estás seguro de solicitar la baja de este vehículo? La solicitud será enviada al administrador para su revisión.'
-                                );
-
-                                if (!confirmar) return;
-
-                                setCargandoAccionBtn(`baja-${vehiculo.IDvehiculo}`);
-                                try {
-                                  await solicitarBajaVehiculo(vehiculo.IDvehiculo);
-                                  await cargarTodo();
-                                  alert(
-                                    '✅ Solicitud de baja enviada correctamente. Quedará pendiente de aprobación por el administrador.'
-                                  );
-                                } catch (err) {
-                                  alert(
-                                    err.response?.data?.error ||
-                                    'No se pudo enviar la solicitud de baja del vehículo.'
-                                  );
-                                } finally {
-                                  setCargandoAccionBtn(null);
-                                }
+                              onClick={() => {
+                                setModalConfirmacion({
+                                  titulo: '⚠️ Solicitar Baja',
+                                  mensaje: '¿Estás seguro de solicitar la baja de este vehículo?',
+                                  onConfirm: async () => {
+                                    setModalConfirmacion(null);
+                                    setCargandoAccionBtn(`baja-${vehiculo.IDvehiculo}`);
+                                    try {
+                                      await solicitarBajaVehiculo(vehiculo.IDvehiculo);
+                                      await cargarTodo();
+                                      setModalAviso({ titulo: '✅ Solicitud Enviada', mensaje: 'Solicitud de baja enviada correctamente.' });
+                                    } catch (err) {
+                                      setModalAviso({ titulo: '⚠️ Error', mensaje: err.response?.data?.error || 'No se pudo enviar la solicitud.' });
+                                    } finally {
+                                      setCargandoAccionBtn(null);
+                                    }
+                                  }
+                                });
                               }}
                               disabled={cargandoAccionBtn === `baja-${vehiculo.IDvehiculo}`}
-                              style={{
-                                padding: '0.3rem 0.6rem',
-                                backgroundColor: cargandoAccionBtn === `baja-${vehiculo.IDvehiculo}` ? '#ccc' : '#fff5f5',
-                                color: '#c92a2a',
-                                border: '1px solid #ffc9c9',
-                                borderRadius: '4px',
-                                fontSize: '0.8rem',
-                                cursor: cargandoAccionBtn === `baja-${vehiculo.IDvehiculo}` ? 'not-allowed' : 'pointer'
-                              }}
+                              className="repartidor-btn repartidor-btn--danger-soft repartidor-btn--sm"
                             >
-                              {cargandoAccionBtn === `baja-${vehiculo.IDvehiculo}` ? '⏳ Solicitando baja...' : '🗑️ Solicitar baja'}
+                              {cargandoAccionBtn === `baja-${vehiculo.IDvehiculo}` ? '⏳ Solicitando...' : '🗑️ Solicitar baja'}
                             </button>
                           )}
                         </div>
 
-                        <div
-                          style={{
-                            color: estilo.color,
-                            fontWeight: 'bold',
-                            fontSize: '0.85rem',
-                            marginTop: '0.3rem'
-                          }}
-                        >
-                          {esRechazadoTotal
-                            ? 'RECHAZADO POR EL ADMINISTRADOR'
-                            : (esRechazadoDoc
-                              ? 'RECHAZADO DE DOCUMENTACIÓN'
-                              : (esBajaReal ? 'DADO DE BAJA' : (vehiculo.estado === 'PENDIENTE_BAJA' ? 'PENDIENTE DE BAJA' : vehiculo.estado)))}
+                        <div className="repartidor-vehicle__meta">
+                          <span>Estado: <strong>{vehiculo.estado}</strong></span>
+                          {vehiculo.patente && <span>Patente: {vehiculo.patente}</span>}
                         </div>
 
-                        {vehiculo.patente && (
-                          <div>Patente: {vehiculo.patente}</div>
-                        )}
-
-                        {estaActivo &&
-                          Number(vehiculo.IDtipo_vehiculo) !== 2 && (
-                            <div
-                              style={{
-                                fontSize: '0.8rem',
-                                marginTop: '0.5rem',
-                                display: 'grid',
-                                gap: '0.2rem'
-                              }}
-                            >
-                              <span
-                                style={{
-                                  color: lic.vencido
-                                    ? '#e03131'
-                                    : '#2b8a3e',
-                                  fontWeight: lic.vencido
-                                    ? 'bold'
-                                    : 'normal'
-                                }}
-                              >
-                                🪪 Licencia: {lic.texto}{' '}
-                                {lic.vencido && '❌ (VENCIDA)'}
-                              </span>
-
-                              <span
-                                style={{
-                                  color: seg.vencido
-                                    ? '#e03131'
-                                    : '#2b8a3e',
-                                  fontWeight: seg.vencido
-                                    ? 'bold'
-                                    : 'normal'
-                                }}
-                              >
-                                🛡️ Seguro: {seg.texto}{' '}
-                                {seg.vencido && '❌ (VENCIDO)'}
-                              </span>
-
-                              <span
-                                style={{
-                                  color: ced.vencido
-                                    ? '#e03131'
-                                    : '#2b8a3e',
-                                  fontWeight: ced.vencido
-                                    ? 'bold'
-                                    : 'normal'
-                                }}
-                              >
-                                📄 Cédula: {ced.texto}{' '}
-                                {ced.vencido && '❌ (VENCIDA)'}
-                              </span>
+                        {estaActivo && Number(vehiculo.IDtipo_vehiculo) !== 2 && (
+                          <div className="repartidor-doc-list">
+                            <div className={`repartidor-doc-row ${lic.vencido ? 'is-expired' : ''}`}>
+                              🪪 Licencia: {lic.texto} {lic.vencido && '❌ (VENCIDA)'}
                             </div>
-                          )}
-
-                        {esRechazadoDoc && vehiculo.motivo_rechazo_documentacion && (
-                          <div
-                            style={{
-                              color: '#c92a2a',
-                              backgroundColor: '#ffe3e3',
-                              padding: '0.5rem',
-                              borderRadius: '6px',
-                              marginTop: '0.4rem',
-                              fontSize: '0.85rem',
-                              fontWeight: 'bold',
-                              border: '1px solid #ffc9c9'
-                            }}
-                          >
-                            ❌ Documentación rechazada: {vehiculo.motivo_rechazo_documentacion}
-                          </div>
-                        )}
-
-                        {esRechazadoTotal && vehiculo.motivo_rechazo && (
-                          <div
-                            style={{
-                              color: '#c92a2a',
-                              backgroundColor: '#ffe3e3',
-                              padding: '0.5rem',
-                              borderRadius: '6px',
-                              marginTop: '0.4rem',
-                              fontSize: '0.85rem',
-                              fontWeight: 'bold',
-                              border: '1px solid #ffc9c9'
-                            }}
-                          >
-                            🚫 Motivo de rechazo del vehículo: {vehiculo.motivo_rechazo}
+                            <div className={`repartidor-doc-row ${seg.vencido ? 'is-expired' : ''}`}>
+                              🛡️ Seguro: {seg.texto} {seg.vencido && '❌ (VENCIDO)'}
+                            </div>
+                            <div className={`repartidor-doc-row ${ced.vencido ? 'is-expired' : ''}`}>
+                              📄 Cédula: {ced.texto} {ced.vencido && '❌ (VENCIDA)'}
+                            </div>
                           </div>
                         )}
 
                         {estaActivo && ((vehiculo.estado === 'APROBADO' && tieneVencidos) || esRechazadoDoc) && (
                           <button
                             type="button"
-                            onClick={() =>
-                              setVehiculoEditando({
-                                ...vehiculo,
-                                vencidos: {
-                                  licencia: lic.vencido,
-                                  seguro: seg.vencido,
-                                  cedula: ced.vencido
-                                }
-                              })
-                            }
-                            style={{
-                              marginTop: '0.6rem',
-                              padding: '0.4rem 0.8rem',
-                              backgroundColor: '#fff5f5',
-                              color: '#c92a2a',
-                              border: '1px solid #ffc9c9',
-                              borderRadius: '6px',
-                              fontSize: '0.85rem',
-                              fontWeight: 'bold',
-                              cursor: 'pointer'
-                            }}
+                            onClick={() => setVehiculoEditando({ ...vehiculo, vencidos: { licencia: lic.vencido, seguro: seg.vencido, cedula: ced.vencido } })}
+                            className="repartidor-btn repartidor-btn--danger-soft repartidor-btn--sm"
+                            style={{ marginTop: '0.4rem' }}
                           >
-                            {esRechazadoDoc
-                              ? '🔄 Actualizar documentación rechazada'
-                              : '🔄 Actualizar documentación vencida'}
+                            🔄 Actualizar documentación
                           </button>
-                        )}
-
-                        {estaActivo && esRechazadoTotal && (
-                          <div style={{ color: '#c92a2a', fontSize: '0.85rem', marginTop: '0.4rem', fontStyle: 'italic' }}>
-                            🚫 Vehículo rechazado por el administrador. No se puede utilizar.
-                          </div>
                         )}
                       </div>
                     );
@@ -1159,88 +856,55 @@ export const PanelRepartidor = () => {
             </section>
 
             {vehiculoEditando && (
-              <section style={{ padding: '1rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '8px', marginBottom: '1.2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ margin: 0, color: '#c92a2a' }}>
-                    Renovar Documentación Vencida: {vehiculoEditando.tipo_vehiculo} ({vehiculoEditando.patente})
+              <section className="repartidor-subbox repartidor-subbox--danger">
+                <div className="repartidor-subbox__head">
+                  <h4 className="repartidor-subbox__title">
+                    Renovar Documentación Vencida: {vehiculoEditando.tipo_vehiculo}
                   </h4>
                   <button type="button" onClick={() => setVehiculoEditando(null)}>✕</button>
                 </div>
 
-                <form onSubmit={handleActualizarDocumentos} style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
-
+                <form onSubmit={handleActualizarDocumentos} className="repartidor-form">
                   {vehiculoEditando.vencidos?.cedula && (
-                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                      📄 Cédula verde / azul (Vencida - Subir Nuevo Archivo y Fecha)
+                    <label className="repartidor-field repartidor-file">
+                      <span>📄 Cédula verde / azul (Nuevo Archivo y Fecha)</span>
                       <input name="cedula" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_cedula"
-                        value={formRenovacion.fecha_vencimiento_cedula}
-                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_cedula: e.target.value })}
-                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        required
-                      />
+                      <input type="date" name="fecha_vencimiento_cedula" value={formRenovacion.fecha_vencimiento_cedula} onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_cedula: e.target.value })} className="repartidor-input" required />
                     </label>
                   )}
 
                   {vehiculoEditando.vencidos?.seguro && (
-                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                      🛡️ Póliza de Seguro (Vencido - Subir Nuevo Archivo y Fecha)
+                    <label className="repartidor-field repartidor-file">
+                      <span>🛡️ Póliza de Seguro (Nuevo Archivo y Fecha)</span>
                       <input name="seguro" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_seguro"
-                        value={formRenovacion.fecha_vencimiento_seguro}
-                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_seguro: e.target.value })}
-                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        required
-                      />
+                      <input type="date" name="fecha_vencimiento_seguro" value={formRenovacion.fecha_vencimiento_seguro} onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_seguro: e.target.value })} className="repartidor-input" required />
                     </label>
                   )}
 
                   {vehiculoEditando.vencidos?.licencia && (
-                    <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                      🪪 Licencia de Conducir (Vencida - Subir Nuevo Archivo y Fecha)
+                    <label className="repartidor-field repartidor-file">
+                      <span>🪪 Licencia de Conducir (Nuevo Archivo y Fecha)</span>
                       <input name="licencia" type="file" accept="image/*,.pdf" onChange={handleArchivoRenovacion} required />
-                      <input
-                        type="date"
-                        name="fecha_vencimiento_licencia"
-                        value={formRenovacion.fecha_vencimiento_licencia}
-                        onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_licencia: e.target.value })}
-                        style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        required
-                      />
+                      <input type="date" name="fecha_vencimiento_licencia" value={formRenovacion.fecha_vencimiento_licencia} onChange={(e) => setFormRenovacion({ ...formRenovacion, fecha_vencimiento_licencia: e.target.value })} className="repartidor-input" required />
                     </label>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={enviandoSolicitud}
-                    style={{
-                      backgroundColor: enviandoSolicitud ? '#868e96' : '#e03131',
-                      color: '#fff',
-                      padding: '0.6rem',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: 'bold',
-                      cursor: enviandoSolicitud ? 'not-allowed' : 'pointer'
-                    }}
-                  >
+                  <button type="submit" disabled={enviandoSolicitud} className="repartidor-btn repartidor-btn--primary repartidor-btn--block">
                     {enviandoSolicitud ? '⏳ Guardando...' : 'Enviar Renovación a Revisión'}
                   </button>
                 </form>
               </section>
             )}
 
-            <section>
-              <h3>Solicitar alta de vehículo</h3>
-              <form onSubmit={handleSolicitarVehiculo} style={{ display: 'grid', gap: '0.7rem' }}>
+            <section className="repartidor-subbox">
+              <h3 className="repartidor-subbox__title">Solicitar alta de vehículo</h3>
+              <form onSubmit={handleSolicitarVehiculo} className="repartidor-form">
                 <select
                   name="IDtipo_vehiculo"
                   value={formVehiculo.IDtipo_vehiculo}
                   onChange={(e) => setFormVehiculo({ ...formVehiculo, IDtipo_vehiculo: e.target.value })}
                   required
+                  className="repartidor-select"
                 >
                   <option value="">Tipo de vehículo</option>
                   <option value="2">Bicicleta 🚴</option>
@@ -1250,16 +914,18 @@ export const PanelRepartidor = () => {
 
                 <input
                   name="marca"
-                  placeholder={esBicicleta ? 'Marca o Color (Opcional, Ej: Venzo roja)' : 'Marca'}
+                  placeholder={esBicicleta ? 'Marca o Color (Opcional)' : 'Marca'}
                   value={formVehiculo.marca}
                   onChange={(e) => setFormVehiculo({ ...formVehiculo, marca: e.target.value })}
+                  className="repartidor-input"
                 />
 
                 <input
                   name="modelo"
-                  placeholder={esBicicleta ? 'Modelo / Tipo (Opcional, Ej: Mountain Bike)' : 'Modelo'}
+                  placeholder={esBicicleta ? 'Modelo / Tipo (Opcional)' : 'Modelo'}
                   value={formVehiculo.modelo}
                   onChange={(e) => setFormVehiculo({ ...formVehiculo, modelo: e.target.value })}
+                  className="repartidor-input"
                 />
 
                 <input
@@ -1268,6 +934,7 @@ export const PanelRepartidor = () => {
                   placeholder="Año (Opcional)"
                   value={formVehiculo.anio}
                   onChange={(e) => setFormVehiculo({ ...formVehiculo, anio: e.target.value })}
+                  className="repartidor-input"
                 />
 
                 {!esBicicleta && (
@@ -1278,43 +945,26 @@ export const PanelRepartidor = () => {
                       value={formVehiculo.patente}
                       onChange={(e) => setFormVehiculo({ ...formVehiculo, patente: e.target.value })}
                       required={!esBicicleta}
+                      className="repartidor-input"
                     />
 
-                    <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
-                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                        Cédula verde / azul (Archivo y Vencimiento)
+                    <div className="repartidor-stack">
+                      <label className="repartidor-field repartidor-file">
+                        <span>Cédula verde / azul (Archivo y Vencimiento)</span>
                         <input name="cedula" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
-                        <input
-                          type="date"
-                          name="fecha_vencimiento_cedula"
-                          value={formVehiculo.fecha_vencimiento_cedula}
-                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_cedula: e.target.value })}
-                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        />
+                        <input type="date" name="fecha_vencimiento_cedula" value={formVehiculo.fecha_vencimiento_cedula} onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_cedula: e.target.value })} className="repartidor-input" />
                       </label>
 
-                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                        Póliza de Seguro (Archivo y Vencimiento)
+                      <label className="repartidor-field repartidor-file">
+                        <span>Póliza de Seguro (Archivo y Vencimiento)</span>
                         <input name="seguro" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
-                        <input
-                          type="date"
-                          name="fecha_vencimiento_seguro"
-                          value={formVehiculo.fecha_vencimiento_seguro}
-                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_seguro: e.target.value })}
-                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        />
+                        <input type="date" name="fecha_vencimiento_seguro" value={formVehiculo.fecha_vencimiento_seguro} onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_seguro: e.target.value })} className="repartidor-input" />
                       </label>
 
-                      <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                        Licencia de Conducir (Archivo y Vencimiento)
+                      <label className="repartidor-field repartidor-file">
+                        <span>Licencia de Conducir (Archivo y Vencimiento)</span>
                         <input name="licencia" type="file" accept="image/*,.pdf" onChange={handleArchivoVehiculo} />
-                        <input
-                          type="date"
-                          name="fecha_vencimiento_licencia"
-                          value={formVehiculo.fecha_vencimiento_licencia}
-                          onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_licencia: e.target.value })}
-                          style={{ width: '100%', marginTop: '0.3rem', padding: '0.4rem' }}
-                        />
+                        <input type="date" name="fecha_vencimiento_licencia" value={formVehiculo.fecha_vencimiento_licencia} onChange={(e) => setFormVehiculo({ ...formVehiculo, fecha_vencimiento_licencia: e.target.value })} className="repartidor-input" />
                       </label>
                     </div>
                   </>
@@ -1323,15 +973,7 @@ export const PanelRepartidor = () => {
                 <button
                   type="submit"
                   disabled={enviandoSolicitud}
-                  style={{
-                    padding: '0.8rem',
-                    backgroundColor: enviandoSolicitud ? '#868e96' : '#2b8a3e',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: enviandoSolicitud ? 'not-allowed' : 'pointer'
-                  }}
+                  className="repartidor-btn repartidor-btn--success repartidor-btn--block"
                 >
                   {enviandoSolicitud ? '⏳ Enviando solicitud...' : 'Enviar solicitud'}
                 </button>
@@ -1343,154 +985,126 @@ export const PanelRepartidor = () => {
 
       {/* MODAL PERFIL */}
       {mostrarPerfil && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
-          <div style={{ width: '100%', maxWidth: '500px', backgroundColor: '#fff', borderRadius: '12px', padding: '1.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', borderBottom: '1px solid #eee', paddingBottom: '0.8rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>👤 Perfil del Repartidor</h2>
-              <button
-                type="button"
-                onClick={() => setMostrarPerfil(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
+        <div className="repartidor-modal-overlay">
+          <div className="repartidor-modal-content repartidor-modal-content--md">
+            <div className="repartidor-modal-head">
+              <h2>👤 Perfil del Repartidor</h2>
+              <button type="button" onClick={() => setMostrarPerfil(false)}>✕</button>
             </div>
 
             {cargandoPerfil ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                ⏳ Cargando perfil...
+              <div className="repartidor-state">
+                <div className="repartidor-spinner"></div>
+                <p>Cargando perfil...</p>
               </div>
             ) : perfil ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', border: '1px solid #e9ecef' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#6c757d', marginBottom: '0.3rem', fontWeight: 'bold' }}>
-                    DNI (Documento Nacional de Identidad)
+              <div className="repartidor-form">
+                <div className="repartidor-subbox">
+                  <label className="repartidor-field">
+                    <span>DNI (Documento Nacional de Identidad)</span>
+                    <input type="text" value={perfil.dni || ''} readOnly disabled className="repartidor-input" />
                   </label>
-                  <input
-                    type="text"
-                    value={perfil.dni || ''}
-                    readOnly
-                    disabled
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem',
-                      borderRadius: '6px',
-                      border: '1px solid #ced4da',
-                      backgroundColor: '#e9ecef',
-                      color: '#495057',
-                      fontWeight: 'bold',
-                      cursor: 'not-allowed',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <small style={{ color: '#868e96', fontSize: '0.75rem', marginTop: '0.3rem', display: 'block' }}>
-                    🔒 El DNI no es editable por el repartidor por motivos de seguridad.
+                  <small className="repartidor-muted" style={{ fontSize: '0.75rem' }}>
+                    🔒 El DNI no es editable por motivos de seguridad.
                   </small>
                 </div>
 
-                <div style={{ display: 'grid', gap: '0.8rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#495057', marginBottom: '0.2rem', fontWeight: '600' }}>
-                      Nombre de usuario (Username)
-                    </label>
-                    <input
-                      type="text"
-                      value={perfil.username || ''}
-                      readOnly
-                      disabled
-                      style={{
-                        width: '100%',
-                        padding: '0.6rem',
-                        borderRadius: '6px',
-                        border: '1px solid #ced4da',
-                        backgroundColor: '#f1f3f5',
-                        color: '#333',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
+                <div className="repartidor-field">
+                  <span>Nombre de usuario (Username)</span>
+                  <input type="text" value={perfil.username || ''} readOnly disabled className="repartidor-input" />
+                </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#495057', marginBottom: '0.2rem', fontWeight: '600' }}>
-                      Correo electrónico (Email)
-                    </label>
-                    <input
-                      type="email"
-                      value={perfil.email || ''}
-                      readOnly
-                      disabled
-                      style={{
-                        width: '100%',
-                        padding: '0.6rem',
-                        borderRadius: '6px',
-                        border: '1px solid #ced4da',
-                        backgroundColor: '#f1f3f5',
-                        color: '#333',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
+                <div className="repartidor-field">
+                  <span>Correo electrónico (Email)</span>
+                  <input type="email" value={perfil.email || ''} readOnly disabled className="repartidor-input" />
+                </div>
 
-                  {(perfil.nombre || perfil.apellido) && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: '#495057', marginBottom: '0.2rem', fontWeight: '600' }}>
-                        Nombre completo
-                      </label>
-                      <p style={{ margin: 0, padding: '0.6rem', backgroundColor: '#f8f9fa', borderRadius: '6px', border: '1px solid #dee2e6' }}>
-                        {perfil.nombre} {perfil.apellido}
-                      </p>
+                {(perfil.nombre || perfil.apellido) && (
+                  <div className="repartidor-field">
+                    <span>Nombre completo</span>
+                    <div className="repartidor-readonly">
+                      {perfil.nombre} {perfil.apellido}
                     </div>
-                  )}
-                </div>
-
-                <div style={{ marginTop: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem 1rem',
-                      backgroundColor: '#6c757d',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🔐 {mostrarCambioPass ? 'Ocultar Cambio de Contraseña' : 'Cambiar Contraseña'}
-                  </button>
-                </div>
-
-                {mostrarCambioPass && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
                   </div>
                 )}
 
-                <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
-                  <button
-                    onClick={() => {
-                      setMostrarPerfil(false);
-                      setMostrarCambioPass(false);
-                    }}
-                    style={{
-                      padding: '0.6rem 1.2rem',
-                      backgroundColor: '#2b8a3e',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Cerrar
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
+                  className="repartidor-btn repartidor-btn--outline repartidor-btn--block"
+                >
+                  🔐 {mostrarCambioPass ? 'Ocultar Cambio de Contraseña' : 'Cambiar Contraseña'}
+                </button>
+
+                {mostrarCambioPass && <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />}
+
+                <button
+                  onClick={() => {
+                    setMostrarPerfil(false);
+                    setMostrarCambioPass(false);
+                  }}
+                  className="repartidor-btn repartidor-btn--success repartidor-btn--block"
+                >
+                  Cerrar
+                </button>
               </div>
             ) : (
-              <p style={{ color: '#c92a2a' }}>No se pudo cargar la información del perfil.</p>
+              <p style={{ color: 'var(--sd-rep-error)' }}>No se pudo cargar la información del perfil.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AVISOS / ALERTAS */}
+      {modalAviso && (
+        <div className="repartidor-modal-overlay" style={{ zIndex: 3000 }}>
+          <div className="repartidor-modal-content repartidor-modal-content--sm">
+            <div className="repartidor-aviso-box">
+              <div className={`repartidor-aviso-icon ${modalAviso.titulo.includes('✅') ? 'repartidor-aviso-icon--success' : 'repartidor-aviso-icon--error'}`}>
+                {modalAviso.titulo.includes('✅') ? '✓' : '⚠️'}
+              </div>
+              <h3>{modalAviso.titulo}</h3>
+              <p>{modalAviso.mensaje}</p>
+            </div>
+            <div className="repartidor-modal-foot" style={{ marginTop: '24px' }}>
+              <button
+                onClick={() => {
+                  const cb = modalAviso.callback;
+                  setModalAviso(null);
+                  if (cb) cb();
+                }}
+                className="repartidor-btn repartidor-btn--primary repartidor-btn--block"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN */}
+      {modalConfirmacion && (
+        <div className="repartidor-modal-overlay" style={{ zIndex: 3000 }}>
+          <div className="repartidor-modal-content repartidor-modal-content--sm">
+            <div className="repartidor-aviso-box">
+              <div className="repartidor-aviso-icon repartidor-aviso-icon--warning">⚠️</div>
+              <h3>{modalConfirmacion.titulo}</h3>
+              <p>{modalConfirmacion.mensaje}</p>
+            </div>
+            <div className="repartidor-modal-foot">
+              <button
+                onClick={() => setModalConfirmacion(null)}
+                className="repartidor-btn repartidor-btn--outline repartidor-btn--grow"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={modalConfirmacion.onConfirm}
+                className="repartidor-btn repartidor-btn--danger repartidor-btn--grow"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

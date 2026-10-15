@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { getMiPerfil, updateMiPerfil } from '../../api/clientesService';
 import { MisDireccionesManager } from './MisDirecciones';
 import { CambiarPasswordModal } from '../CambiarPasswordModal';
+import './CSS/Cliente.css'; // 👈 Importamos los estilos unificados
 
 export const MiPerfil = () => {
   const [form, setForm] = useState({
@@ -65,11 +66,12 @@ export const MiPerfil = () => {
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      alert('La geolocalización no es soportada por tu navegador.');
+      setMensaje({ tipo: 'error', texto: '⚠️ La geolocalización no es soportada por tu navegador.' });
       return;
     }
 
     setLoadingGps(true);
+    setMensaje({ tipo: '', texto: '' });
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setForm((prev) => ({
@@ -78,9 +80,10 @@ export const MiPerfil = () => {
           longitud: position.coords.longitude
         }));
         setLoadingGps(false);
+        setMensaje({ tipo: 'exito', texto: '✓ Ubicación GPS obtenida correctamente.' });
       },
       (err) => {
-        alert('No se pudo obtener la ubicación GPS.');
+        setMensaje({ tipo: 'error', texto: '⚠️ No se pudo obtener la ubicación GPS. Verifica los permisos de tu navegador.' });
         setLoadingGps(false);
       }
     );
@@ -126,259 +129,260 @@ export const MiPerfil = () => {
     }
   };
 
-  if (loading) return <div>⏳ Cargando información de tu perfil...</div>;
+  if (loading) {
+    return (
+      <div className="sd-container">
+        <div className="sd-state">
+          <span className="sd-spinner"></span>
+          <p>Cargando información de tu perfil...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: '600px', margin: '1rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px', backgroundColor: '#fff' }}>
+    <div className="sd-container">
+      <div className="sd-profile-container">
 
-      {/* Navegación entre Pestañas */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', borderBottom: '2px solid #eee', paddingBottom: '0.8rem' }}>
-        <button
-          type="button"
-          onClick={() => setSeccion('perfil')}
-          style={{
-            padding: '0.6rem 1.2rem',
-            backgroundColor: seccion === 'perfil' ? '#007bff' : '#f8f9fa',
-            color: seccion === 'perfil' ? '#fff' : '#333',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          👤 Datos de Perfil
-        </button>
+        {/* Navegación entre Pestañas */}
+        <div className="sd-profile-tabs">
+          <button
+            type="button"
+            onClick={() => setSeccion('perfil')}
+            className={`sd-profile-tab ${seccion === 'perfil' ? 'active' : ''}`}
+          >
+            👤 Datos de Perfil
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setSeccion('direcciones')}
-          style={{
-            padding: '0.6rem 1.2rem',
-            backgroundColor: seccion === 'direcciones' ? '#007bff' : '#f8f9fa',
-            color: seccion === 'direcciones' ? '#fff' : '#333',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          📍 Mis Ubicaciones Guardadas
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setSeccion('direcciones')}
+            className={`sd-profile-tab ${seccion === 'direcciones' ? 'active' : ''}`}
+          >
+            📍 Mis Ubicaciones Guardadas
+          </button>
+        </div>
 
-      {seccion === 'direcciones' ? (
-        <MisDireccionesManager permitirAgregar={false} />
-      ) : (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2>👤 Mi Cuenta / Perfil</h2>
+        {seccion === 'direcciones' ? (
+          <MisDireccionesManager permitirAgregar={false} />
+        ) : (
+          <>
+            <div className="sd-profile-head">
+              <h2>👤 Mi Cuenta / Perfil</h2>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
-                style={{ padding: '0.5rem 1rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-              >
-                🔐 {mostrarCambioPass ? 'Ocultar Cambio Clave' : 'Cambiar Contraseña'}
-              </button>
-
-              {!editando && (
+              <div className="sd-profile-actions">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditando(true);
-                    setMensaje({ tipo: '', texto: '' });
-                  }}
-                  style={{ padding: '0.5rem 1rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  onClick={() => setMostrarCambioPass(!mostrarCambioPass)}
+                  className="admin-btn admin-btn--outline admin-btn--sm"
                 >
-                  ✏️ Editar Perfil
+                  🔐 {mostrarCambioPass ? 'Ocultar Cambio Clave' : 'Cambiar Contraseña'}
                 </button>
-              )}
-            </div>
-          </div>
 
-          {mostrarCambioPass && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
-            </div>
-          )}
-
-          {mensaje.texto && (
-            <p style={{ color: mensaje.tipo === 'error' ? 'red' : 'green', fontWeight: 'bold' }}>
-              {mensaje.texto}
-            </p>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Nombre:</label>
-              <input
-                type="text"
-                name="nombre"
-                value={form.nombre}
-                onChange={handleChange}
-                disabled={!editando}
-                required
-                style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Apellido:</label>
-              <input
-                type="text"
-                name="apellido"
-                value={form.apellido}
-                onChange={handleChange}
-                disabled={!editando}
-                required
-                style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Usuario:</label>
-              <input type="text" value={form.username} disabled style={{ width: '100%', padding: '0.5rem', backgroundColor: '#e9ecef' }} />
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Email:</label>
-              <input type="email" value={form.email} disabled style={{ width: '100%', padding: '0.5rem', backgroundColor: '#e9ecef' }} />
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 'bold' }}>Teléfono *:</label>
-              <input
-                type="text"
-                name="telefono"
-                value={form.telefono}
-                onChange={handleChange}
-                disabled={!editando}
-                required
-                style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-              />
-            </div>
-
-            {/* DIRECCIÓN PRINCIPAL (Se oculta si no tiene valor y no se edita) */}
-            {(editando || form.direccion) && (
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold' }}>Dirección Principal *:</label>
-                <input
-                  type="text"
-                  name="direccion"
-                  value={form.direccion}
-                  onChange={handleChange}
-                  disabled={!editando}
-                  required={editando}
-                  placeholder="Calle y altura"
-                  style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-                />
-              </div>
-            )}
-
-            {/* PISO Y DEPTO */}
-            {(editando || form.piso || form.departamento) && (
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
-                {(editando || form.piso) && (
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontWeight: 'bold' }}>Piso:</label>
-                    <input
-                      type="text"
-                      name="piso"
-                      value={form.piso}
-                      onChange={handleChange}
-                      disabled={!editando}
-                      placeholder="Ej: 4"
-                      style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-                    />
-                  </div>
-                )}
-                {(editando || form.departamento) && (
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontWeight: 'bold' }}>Depto:</label>
-                    <input
-                      type="text"
-                      name="departamento"
-                      value={form.departamento}
-                      onChange={handleChange}
-                      disabled={!editando}
-                      placeholder="Ej: B"
-                      style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* REFERENCIA */}
-            {(editando || form.referencia) && (
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold' }}>Referencia de entrega:</label>
-                <input
-                  type="text"
-                  name="referencia"
-                  value={form.referencia}
-                  onChange={handleChange}
-                  disabled={!editando}
-                  placeholder="Ej: Portón blanco, entre calle X e Y"
-                  style={{ width: '100%', padding: '0.5rem', backgroundColor: !editando ? '#f8f9fa' : '#fff' }}
-                />
-              </div>
-            )}
-
-            {/* INDICADOR DE GPS LIMPIO (Sin coordenadas crudas en números largos) */}
-            {(editando || form.latitud) && (
-              <div style={{ backgroundColor: '#f8f9fa', padding: '0.8rem 1rem', marginBottom: '1.5rem', borderRadius: '6px', border: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontWeight: 'bold', display: 'block', fontSize: '0.9rem' }}>📍 Geolocalización GPS</span>
-                  <small style={{ color: form.latitud ? '#2b8a3e' : '#6c757d' }}>
-                    {form.latitud ? '✓ Ubicación sincronizada correctamente' : '⚠️ Sin coordenadas GPS registradas'}
-                  </small>
-                </div>
-
-                {editando && (
+                {!editando && (
                   <button
                     type="button"
-                    onClick={handleGetLocation}
-                    disabled={loadingGps}
-                    style={{ padding: '0.4rem 0.8rem', cursor: loadingGps ? 'not-allowed' : 'pointer', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                    onClick={() => {
+                      setEditando(true);
+                      setMensaje({ tipo: '', texto: '' });
+                    }}
+                    className="admin-btn admin-btn--primary admin-btn--sm"
                   >
-                    {loadingGps ? 'Obteniendo...' : '🎯 Actualizar GPS'}
+                    ✏️ Editar Perfil
                   </button>
                 )}
               </div>
-            )}
+            </div>
 
-            {!form.direccion && !editando && (
-              <div style={{ marginBottom: '1rem', padding: '0.8rem', backgroundColor: '#fff3cd', color: '#856404', borderRadius: '4px' }}>
-                ⚠️ No tienes una dirección principal configurada. Haz clic en <strong>"✏️ Editar Perfil"</strong> para agregar una o búscala en la pestaña <em>Mis Ubicaciones Guardadas</em>.
+            {mostrarCambioPass && (
+              <div style={{ marginBottom: '16px' }}>
+                <CambiarPasswordModal onClose={() => setMostrarCambioPass(false)} />
               </div>
             )}
 
-            {/* ACCIONES DE EDICIÓN */}
-            {editando && (
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={handleCancelarEdicion}
-                  disabled={isSubmitting}
-                  style={{ flex: 1, padding: '0.8rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  ❌ Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  style={{ flex: 1, padding: '0.8rem', backgroundColor: '#2b8a3e', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  {isSubmitting ? 'Guardando...' : '💾 Guardar Cambios'}
-                </button>
+            {mensaje.texto && (
+              <div
+                className={`admin-banner ${
+                  mensaje.tipo === 'error' ? 'admin-banner--error' : 'admin-banner--success'
+                }`}
+                role="alert"
+              >
+                <span>{mensaje.tipo === 'error' ? '⚠️' : '✓'}</span>
+                <span>{mensaje.texto}</span>
               </div>
             )}
-          </form>
-        </>
-      )}
+
+            <form onSubmit={handleSubmit} className="admin-form">
+              <div className="admin-grid-2">
+                <div className="admin-field">
+                  <label className="admin-field__label">Nombre:</label>
+                  <input
+                    type="text"
+                    name="nombre"
+                    value={form.nombre}
+                    onChange={handleChange}
+                    disabled={!editando}
+                    required
+                    className="admin-input"
+                  />
+                </div>
+
+                <div className="admin-field">
+                  <label className="admin-field__label">Apellido:</label>
+                  <input
+                    type="text"
+                    name="apellido"
+                    value={form.apellido}
+                    onChange={handleChange}
+                    disabled={!editando}
+                    required
+                    className="admin-input"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-grid-2">
+                <div className="admin-field">
+                  <label className="admin-field__label">Usuario:</label>
+                  <input type="text" value={form.username} disabled className="admin-input admin-input--readonly" />
+                </div>
+
+                <div className="admin-field">
+                  <label className="admin-field__label">Email:</label>
+                  <input type="email" value={form.email} disabled className="admin-input admin-input--readonly" />
+                </div>
+              </div>
+
+              <div className="admin-field">
+                <label className="admin-field__label">Teléfono *:</label>
+                <input
+                  type="text"
+                  name="telefono"
+                  value={form.telefono}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  required
+                  className="admin-input"
+                />
+              </div>
+
+              {(editando || form.direccion) && (
+                <div className="admin-field">
+                  <label className="admin-field__label">Dirección Principal *:</label>
+                  <input
+                    type="text"
+                    name="direccion"
+                    value={form.direccion}
+                    onChange={handleChange}
+                    disabled={!editando}
+                    required={editando}
+                    placeholder="Calle y altura"
+                    className="admin-input"
+                  />
+                </div>
+              )}
+
+              {(editando || form.piso || form.departamento) && (
+                <div className="admin-form-grid">
+                  {(editando || form.piso) && (
+                    <div className="admin-field">
+                      <label className="admin-field__label">Piso:</label>
+                      <input
+                        type="text"
+                        name="piso"
+                        value={form.piso}
+                        onChange={handleChange}
+                        disabled={!editando}
+                        placeholder="Ej: 4"
+                        className="admin-input"
+                      />
+                    </div>
+                  )}
+                  {(editando || form.departamento) && (
+                    <div className="admin-field">
+                      <label className="admin-field__label">Depto:</label>
+                      <input
+                        type="text"
+                        name="departamento"
+                        value={form.departamento}
+                        onChange={handleChange}
+                        disabled={!editando}
+                        placeholder="Ej: B"
+                        className="admin-input"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(editando || form.referencia) && (
+                <div className="admin-field">
+                  <label className="admin-field__label">Referencia de entrega:</label>
+                  <input
+                    type="text"
+                    name="referencia"
+                    value={form.referencia}
+                    onChange={handleChange}
+                    disabled={!editando}
+                    placeholder="Ej: Portón blanco, entre calle X e Y"
+                    className="admin-input"
+                  />
+                </div>
+              )}
+
+              {(editando || form.latitud) && (
+                <div className="sd-gps-box">
+                  <div className="sd-gps-info">
+                    <strong>📍 Geolocalización GPS</strong>
+                    <small style={{ color: form.latitud ? 'var(--sd-success)' : 'var(--sd-text-secondary)' }}>
+                      {form.latitud ? '✓ Ubicación sincronizada correctamente' : '⚠️ Sin coordenadas GPS registradas'}
+                    </small>
+                  </div>
+
+                  {editando && (
+                    <button
+                      type="button"
+                      onClick={handleGetLocation}
+                      disabled={loadingGps}
+                      className="admin-btn admin-btn--outline admin-btn--sm"
+                    >
+                      {loadingGps ? 'Obteniendo...' : '🎯 Actualizar GPS'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!form.direccion && !editando && (
+                <div className="admin-inline-note admin-inline-note--error">
+                  ⚠️ No tienes una dirección principal configurada. Haz clic en <strong>"✏️ Editar Perfil"</strong> para agregar una o búscala en la pestaña <em>Mis Ubicaciones Guardadas</em>.
+                </div>
+              )}
+
+              {editando && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleCancelarEdicion}
+                    disabled={isSubmitting}
+                    className="admin-btn admin-btn--outline admin-btn--block"
+                  >
+                    ❌ Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="admin-btn admin-btn--success admin-btn--block"
+                  >
+                    {isSubmitting ? 'Guardando...' : '💾 Guardar Cambios'}
+                  </button>
+                </div>
+              )}
+            </form>
+          </>
+        )}
+
+      </div>
     </div>
   );
 };

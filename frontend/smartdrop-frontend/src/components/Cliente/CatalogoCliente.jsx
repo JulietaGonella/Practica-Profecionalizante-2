@@ -5,6 +5,7 @@ import { getLocales, getProductos } from '../../api/catalogService';
 import { LocalesLista } from './LocalesLista';
 import { ProductosLocal } from './ProductosLocal';
 import { DetalleProducto } from './DetalleProducto';
+import './CSS/Cliente.css'; // 👈 Importamos los estilos unificados del cliente
 
 export const CatalogoCliente = ({ onAgregarAlCarrito }) => {
   const [locales, setLocales] = useState([]);
@@ -23,7 +24,6 @@ export const CatalogoCliente = ({ onAgregarAlCarrito }) => {
           getProductos()
         ]);
 
-        // Cargar todos los locales retornados por la API
         setLocales(localesData);
         setProductos(productosData.filter((p) => Boolean(p.disponible)));
       } catch (err) {
@@ -37,21 +37,41 @@ export const CatalogoCliente = ({ onAgregarAlCarrito }) => {
     cargarDatos();
   }, []);
 
-  if (loading) return <div>⏳ Cargando datos...</div>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+  if (loading) {
+    return (
+      <div className="sd-container">
+        <div className="sd-state">
+          <span className="sd-spinner"></span>
+          <p>Cargando establecimientos y productos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="sd-container">
+        <div className="sd-state sd-state--error">
+          <span>⚠️ {error}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <Routes>
-      <Route path="/" element={<LocalesLista locales={locales} />} />
-      <Route path="locales" element={<LocalesLista locales={locales} />} />
-      <Route 
-        path="local/:localId" 
-        element={<ProductosLocal locales={locales} productos={productos} />} 
-      />
-      <Route 
-        path="producto/:productoId" 
-        element={<DetalleProducto onAgregarAlCarrito={onAgregarAlCarrito} />} 
-      />
-    </Routes>
+    <div className="sd-container">
+      <Routes>
+        <Route path="/" element={<LocalesLista locales={locales} />} />
+        <Route path="locales" element={<LocalesLista locales={locales} />} />
+        <Route 
+          path="local/:localId" 
+          element={<ProductosLocal locales={locales} productos={productos} />} 
+        />
+        <Route 
+          path="producto/:productoId" 
+          element={<DetalleProducto onAgregarAlCarrito={onAgregarAlCarrito} />} 
+        />
+      </Routes>
+    </div>
   );
 };

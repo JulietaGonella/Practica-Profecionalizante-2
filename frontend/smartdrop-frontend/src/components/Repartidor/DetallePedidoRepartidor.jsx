@@ -1,3 +1,4 @@
+// src/components/Repartidor/DetallePedidoRepartidor.jsx
 import { useEffect, useState, useMemo, Fragment } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -10,6 +11,7 @@ import {
 import { NotificationMenu } from '../Common/NotificationMenu';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import './CSS/Repartidor.css';
 
 /* ============================================================
    🗺️ ICONOS ILUSTRADOS PERSONALIZADOS PARA EL MAPA
@@ -159,6 +161,10 @@ export const DetallePedidoRepartidor = () => {
   const [accionProcesando, setAccionProcesando] = useState('');
   const [localAConfirmar, setLocalAConfirmar] = useState(null);
 
+  // 🟢 Estados para modales estéticos (Reemplazo de alert y window.confirm)
+  const [modalAviso, setModalAviso] = useState(null); // { titulo: '', mensaje: '', callback: null }
+  const [modalConfirmacion, setModalConfirmacion] = useState(null); // { titulo: '', mensaje: '', onConfirm: null }
+
   // 🗺️ Estado para almacenar los puntos por calle obtenidos de OSRM
   const [rutaCalles, setRutaCalles] = useState([]);
   const esPedidoEntregado = Number(pedido?.IDestado) === 3;
@@ -202,7 +208,10 @@ export const DetallePedidoRepartidor = () => {
 
   const handleSimularRecorrido = async () => {
     if (!pedido?.IDrepartidor) {
-      alert('No se encontró el repartidor asignado.');
+      setModalAviso({
+        titulo: '⚠️ Aviso',
+        mensaje: 'No se encontró el repartidor asignado.'
+      });
       return;
     }
 
@@ -214,10 +223,10 @@ export const DetallePedidoRepartidor = () => {
       );
       await cargarPedido();
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo iniciar la simulación del recorrido.'
-      );
+      setModalAviso({
+        titulo: '⚠️ Error de Simulación',
+        mensaje: err.response?.data?.error || 'No se pudo iniciar la simulación del recorrido.'
+      });
     } finally {
       setAccionProcesando('');
     }
@@ -237,10 +246,10 @@ export const DetallePedidoRepartidor = () => {
       await cargarPedido();
 
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        `No se pudo confirmar el retiro en ${localAConfirmar.nombre}.`
-      );
+      setModalAviso({
+        titulo: '⚠️ Error de Retiro',
+        mensaje: err.response?.data?.error || `No se pudo confirmar el retiro en ${localAConfirmar.nombre}.`
+      });
     } finally {
       setAccionProcesando('');
     }
@@ -248,46 +257,55 @@ export const DetallePedidoRepartidor = () => {
 
   const handleEntregar = async () => {
     if (!otp.trim()) {
-      alert('Ingresá el código OTP que te proporciona el cliente.');
+      setModalAviso({
+        titulo: '⚠️ Código OTP Requerido',
+        mensaje: 'Ingresá el código OTP que te proporciona el cliente.'
+      });
       return;
     }
 
     try {
       setAccionProcesando('entrega');
       await entregarPedido(Number(ordenId), otp.trim());
-      alert('Pedido entregado correctamente.');
-      navigate('/repartidor/inicio');
+      setModalAviso({
+        titulo: '✅ Pedido Entregado',
+        mensaje: 'Pedido entregado correctamente.',
+        callback: () => navigate('/repartidor/inicio')
+      });
     } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo confirmar la entrega.'
-      );
+      setModalAviso({
+        titulo: '⚠️ Error de Entrega',
+        mensaje: err.response?.data?.error || 'No se pudo confirmar la entrega.'
+      });
     } finally {
       setAccionProcesando('');
     }
   };
 
-  const handleLiberarPedido = async () => {
-    const confirmacion = window.confirm(
-      '¿Estás seguro de que deseas rechazar/liberar este pedido? El pedido volverá a la lista de disponibles para otros repartidores.'
-    );
-
-    if (!confirmacion) return;
-
-    try {
-      setAccionProcesando('liberar');
-      // 👈 Se añade {} o { motivo: null } como body de la petición
-      await liberarPedidoRepartidor(Number(ordenId), {});
-      alert('Pedido liberado correctamente. Volviendo al listado.');
-      navigate('/repartidor/inicio');
-    } catch (err) {
-      alert(
-        err.response?.data?.error ||
-        'No se pudo liberar el pedido.'
-      );
-    } finally {
-      setAccionProcesando('');
-    }
+  const handleLiberarPedido = () => {
+    setModalConfirmacion({
+      titulo: '⚠️ Liberar Viaje',
+      mensaje: '¿Estás seguro de que deseas rechazar/liberar este pedido? El pedido volverá a la lista de disponibles para otros repartidores.',
+      onConfirm: async () => {
+        setModalConfirmacion(null);
+        try {
+          setAccionProcesando('liberar');
+          await liberarPedidoRepartidor(Number(ordenId), {});
+          setModalAviso({
+            titulo: '✅ Pedido Liberado',
+            mensaje: 'Pedido liberado correctamente. Volviendo al listado.',
+            callback: () => navigate('/repartidor/inicio')
+          });
+        } catch (err) {
+          setModalAviso({
+            titulo: '⚠️ Error',
+            mensaje: err.response?.data?.error || 'No se pudo liberar el pedido.'
+          });
+        } finally {
+          setAccionProcesando('');
+        }
+      }
+    });
   };
 
   // 1. Agrupar productos por local y calcular rechazos / retiros
@@ -362,7 +380,6 @@ export const DetallePedidoRepartidor = () => {
   });
 
   const getOrdenRutaBackend = (idLocal) => {
-    // Buscar en todas las posibles estructuras que devuelve el endpoint de la orden
     const listaRuta = pedido?.localesRuta || pedido?.localesOrdenados || pedido?.locales_ruta || [];
     if (!Array.isArray(listaRuta) || listaRuta.length === 0) return -1;
 
@@ -375,12 +392,10 @@ export const DetallePedidoRepartidor = () => {
     const aFinalizado = a.retirado || a.todosRechazados;
     const bFinalizado = b.retirado || b.todosRechazados;
 
-    // Colocar al final los locales ya retirados o totalmente rechazados
     if (aFinalizado !== bFinalizado) {
       return aFinalizado ? 1 : -1;
     }
 
-    // 1️⃣ Prioridad Absoluta: El orden exacto definido en el Backend / Algoritmo de Ruta
     const idxA = getOrdenRutaBackend(a.id);
     const idxB = getOrdenRutaBackend(b.id);
 
@@ -388,7 +403,6 @@ export const DetallePedidoRepartidor = () => {
       return idxA - idxB;
     }
 
-    // 2️⃣ Fallback si no hay secuencia asignada: Orden por Sensibilidad asignada
     if (a.maxSensibilidad !== b.maxSensibilidad) {
       return a.maxSensibilidad - b.maxSensibilidad;
     }
@@ -419,11 +433,9 @@ export const DetallePedidoRepartidor = () => {
     };
   });
 
-  // 🛑 Omitir locales 100% rechazados o retirados para determinar la siguiente parada
   const primerLocalPendiente = localesInvolucrados.find((l) => !l.retirado && !l.todosRechazados);
   const todosLocalesListos = localesInvolucrados.length === 0 || localesInvolucrados.every((l) => l.retirado || l.todosRechazados);
 
-  // 🎯 Coordenadas del destino actual (Local pendiente o Cliente)
   const destinoLat = primerLocalPendiente?.latitud != null
     ? Number(primerLocalPendiente.latitud)
     : (todosLocalesListos && pedido?.latitud_entrega != null ? Number(pedido.latitud_entrega) : null);
@@ -432,10 +444,8 @@ export const DetallePedidoRepartidor = () => {
     ? Number(primerLocalPendiente.longitud)
     : (todosLocalesListos && pedido?.longitud_entrega != null ? Number(pedido.longitud_entrega) : null);
 
-  // 🆔 Identificador de la etapa actual (Cambia solo al pasar de un local a otro o al cliente)
   const etapaId = primerLocalPendiente?.id ?? (todosLocalesListos ? 'CLIENTE' : null);
 
-  // 🛣️ Puntos directo/fallback para encuadre y respaldo de la Polyline
   const trayectoCoords = [];
   const puntosMapa = [];
 
@@ -449,7 +459,6 @@ export const DetallePedidoRepartidor = () => {
     }
   }
 
-  // ✂️ Recortar la ruta para que solo se dibuje desde la posición actual
   const rutaRestante = useMemo(() => {
     if (!rutaCalles || rutaCalles.length === 0 || repLat == null || repLng == null) {
       return rutaCalles;
@@ -499,24 +508,31 @@ export const DetallePedidoRepartidor = () => {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        ⏳ Cargando información del pedido...
+      <div className="repartidor-container">
+        <div className="repartidor-state">
+          <div className="repartidor-spinner"></div>
+          <p>Cargando información del pedido...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: '2rem', color: '#e03131' }}>
-        {error}
+      <div className="repartidor-container">
+        <div className="repartidor-alert repartidor-alert--danger">
+          <span>⚠️ {error}</span>
+        </div>
       </div>
     );
   }
 
   if (!pedido) {
     return (
-      <div style={{ padding: '2rem' }}>
-        Pedido no encontrado.
+      <div className="repartidor-container">
+        <div className="repartidor-state">
+          <p>Pedido no encontrado.</p>
+        </div>
       </div>
     );
   }
@@ -532,10 +548,8 @@ export const DetallePedidoRepartidor = () => {
 
   const enEsperadeRetiro = estaEnCamino && !todosLocalesListos;
 
-  // 💳 Banderas y variables de Estado de Pago
   const esPagoEfectivo = Number(pedido.IDmetodo_pago) === 1 || String(pedido.metodo_pago).toLowerCase().includes('efectivo');
 
-  // Definir una constante auxiliar arriba del return si se prefiere, o de forma inline:
   const subtotalPedido = Number(
     pedido.subtotal_productos ?? pedido.subtotal ?? pedido.precio ?? 0
   );
@@ -556,51 +570,28 @@ export const DetallePedidoRepartidor = () => {
   );
 
   return (
-    <div style={{ maxWidth: '900px', margin: '2rem auto', padding: '1rem' }}>
+    <div className="repartidor-container repartidor-container--narrow">
       {/* 🟢 CABECERA SUPERIOR: Botón Volver + Menú de Notificaciones */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1rem'
-        }}
-      >
+      <div className="repartidor-topbar">
         <button
           onClick={() => navigate('/repartidor/inicio')}
-          style={{ padding: '0.6rem 1rem', cursor: 'pointer' }}
+          className="repartidor-btn repartidor-btn--outline repartidor-btn--sm"
         >
           ← Volver a mis pedidos
         </button>
 
-        {/* 🔔 Notificaciones integradas en la vista de detalle */}
         <NotificationMenu />
       </div>
 
-      <div
-        style={{
-          backgroundColor: '#fff',
-          border: '1px solid #e0e0e0',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+      <div className="repartidor-detail-card">
+        <div className="repartidor-detail-head">
           <div>
-            <p style={{ margin: 0, color: '#6c757d' }}>Detalle del pedido</p>
-            <h2 style={{ margin: '0.3rem 0' }}>Pedido #{pedido.IDorden}</h2>
+            <small>Detalle del pedido</small>
+            <h1>Pedido #{pedido.IDorden}</h1>
           </div>
 
-          <span
-            style={{
-              padding: '0.5rem 0.9rem',
-              borderRadius: '20px',
-              backgroundColor: estadoGlobalId === 5 ? '#ffe8cc' : '#d0ebff',
-              color: estadoGlobalId === 5 ? '#d9480f' : '#1864ab',
-              fontWeight: 'bold'
-            }}
-          >
+          <span className={`repartidor-badge ${estadoGlobalId === 5 ? 'repartidor-badge--orange' : 'repartidor-badge--info'}`}>
+            <span className="repartidor-dot"></span>
             {pedido.estado_orden || 'Sin estado'}
           </span>
         </div>
@@ -608,16 +599,16 @@ export const DetallePedidoRepartidor = () => {
         {!esPedidoEntregado && (
           <>
             {/* 🗺️ MAPA INTERACTIVO PROGRESIVO POR PARADAS */}
-            <section style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
-              <h3>🗺️ Navegación por Paradas en Tiempo Real</h3>
+            <div className="repartidor-map-box">
+              <h2 style={{ fontSize: '1rem', marginBottom: '8px' }}>🗺️ Navegación por Paradas en Tiempo Real</h2>
 
               {repLat != null && repLng != null ? (
-                <div style={{ height: '400px', width: '100%', borderRadius: '8px', overflow: 'hidden', marginTop: '1rem' }}>
+                <div className="repartidor-map-canvas">
                   <MapContainer center={[repLat, repLng]} zoom={15} style={{ height: '100%', width: '100%' }}>
                     <AjustarVistaMapa puntos={puntosMapa} />
 
                     <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      attribution='&copy; OpenStreetMap contributors'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
 
@@ -706,36 +697,26 @@ export const DetallePedidoRepartidor = () => {
                   </MapContainer>
                 </div>
               ) : (
-                <div style={{ padding: '1rem', backgroundColor: '#fff3cd', borderRadius: '8px', color: '#856404', textAlign: 'center' }}>
+                <div className="repartidor-map-note">
                   ⏳ Cargando coordenadas guardadas en la base de datos...
                 </div>
               )}
-            </section>
+            </div>
           </>
         )}
 
-
-
         {/* 📍 LISTADO DE LOCALES */}
-        <section style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
-          <h3 style={{ marginTop: 0 }}>📍 Datos de entrega y locales</h3>
-          <p>
+        <section className="repartidor-subbox">
+          <h3 className="repartidor-subbox__title">📍 Datos de entrega y locales</h3>
+          <p className="repartidor-info-row">
             <strong>Dirección del cliente:</strong> {pedido.direccion_entrega || pedido.direccion_cliente || 'No informada'}
           </p>
 
           {!esPedidoEntregado && pedido.telefono_cliente && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            <div className="repartidor-contact" style={{ margin: '12px 0' }}>
               <a
                 href={`tel:${pedido.telefono_cliente}`}
-                style={{
-                  padding: '0.5rem 0.8rem',
-                  backgroundColor: '#22b8cf',
-                  color: '#fff',
-                  borderRadius: '6px',
-                  textDecoration: 'none',
-                  fontSize: '0.85rem',
-                  fontWeight: 'bold'
-                }}
+                className="repartidor-btn repartidor-btn--info-soft repartidor-btn--sm"
               >
                 📞 Llamar Cliente
               </a>
@@ -743,358 +724,241 @@ export const DetallePedidoRepartidor = () => {
                 href={`https://wa.me/${formatearTelefonoWA(pedido.telefono_cliente)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{
-                  padding: '0.5rem 0.8rem',
-                  backgroundColor: '#2b8a3e',
-                  color: '#fff',
-                  borderRadius: '6px',
-                  textDecoration: 'none',
-                  fontSize: '0.85rem',
-                  fontWeight: 'bold'
-                }}
+                className="repartidor-btn repartidor-btn--success-soft repartidor-btn--sm"
               >
                 💬 WhatsApp Cliente
               </a>
             </div>
           )}
 
-          <h4 style={{ margin: '1rem 0 0.5rem' }}>
+          <h4 style={{ margin: '12px 0 8px', color: 'var(--sd-rep-navy)' }}>
             🏪 Locales involucrados ({localesInvolucrados.length}):
           </h4>
 
           {localesInvolucrados.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="repartidor-stops-list">
               {localesInvolucrados.map((local, index) => {
                 const esSiguienteEnRuta = primerLocalPendiente?.id === local.id;
                 const habilitadoPorProximidad = estaEnCamino && local.estaCerca && esSiguienteEnRuta && !local.todosRechazados;
 
-                let cardBg = '#f1f3f5';
-                let cardBorder = '1px solid #dee2e6';
-
+                let itemClass = 'repartidor-stop-item';
                 if (local.todosRechazados) {
-                  cardBg = '#ffe3e3';
-                  cardBorder = '1px solid #ffc9c9';
+                  itemClass += ' repartidor-stop-item--rejected';
                 } else if (local.retirado) {
-                  cardBg = '#e6fcf5';
-                  cardBorder = '1px solid #20c997';
+                  itemClass += ' repartidor-stop-item--retired';
                 } else if (esSiguienteEnRuta) {
-                  cardBg = '#fff';
-                  cardBorder = '2px solid #1c7ed6';
+                  itemClass += ' repartidor-stop-item--next';
                 }
 
                 return (
-                  <div
-                    key={local.id || index}
-                    style={{
-                      padding: '0.8rem',
-                      backgroundColor: cardBg,
-                      border: cardBorder,
-                      borderRadius: '6px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <p style={{ margin: 0 }}>
-                        <span style={{ fontWeight: 'bold', color: '#1c7ed6', marginRight: '0.5rem' }}>
-                          Parada {index + 1} de {localesInvolucrados.length}:
-                        </span>
+                  <div key={local.id || index} className={itemClass}>
+                    <div className="repartidor-stop-head">
+                      <div>
+                        <span className="repartidor-stop-head__num">Parada {index + 1} de {localesInvolucrados.length}</span>
                         <strong>{local.nombre}</strong>
-                      </p>
+                      </div>
                       {local.todosRechazados ? (
-                        <span style={{ color: '#c92a2a', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                          ❌ Productos Rechazados (Parada Omitida)
+                        <span className="repartidor-badge repartidor-badge--error">
+                          ❌ Rechazado
                         </span>
                       ) : local.retirado ? (
-                        <span style={{ color: '#0ca678', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                          ✅ Paquete Retirado
+                        <span className="repartidor-badge repartidor-badge--success">
+                          ✅ Retirado
                         </span>
                       ) : (
-                        <span style={{ fontSize: '0.8rem', color: esSiguienteEnRuta ? '#1c7ed6' : '#868e96', fontWeight: 'bold' }}>
-                          {esSiguienteEnRuta ? '📍 Siguiente parada' : '⏳ En espera de turno'}
+                        <span className="repartidor-badge" style={{ backgroundColor: esSiguienteEnRuta ? 'var(--sd-rep-info-soft)' : 'var(--sd-rep-surface-soft)', color: esSiguienteEnRuta ? 'var(--sd-rep-info)' : 'var(--sd-rep-muted)' }}>
+                          {esSiguienteEnRuta ? '📍 Siguiente parada' : '⏳ En espera'}
                         </span>
                       )}
                     </div>
 
                     {local.direccion && (
-                      <p style={{ margin: '0.3rem 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>
+                      <p className="repartidor-muted" style={{ fontSize: '0.875rem' }}>
                         <strong>Dirección:</strong> {local.direccion}
                       </p>
                     )}
 
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.5rem' }}>
-                      {local.telefono ? (
-                        <>
-                          <a
-                            href={`tel:${local.telefono}`}
-                            style={{
-                              padding: '0.4rem 0.7rem',
-                              backgroundColor: '#22b8cf',
-                              color: '#fff',
-                              borderRadius: '6px',
-                              textDecoration: 'none',
-                              fontSize: '0.8rem',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            📞 Llamar al Local
-                          </a>
-                          <a
-                            href={`https://wa.me/${formatearTelefonoWA(local.telefono)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              padding: '0.4rem 0.7rem',
-                              backgroundColor: '#2b8a3e',
-                              color: '#fff',
-                              borderRadius: '6px',
-                              textDecoration: 'none',
-                              fontSize: '0.8rem',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            💬 WhatsApp Local
-                          </a>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: '0.85rem', color: '#888' }}>
-                          Sin teléfono registrado
-                        </span>
-                      )}
+                    <div className="repartidor-stop-foot">
+                      <div className="repartidor-contact">
+                        {local.telefono ? (
+                          <>
+                            <a
+                              href={`tel:${local.telefono}`}
+                              className="repartidor-btn repartidor-btn--info-soft repartidor-btn--sm"
+                            >
+                              📞 Llamar
+                            </a>
+                            <a
+                              href={`https://wa.me/${formatearTelefonoWA(local.telefono)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="repartidor-btn repartidor-btn--success-soft repartidor-btn--sm"
+                            >
+                              💬 WhatsApp
+                            </a>
+                          </>
+                        ) : (
+                          <span className="repartidor-muted" style={{ fontSize: '0.8125rem' }}>
+                            Sin teléfono
+                          </span>
+                        )}
+                      </div>
 
-                      {local.todosRechazados ? (
-                        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#c92a2a', fontWeight: 'bold' }}>
-                          🚫 Omitido del recorrido
-                        </span>
-                      ) : !local.retirado ? (
-                        <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
-                          <button
-                            onClick={() => setLocalAConfirmar(local)}
-                            disabled={!habilitadoPorProximidad || accionProcesando === `retiro_${local.id}`}
-                            style={{
-                              padding: '0.4rem 0.8rem',
-                              backgroundColor: !habilitadoPorProximidad ? '#adb5bd' : accionProcesando === `retiro_${local.id}` ? '#868e96' : '#fd7e14',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontWeight: 'bold',
-                              fontSize: '0.8rem',
-                              cursor: !habilitadoPorProximidad || accionProcesando === `retiro_${local.id}` ? 'not-allowed' : 'pointer'
-                            }}
-                          >
-                            {accionProcesando === `retiro_${local.id}`
-                              ? '⏳ Confirmando...'
-                              : !estaEnCamino
-                                ? 'Iniciá el recorrido primero'
-                                : !esSiguienteEnRuta
-                                  ? 'Espere turno de ruta'
-                                  : !local.estaCerca
-                                    ? `Debes estar a menos de 100m`
-                                    : '📦 Confirmar Retiro'}
-                          </button>
+                      <div className="repartidor-stop-foot__action">
+                        {local.todosRechazados ? (
+                          <span className="repartidor-hint repartidor-hint--error">
+                            🚫 Omitido del recorrido
+                          </span>
+                        ) : !local.retirado ? (
+                          <>
+                            <button
+                              onClick={() => setLocalAConfirmar(local)}
+                              disabled={!habilitadoPorProximidad || accionProcesando === `retiro_${local.id}`}
+                              className={`repartidor-btn repartidor-btn--sm ${!habilitadoPorProximidad ? '' : 'repartidor-btn--primary'}`}
+                              style={{ backgroundColor: !habilitadoPorProximidad ? '#adb5bd' : undefined }}
+                            >
+                              {accionProcesando === `retiro_${local.id}`
+                                ? '⏳ Confirmando...'
+                                : !estaEnCamino
+                                  ? 'Iniciá el recorrido primero'
+                                  : !esSiguienteEnRuta
+                                    ? 'Espere turno de ruta'
+                                    : !local.estaCerca
+                                      ? `Debes estar a menos de 100m`
+                                      : '📦 Confirmar Retiro'}
+                            </button>
 
-                          {!estaEnCamino && (
-                            <span style={{ fontSize: '0.75rem', color: '#e67700', fontWeight: 'bold' }}>
-                              📍 Iniciá el recorrido para poder confirmar retiros
-                            </span>
-                          )}
+                            {!estaEnCamino && (
+                              <span className="repartidor-hint">
+                                📍 Iniciá el recorrido para confirmar retiros
+                              </span>
+                            )}
 
-                          {estaEnCamino && !esSiguienteEnRuta && (
-                            <span style={{ fontSize: '0.75rem', color: '#fa5252' }}>
-                              Debe completar las paradas anteriores
-                            </span>
-                          )}
+                            {estaEnCamino && !esSiguienteEnRuta && (
+                              <span className="repartidor-hint repartidor-hint--error">
+                                Debe completar paradas anteriores
+                              </span>
+                            )}
 
-                          {estaEnCamino && esSiguienteEnRuta && !local.estaCerca && (
-                            <span style={{ fontSize: '0.75rem', color: '#e67700', fontWeight: 'bold' }}>
-                              📍 Debes estar en el local para confirmar ({local.distanciaMetros ?? '---'}m de distancia)
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#0ca678', fontWeight: 'bold' }}>
-                          ✓ Retirado
-                        </span>
-                      )}
+                            {estaEnCamino && esSiguienteEnRuta && !local.estaCerca && (
+                              <span className="repartidor-hint">
+                                📍 A menos de 100m ({local.distanciaMetros ?? '---'}m actual)
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="repartidor-hint" style={{ color: 'var(--sd-rep-success)' }}>
+                            ✓ Retirado exitosamente
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p style={{ margin: 0 }}>No hay información de locales disponibles.</p>
+            <p className="repartidor-muted" style={{ margin: 0 }}>No hay información de locales disponibles.</p>
           )}
         </section>
 
-
-
         {enEsperadeRetiro && (
-          <div style={{ padding: '1rem', backgroundColor: '#fff3cd', border: '1px solid #ffe8cc', borderRadius: '8px', color: '#856404', marginBottom: '1.5rem', fontWeight: 'bold' }}>
-            🛑 Simulación pausada: Llegaste al local. Debes confirmar el retiro de los productos para continuar con el recorrido.
+          <div className="repartidor-alert repartidor-alert--warning">
+            🛑 Simulación pausada: Llegaste al local. Debes confirmar el retiro de los productos para continuar.
           </div>
         )}
 
-
-
         {!esPedidoEntregado && (
-          <>
-            {/* ACCIONES Y ENTREGA OTP */}
-            <section style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
-              {(puedeIniciarRecorrido || puedeLiberar) && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem' }}>
-                  {puedeIniciarRecorrido && (
-                    <button
-                      onClick={handleSimularRecorrido}
-                      disabled={accionProcesando !== ''}
-                      style={{
-                        width: '100%',
-                        padding: '0.9rem',
-                        backgroundColor: accionProcesando === 'recorrido' ? '#868e96' : '#1c7ed6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontWeight: 'bold',
-                        cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {accionProcesando === 'recorrido' ? '⏳ Iniciando recorrido...' : '🚴 Iniciar recorrido simulado'}
-                    </button>
-                  )}
-
-                  {puedeLiberar && (
-                    <button
-                      onClick={handleLiberarPedido}
-                      disabled={accionProcesando !== ''}
-                      style={{
-                        width: '100%',
-                        padding: '0.8rem',
-                        backgroundColor: accionProcesando === 'liberar' ? '#868e96' : '#e03131',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontWeight: 'bold',
-                        cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {accionProcesando === 'liberar' ? '⏳ Liberando...' : '❌ Rechazar / Liberar viaje'}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {puedeEntregar && (
-                <div>
-                  <h3>✅ Confirmar entrega</h3>
-                  <p style={{ color: '#666' }}>Ingresá el código OTP proporcionado por el cliente.</p>
-                  <input
-                    type="text"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    placeholder="Código OTP"
-                    maxLength={8}
-                    disabled={accionProcesando !== ''}
-                    style={{ width: '100%', padding: '0.8rem', border: '1px solid #ced4da', borderRadius: '8px', marginBottom: '0.8rem', boxSizing: 'border-box' }}
-                  />
+          <section className="repartidor-actions">
+            {(puedeIniciarRecorrido || puedeLiberar) && (
+              <div className="repartidor-stack">
+                {puedeIniciarRecorrido && (
                   <button
-                    onClick={handleEntregar}
+                    onClick={handleSimularRecorrido}
                     disabled={accionProcesando !== ''}
-                    style={{
-                      width: '100%',
-                      padding: '0.9rem',
-                      backgroundColor: accionProcesando === 'entrega' ? '#868e96' : '#2b8a3e',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontWeight: 'bold',
-                      cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer'
-                    }}
+                    className="repartidor-btn repartidor-btn--primary repartidor-btn--lg repartidor-btn--block"
                   >
-                    {accionProcesando === 'entrega' ? '⏳ Confirmando entrega...' : '✅ Entregar pedido'}
+                    {accionProcesando === 'recorrido' ? '⏳ Iniciando recorrido...' : '🚴 Iniciar recorrido simulado'}
                   </button>
-                </div>
-              )}
+                )}
 
-              {estadoGlobalId === 3 && (
-                <div
-                  style={{
-                    padding: '1rem',
-                    backgroundColor: '#d4edda',
-                    color: '#155724',
-                    borderRadius: '8px',
-                    textAlign: 'center',
-                    fontWeight: 'bold'
-                  }}
+                {puedeLiberar && (
+                  <button
+                    onClick={handleLiberarPedido}
+                    disabled={accionProcesando !== ''}
+                    className="repartidor-btn repartidor-btn--danger-soft repartidor-btn--block"
+                  >
+                    {accionProcesando === 'liberar' ? '⏳ Liberando...' : '❌ Rechazar / Liberar viaje'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {puedeEntregar && (
+              <div className="repartidor-subbox" style={{ background: 'var(--sd-rep-success-soft)', borderColor: 'var(--sd-rep-success-line)' }}>
+                <h3 className="repartidor-subbox__title" style={{ color: 'var(--sd-rep-success)' }}>✅ Confirmar entrega</h3>
+                <p className="repartidor-muted">Ingresá el código OTP proporcionado por el cliente.</p>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  placeholder="Código OTP"
+                  maxLength={8}
+                  disabled={accionProcesando !== ''}
+                  className="repartidor-input repartidor-otp"
+                />
+                <button
+                  onClick={handleEntregar}
+                  disabled={accionProcesando !== ''}
+                  className="repartidor-btn repartidor-btn--success repartidor-btn--lg repartidor-btn--block"
                 >
-                  ✅ Este pedido ya fue entregado.
-                </div>
-              )}
-            </section>
-          </>
+                  {accionProcesando === 'entrega' ? '⏳ Confirmando entrega...' : '✅ Entregar pedido'}
+                </button>
+              </div>
+            )}
+
+            {estadoGlobalId === 3 && (
+              <div className="repartidor-alert repartidor-alert--success" style={{ justifyContent: 'center' }}>
+                ✅ Este pedido ya fue entregado.
+              </div>
+            )}
+          </section>
         )}
 
         {/* 💳 SECCIÓN DE INFORMACIÓN DE PAGO, COBRO Y LIQUIDACIÓN */}
-        <section
-          style={{
-            backgroundColor: '#fff',
-            border: '1px solid #dee2e6',
-            borderRadius: '8px',
-            padding: '1rem',
-            marginBottom: '1.5rem'
-          }}
-        >
-          <h3
-            style={{
-              marginTop: 0,
-              color: '#212529',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
+        <section className="repartidor-finance-box">
+          <h3 style={{ marginTop: 0, color: 'var(--sd-rep-navy)' }}>
             📦 Productos y resumen del viaje
           </h3>
 
-          {/* Resumen principal de montos */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-              gap: '0.65rem',
-              marginBottom: '0.8rem'
-            }}
-          >
-            <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Método de Pago:</span>
-              <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1rem' }}>
-                {pedido.metodo_pago || (esPagoEfectivo ? 'Efectivo contra entrega' : 'Pago Digital')}
-              </p>
+          <div className="repartidor-finance-grid">
+            <div className="repartidor-finance-item repartidor-finance-item--text">
+              <span>Método de Pago</span>
+              <p>{pedido.metodo_pago || (esPagoEfectivo ? 'Efectivo contra entrega' : 'Pago Digital')}</p>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Tu parte del envío:</span>
-              <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.2rem', color: '#2b8a3e' }}>
-                ${formatoMonto(gananciaRepartidor)}
-              </p>
+            <div className="repartidor-finance-item repartidor-finance-item--highlight">
+              <span>Tu parte del envío</span>
+              <p>${formatoMonto(gananciaRepartidor)}</p>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Costo total del envío:</span>
-              <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.1rem', color: '#1c7ed6' }}>
-                ${formatoMonto(costoEnvio)}
-              </p>
+            <div className="repartidor-finance-item">
+              <span>Costo total del envío</span>
+              <p>${formatoMonto(costoEnvio)}</p>
             </div>
 
-            <div>
-              <span style={{ fontSize: '0.85rem', color: '#666' }}>Total del pedido:</span>
-              <p style={{ margin: '0.2rem 0', fontWeight: 'bold', fontSize: '1.2rem', color: '#333' }}>
-                ${formatoMonto(totalOrdenCalculado)}
-              </p>
+            <div className="repartidor-finance-item">
+              <span>Total del pedido</span>
+              <p>${formatoMonto(totalOrdenCalculado)}</p>
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #dee2e6', borderBottom: '1px solid #dee2e6', padding: '0.55rem 0', marginBottom: '0.6rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
-              <h4 style={{ margin: 0 }}>Productos por local</h4>
-              <span style={{ color: '#666', fontSize: '0.8rem' }}>{pedido.productos?.length || 0} productos</span>
+          <div className="repartidor-lines">
+            <div className="repartidor-lines__head">
+              <h3>Productos por local</h3>
+              <span>{pedido.productos?.length || 0} productos</span>
             </div>
+
             {localesInvolucrados.length ? localesInvolucrados.map((local) => {
               const liquidacion = pedido.liquidacion_locales?.find(
                 (item) => Number(item.IDlocal) === Number(local.id)
@@ -1105,64 +969,57 @@ export const DetallePedidoRepartidor = () => {
               }, 0));
 
               return (
-                <div key={`productos-local-${local.id}`} style={{ borderBottom: '1px solid #f1f3f5', padding: '0.45rem 0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                    <span style={{ minWidth: 0 }}>
+                <div key={`productos-local-${local.id}`} className="repartidor-line-group">
+                  <div className="repartidor-line-group__head">
+                    <span>
                       <strong>{local.nombre || `Local #${local.id}`}</strong>
-                      <span style={{ marginLeft: '0.45rem', color: '#777', fontSize: '0.8rem' }}>{local.items.length} ítems</span>
+                      <small>{local.items.length} ítems</small>
                     </span>
-                    <strong style={{ whiteSpace: 'nowrap' }}>${formatoMonto(importeBruto)}</strong>
+                    <strong>${formatoMonto(importeBruto)}</strong>
                   </div>
-                  <div style={{ display: 'grid', gap: '0.35rem', padding: '0.5rem 0.5rem 0.1rem 1.3rem' }}>
+                  <div className="repartidor-line-items">
                     {local.items.map((producto, index) => {
                       const estado = Number(producto.IDestado_detalle || producto.IDestado_item || producto.IDestado);
                       const esCancelado = estado === 6;
                       const importeItem = Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0);
 
                       return (
-                        <div key={producto.IDdetalle || `${local.id}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem', opacity: esCancelado ? 0.65 : 1, fontSize: '0.88rem' }}>
+                        <div key={producto.IDdetalle || `${local.id}-${index}`} className={`repartidor-line-item ${esCancelado ? 'is-cancelled' : ''}`}>
                           <span>
-                            <strong style={{ textDecoration: esCancelado ? 'line-through' : 'none' }}>{producto.cantidad}x {producto.producto}</strong>
-                            <span style={{ marginLeft: '0.4rem', color: esCancelado ? '#c92a2a' : '#666', fontSize: '0.78rem' }}>
-                              {producto.estado_detalle || (esCancelado ? 'Cancelado / Rechazado' : 'En proceso')}
-                            </span>
+                            <strong>{producto.cantidad}x {producto.producto}</strong>
+                            <small>{producto.estado_detalle || (esCancelado ? 'Cancelado / Rechazado' : 'En proceso')}</small>
                           </span>
-                          {esPedidoEntregado && <span style={{ whiteSpace: 'nowrap' }}>${formatoMonto(importeItem)}</span>}
+                          {esPedidoEntregado && <span>${formatoMonto(importeItem)}</span>}
                         </div>
                       );
                     })}
                   </div>
                 </div>
               );
-            }) : pedido.productos?.length ? pedido.productos.map((producto, index) => (
-              <div key={producto.IDdetalle || index} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.35rem 0', fontSize: '0.88rem' }}>
-                <span><strong>{producto.cantidad}x {producto.producto}</strong> <span style={{ color: '#777' }}>({producto.local || 'Local no informado'})</span></span>
-                {esPedidoEntregado && <span style={{ whiteSpace: 'nowrap' }}>${formatoMonto(Number(producto.precio_unitario || 0) * Number(producto.cantidad || 0))}</span>}
-              </div>
-            )) : <p style={{ margin: '0.3rem 0', color: '#777', fontSize: '0.88rem' }}>No hay productos asociados.</p>}
+            }) : <p className="repartidor-muted">No hay productos asociados.</p>}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.35rem 1rem', padding: '0.55rem 0', borderBottom: '1px solid #dee2e6', marginBottom: '0.6rem', fontSize: '0.88rem' }}>
+          <div className="repartidor-platform-row">
             <span>Parte del envío para la plataforma</span>
             <strong>${formatoMonto(Math.max(0, costoEnvio - gananciaRepartidor))}</strong>
           </div>
 
           {esPedidoEntregado && esPagoEfectivo && (
-            <div style={{ padding: '0.4rem 0 0.7rem', borderBottom: '1px solid #dee2e6', marginBottom: '0.7rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.45rem' }}>
+            <div className="repartidor-rendir">
+              <div className="repartidor-rendir__row">
                 <strong>Efectivo a rendir</strong>
-                <strong style={{ color: '#c92a2a' }}>${formatoMonto(montoARendir)}</strong>
+                <strong>${formatoMonto(montoARendir)}</strong>
               </div>
-              <details style={{ fontSize: '0.84rem' }}>
-                <summary style={{ cursor: 'pointer', color: '#555' }}>Ver composición del efectivo a rendir</summary>
-                <div style={{ display: 'grid', gap: '0.3rem', padding: '0.45rem 0 0 1rem' }}>
+              <details>
+                <summary>Ver composición del efectivo a rendir</summary>
+                <div>
                   {pedido.liquidacion_locales?.map((local) => (
-                    <div key={`rendir-${local.IDlocal}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <div key={`rendir-${local.IDlocal}`}>
                       <span>Productos para {local.nombre || `Local #${local.IDlocal}`}</span>
                       <span>${formatoMonto(local.importe_bruto)}</span>
                     </div>
                   ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                  <div>
                     <span>Retención de plataforma del envío</span>
                     <span>${formatoMonto(Math.max(0, costoEnvio - gananciaRepartidor))}</span>
                   </div>
@@ -1171,51 +1028,101 @@ export const DetallePedidoRepartidor = () => {
             </div>
           )}
 
-          {/* 💵 DESGLOSE DE DISTRIBUCIÓN DE EFECTIVO O PAGO DIGITAL */}
           {!esPedidoEntregado && (esPagoEfectivo ? (
-            <div style={{ backgroundColor: '#fff9db', padding: '0.7rem', borderRadius: '6px', marginTop: '0.7rem' }}>
-              <p style={{ margin: 0, fontWeight: 'bold', color: '#d9480f', fontSize: '0.92rem' }}>
-                💵 Cobro en efectivo: cobrar al cliente el total indicado arriba.
-              </p>
+            <div className="repartidor-alert repartidor-alert--warning" style={{ margin: 0 }}>
+              💵 Cobro en efectivo: cobrar al cliente el total indicado arriba.
             </div>
           ) : (
-            <div style={{ padding: '0.65rem', backgroundColor: '#d3f9d8', borderRadius: '6px', color: '#2b8a3e', fontSize: '0.85rem', marginTop: '0.7rem' }}>
-              ✅ <strong>PAGO DIGITAL REGISTRADO:</strong> El cliente ya abonó electrónicamente. <strong>NO cobres dinero al cliente.</strong> Tu ganancia por el envío se acreditará automáticamente en tu billetera/saldo de la App.
+            <div className="repartidor-alert repartidor-alert--success" style={{ margin: 0 }}>
+              ✅ <strong>PAGO DIGITAL REGISTRADO:</strong> El cliente ya abonó electrónicamente. <strong>NO cobres dinero al cliente.</strong> Tu ganancia se acreditará automáticamente.
             </div>
           ))}
         </section>
 
         {/* MODAL CONFIRMACIÓN RETIRO */}
         {!esPedidoEntregado && localAConfirmar && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '12px', maxWidth: '450px', width: '90%', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
-              <h3 style={{ marginTop: 0, color: '#1c7ed6' }}>📦 Confirmar Retiro de Productos</h3>
+          <div className="repartidor-modal-overlay">
+            <div className="repartidor-modal-content repartidor-modal-content--sm">
+              <div className="repartidor-modal-head">
+                <h2>📦 Confirmar Retiro</h2>
+                <button onClick={() => setLocalAConfirmar(null)}>✕</button>
+              </div>
               <p>¿Confirmás que ya retiraste todos los paquetes en <strong>{localAConfirmar.nombre}</strong>?</p>
 
               {localAConfirmar.items && localAConfirmar.items.length > 0 && (
-                <div style={{ backgroundColor: '#f8f9fa', padding: '0.8rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.85rem' }}>
-                  <strong>Productos a retirar:</strong>
-                  <ul style={{ margin: '0.4rem 0 0 0', paddingLeft: '1.2rem' }}>
-                    {localAConfirmar.items.map((it, idx) => (
-                      <li key={it.IDdetalle || idx}>
-                        {it.cantidad}x {it.producto}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="repartidor-retiro-items">
+                  {localAConfirmar.items.map((it, idx) => (
+                    <li key={it.IDdetalle || idx}>
+                      {it.cantidad}x {it.producto}
+                    </li>
+                  ))}
+                </ul>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
-                <button onClick={() => setLocalAConfirmar(null)} disabled={accionProcesando !== ''} style={{ padding: '0.6rem 1rem', backgroundColor: '#e9ecef', color: '#495057', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
-                <button onClick={handleEjecutarConfirmacionRetiro} disabled={accionProcesando !== ''} style={{ padding: '0.6rem 1rem', backgroundColor: '#fd7e14', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: accionProcesando !== '' ? 'not-allowed' : 'pointer' }}>
+              <div className="repartidor-modal-foot">
+                <button onClick={() => setLocalAConfirmar(null)} disabled={accionProcesando !== ''} className="repartidor-btn repartidor-btn--outline repartidor-btn--grow">Cancelar</button>
+                <button onClick={handleEjecutarConfirmacionRetiro} disabled={accionProcesando !== ''} className="repartidor-btn repartidor-btn--primary repartidor-btn--grow">
                   {accionProcesando === `retiro_${localAConfirmar.id}` ? '⏳ Confirmando...' : '✅ Confirmar Retiro'}
                 </button>
               </div>
             </div>
           </div>
         )}
-
       </div>
+
+      {/* 🟢 MODAL ESTÉTICO DE AVISOS / ALERTAS */}
+      {modalAviso && (
+        <div className="repartidor-modal-overlay" style={{ zIndex: 3000 }}>
+          <div className="repartidor-modal-content repartidor-modal-content--sm">
+            <div className="repartidor-aviso-box">
+              <div className={`repartidor-aviso-icon ${modalAviso.titulo.includes('✅') ? 'repartidor-aviso-icon--success' : 'repartidor-aviso-icon--error'}`}>
+                {modalAviso.titulo.includes('✅') ? '✓' : '⚠️'}
+              </div>
+              <h3>{modalAviso.titulo}</h3>
+              <p>{modalAviso.mensaje}</p>
+            </div>
+            <div className="repartidor-modal-foot" style={{ marginTop: '24px' }}>
+              <button
+                onClick={() => {
+                  const cb = modalAviso.callback;
+                  setModalAviso(null);
+                  if (cb) cb();
+                }}
+                className="repartidor-btn repartidor-btn--primary repartidor-btn--block"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🟢 MODAL ESTÉTICO DE CONFIRMACIÓN */}
+      {modalConfirmacion && (
+        <div className="repartidor-modal-overlay" style={{ zIndex: 3000 }}>
+          <div className="repartidor-modal-content repartidor-modal-content--sm">
+            <div className="repartidor-aviso-box">
+              <div className="repartidor-aviso-icon repartidor-aviso-icon--warning">⚠️</div>
+              <h3>{modalConfirmacion.titulo}</h3>
+              <p>{modalConfirmacion.mensaje}</p>
+            </div>
+            <div className="repartidor-modal-foot">
+              <button
+                onClick={() => setModalConfirmacion(null)}
+                className="repartidor-btn repartidor-btn--outline repartidor-btn--grow"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={modalConfirmacion.onConfirm}
+                className="repartidor-btn repartidor-btn--danger repartidor-btn--grow"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,9 @@
+// src/pages/ActualizarPasswordInicialPage.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { cambiarPasswordInicialApi } from '../api/authService';
+import './Auth.css'; // 👈 Importamos los estilos unificados de autenticación
 
 export const ActualizarPasswordInicialPage = () => {
   const { user, setUser } = useAuth();
@@ -52,38 +54,70 @@ export const ActualizarPasswordInicialPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '420px', margin: '3rem auto', padding: '1.5rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>🔒 Actualización Obligatoria de Contraseña</h2>
-      <p style={{ color: '#555', fontSize: '0.9rem' }}>
-        Por razones de seguridad, debes definir una nueva contraseña personalizada antes de continuar.
-      </p>
+    <div className="auth-page">
+      <div className="auth-card">
+        
+        <div className="auth-card__header">
+          <h2 className="auth-card__title">🔒 Actualización Obligatoria</h2>
+          <p className="auth-card__subtitle">
+            Por razones de seguridad, debes definir una nueva contraseña personalizada antes de continuar.
+          </p>
+        </div>
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+        {error && (
+          <div className="auth-banner" role="alert">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit}>
-        <input 
-          type="password" 
-          placeholder="Nueva Contraseña (mínimo 8 caracteres)" 
-          value={nuevaPassword} 
-          onChange={(e) => setNuevaPassword(e.target.value)} 
-          disabled={isSubmitting}
-          required 
-        />
-        <br /><br />
-        <input 
-          type="password" 
-          placeholder="Confirmar Nueva Contraseña" 
-          value={confirmarPassword} 
-          onChange={(e) => setConfirmarPassword(e.target.value)} 
-          disabled={isSubmitting}
-          required 
-        />
-        <br /><br />
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label htmlFor="nuevaPassword">Nueva Contraseña</label>
+            <input 
+              id="nuevaPassword"
+              type="password" 
+              className="auth-input"
+              placeholder="Mínimo 8 caracteres" 
+              value={nuevaPassword} 
+              onChange={(e) => setNuevaPassword(e.target.value)} 
+              disabled={isSubmitting}
+              required 
+            />
+          </div>
+          
+          <div className="auth-field">
+            <label htmlFor="confirmarPassword">Confirmar Nueva Contraseña</label>
+            <input 
+              id="confirmarPassword"
+              type="password" 
+              className="auth-input"
+              placeholder="Repite tu contraseña" 
+              value={confirmarPassword} 
+              onChange={(e) => setConfirmarPassword(e.target.value)} 
+              disabled={isSubmitting}
+              required 
+            />
+          </div>
 
-        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '0.6rem', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-          {isSubmitting ? '⏳ Guardando cambios...' : 'Actualizar e Ingresar'}
-        </button>
-      </form>
+          <button 
+            type="submit" 
+            className="admin-btn admin-btn--primary admin-btn--block" 
+            disabled={isSubmitting}
+            style={{ marginTop: '8px' }}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="admin-spinner"></span>
+                Guardando cambios...
+              </>
+            ) : (
+              'Actualizar e Ingresar'
+            )}
+          </button>
+        </form>
+
+      </div>
     </div>
   );
 };

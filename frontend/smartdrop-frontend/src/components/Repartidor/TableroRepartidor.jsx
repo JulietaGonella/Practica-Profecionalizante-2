@@ -1,7 +1,7 @@
+// src/components/Repartidor/TableroRepartidor.jsx
 import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -14,17 +14,12 @@ import {
 import { Circle, GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import './CSS/Repartidor.css';
 import { getMiTableroRepartidor } from '../../api/tableroService';
 
 const FECHA_CORTE = '2026-10-01';
-const COLOR_REPARTIDOR = '#15aabf';
+const COLOR_REPARTIDOR = '#F47A16';
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-const ESTILO_PANEL = {
-  backgroundColor: '#fff',
-  border: '1px solid #dee2e6',
-  borderRadius: '8px',
-  padding: '1.1rem'
-};
 
 const fechaLocalISO = (fecha) => {
   const anio = fecha.getFullYear();
@@ -35,8 +30,10 @@ const fechaLocalISO = (fecha) => {
 
 const formatearFecha = (valor) => {
   if (!valor) return '—';
+
   const fecha = new Date(`${String(valor).slice(0, 10)}T12:00:00`);
   if (Number.isNaN(fecha.getTime())) return '—';
+
   return new Intl.DateTimeFormat('es-AR', {
     day: 'numeric',
     month: 'short',
@@ -44,39 +41,60 @@ const formatearFecha = (valor) => {
   }).format(fecha);
 };
 
-const formatearMoneda = (valor) => Number(valor || 0).toLocaleString('es-AR', {
-  style: 'currency',
-  currency: 'ARS',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
+const formatearMoneda = (valor) =>
+  Number(valor || 0).toLocaleString('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 
-const formatearKilometros = (valor) => Number(valor || 0).toLocaleString('es-AR', {
-  minimumFractionDigits: 1, // Muestra al menos 1 decimal (ej: 4,5 km)
-  maximumFractionDigits: 2  // Muestra hasta 2 decimales si existen (ej: 4,52 km)
-});
+const formatearKilometros = (valor) =>
+  Number(valor || 0).toLocaleString('es-AR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2
+  });
 
 const obtenerCentroMapa = (puntos) => {
   if (!puntos.length) return { lat: -32.4075, lng: -63.24 };
+
   return {
     lat: puntos.reduce((total, punto) => total + Number(punto.latitud), 0) / puntos.length,
     lng: puntos.reduce((total, punto) => total + Number(punto.longitud), 0) / puntos.length
   };
 };
 
+/* ==========================================================================
+   MAPA GOOGLE
+   ========================================================================== */
 const MapaGoogle = ({ puntos }) => {
-  const { isLoaded, loadError } = useLoadScript({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY
+  });
 
   if (loadError) {
-    return <MapaOpenStreetMap puntos={puntos} aviso="No se pudo cargar Google Maps; se muestra el mapa alternativo." />;
+    return (
+      <MapaOpenStreetMap
+        puntos={puntos}
+        aviso="No se pudo cargar Google Maps; se muestra el mapa alternativo."
+      />
+    );
   }
-  if (!isLoaded) return <div style={{ height: 340, display: 'grid', placeItems: 'center', color: '#6c757d' }}>Cargando mapa…</div>;
+
+  if (!isLoaded) {
+    return (
+      <div className="repartidor-map-canvas repartidor-map-message" style={{ height: '340px', display: 'grid', placeItems: 'center' }}>
+        <span className="repartidor-spinner" />
+        <p>Cargando mapa…</p>
+      </div>
+    );
+  }
 
   const centro = obtenerCentroMapa(puntos);
 
   return (
     <GoogleMap
-      mapContainerStyle={{ width: '100%', height: '340px', borderRadius: '6px' }}
+      mapContainerStyle={{ width: '100%', height: '340px', borderRadius: '11px' }}
       center={centro}
       zoom={12}
       options={{
@@ -88,7 +106,10 @@ const MapaGoogle = ({ puntos }) => {
       }}
     >
       {puntos.map((punto) => {
-        const position = { lat: Number(punto.latitud), lng: Number(punto.longitud) };
+        const position = {
+          lat: Number(punto.latitud),
+          lng: Number(punto.longitud)
+        };
         const cantidad = Number(punto.cantidad_pedidos) || 1;
 
         return (
@@ -104,9 +125,14 @@ const MapaGoogle = ({ puntos }) => {
                 strokeWeight: 1
               }}
             />
+
             <Marker
               position={position}
-              label={{ text: String(cantidad), color: '#075985', fontWeight: 'bold' }}
+              label={{
+                text: String(cantidad),
+                color: '#17243A',
+                fontWeight: 'bold'
+              }}
               icon={{
                 path: window.google.maps.SymbolPath.CIRCLE,
                 scale: 11,
@@ -124,27 +150,47 @@ const MapaGoogle = ({ puntos }) => {
   );
 };
 
+/* ==========================================================================
+   MAPA ALTERNATIVO OPENSTREETMAP
+   ========================================================================== */
 const MapaOpenStreetMap = ({ puntos, aviso }) => {
   const centro = obtenerCentroMapa(puntos);
   const centroLeaflet = [centro.lat, centro.lng];
 
   return (
-    <div>
-      {aviso && <p style={{ margin: '0 0 0.5rem', color: '#946b00', fontSize: '0.82rem' }}>{aviso}</p>}
-      <div style={{ height: 340, border: '1px solid #dee2e6', borderRadius: '6px', overflow: 'hidden' }}>
-        <MapContainer center={centroLeaflet} zoom={12} style={{ height: '100%', width: '100%' }}>
+    <div className="repartidor-map-wrap">
+      {aviso && (
+        <p className="repartidor-map-note">{aviso}</p>
+      )}
+
+      <div className="repartidor-map-canvas" style={{ height: '340px' }}>
+        <MapContainer
+          center={centroLeaflet}
+          zoom={12}
+          style={{ height: '100%', width: '100%' }}
+        >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            attribution='&copy; OpenStreetMap contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+
           {puntos.map((punto) => (
             <CircleMarker
               key={`${punto.latitud}-${punto.longitud}`}
-              center={[Number(punto.latitud), Number(punto.longitud)]}
+              center={[
+                Number(punto.latitud),
+                Number(punto.longitud)
+              ]}
               radius={8 + Math.min(Number(punto.cantidad_pedidos) || 1, 20)}
-              pathOptions={{ color: COLOR_REPARTIDOR, fillColor: COLOR_REPARTIDOR, fillOpacity: 0.25 }}
+              pathOptions={{
+                color: COLOR_REPARTIDOR,
+                fillColor: COLOR_REPARTIDOR,
+                fillOpacity: 0.25
+              }}
             >
-              <Popup>{Number(punto.cantidad_pedidos) || 1} entregas</Popup>
+              <Popup>
+                {Number(punto.cantidad_pedidos) || 1} entregas
+              </Popup>
             </CircleMarker>
           ))}
         </MapContainer>
@@ -153,30 +199,49 @@ const MapaOpenStreetMap = ({ puntos, aviso }) => {
   );
 };
 
+/* ==========================================================================
+   COMPONENTE COMPARTIDO: MAPA Y REFERENCIA DE ENTREGAS
+   ========================================================================== */
 const MapaPedidos = ({ puntos, nombre }) => {
   if (!puntos.length) {
-    return <div style={{ height: 340, display: 'grid', placeItems: 'center', color: '#6c757d' }}>No hay entregas con coordenadas para este período.</div>;
+    return (
+      <div className="repartidor-map-canvas repartidor-map-message" style={{ height: '340px', display: 'grid', placeItems: 'center' }}>
+        <p>No hay entregas con coordenadas para este período.</p>
+      </div>
+    );
   }
 
   return (
-    <div style={{ display: 'grid', gap: '0.7rem' }}>
+    <div className="repartidor-map-wrap">
       {GOOGLE_MAPS_API_KEY
         ? <MapaGoogle puntos={puntos} />
         : <MapaOpenStreetMap puntos={puntos} />}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
-          <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: COLOR_REPARTIDOR, display: 'inline-block' }} />
+
+      <div className="repartidor-map-legend" style={{ marginTop: '10px' }}>
+        <span>
+          <span className="repartidor-map-legend__dot" style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: COLOR_REPARTIDOR, display: 'inline-block' }} />
           {nombre || 'Repartidor'}
         </span>
-        <span style={{ color: '#6c757d' }}>{puntos.reduce((total, punto) => total + Number(punto.cantidad_pedidos || 0), 0)} entregas marcadas</span>
+
+        <span className="repartidor-muted">
+          {puntos.reduce(
+            (total, punto) => total + Number(punto.cantidad_pedidos || 0),
+            0
+          )}{' '}
+          entregas marcadas
+        </span>
       </div>
     </div>
   );
 };
 
+/* ==========================================================================
+   COMPONENTE PRINCIPAL: TABLERO DEL REPARTIDOR
+   ========================================================================== */
 export const TableroRepartidor = () => {
   const navigate = useNavigate();
-  const [periodo, setPeriodo] = useState('30'); // Opción por defecto
+
+  const [periodo, setPeriodo] = useState('30');
   const [dashboard, setDashboard] = useState(null);
   const [pagina, setPagina] = useState(1);
   const [filasPorPagina, setFilasPorPagina] = useState(7);
@@ -185,181 +250,420 @@ export const TableroRepartidor = () => {
 
   useEffect(() => {
     let activo = true;
+
     const cargarTablero = async () => {
       setCargando(true);
       setError('');
+
       try {
         const params = {};
 
         if (periodo === 'todo') {
-          // Si elige "Desde el 01/10/2026", se establece la fecha inicial fija
-          params.fechaInicio = FECHA_CORTE; // '2026-10-01'
+          params.fechaInicio = FECHA_CORTE;
         } else {
-          // Cálculo de días relativos (7, 30, 90)
           const fechaInicio = new Date();
           fechaInicio.setDate(fechaInicio.getDate() - Number(periodo) + 1);
+
           params.fechaInicio = fechaLocalISO(fechaInicio);
           params.fechaFin = fechaLocalISO(new Date());
         }
 
         const data = await getMiTableroRepartidor(params);
+
         if (activo) setDashboard(data);
       } catch (err) {
-        if (activo) setError(err.response?.data?.error || 'No se pudieron cargar las estadísticas del repartidor.');
+        if (activo) {
+          setError(
+            err.response?.data?.error ||
+            'No se pudieron cargar las estadísticas del repartidor.'
+          );
+        }
       } finally {
         if (activo) setCargando(false);
       }
     };
 
     cargarTablero();
-    return () => { activo = false; };
+
+    return () => {
+      activo = false;
+    };
   }, [periodo]);
 
   const pedidos = dashboard?.pedidos || [];
-  const paginasTotales = Math.max(1, Math.ceil(pedidos.length / filasPorPagina));
+  const paginasTotales = Math.max(
+    1,
+    Math.ceil(pedidos.length / filasPorPagina)
+  );
   const paginaActual = Math.min(pagina, paginasTotales);
   const inicioFilas = (paginaActual - 1) * filasPorPagina;
-  const pedidosVisibles = pedidos.slice(inicioFilas, inicioFilas + filasPorPagina);
-  const nombreRepartidor = dashboard?.repartidor?.nombre || dashboard?.repartidor?.username || 'Repartidor';
+  const pedidosVisibles = pedidos.slice(
+    inicioFilas,
+    inicioFilas + filasPorPagina
+  );
+
+  const nombreRepartidor =
+    dashboard?.repartidor?.nombre ||
+    dashboard?.repartidor?.username ||
+    'Repartidor';
+
   const puntosGrafico = dashboard?.pedidosPorFechaEstado || [];
-  const maxCantidad = Math.max(1, ...puntosGrafico.map((punto) => punto.Entregado));
-  const ticksYAxis = maxCantidad <= 1 ? [0, 0.25, 0.5, 0.75, 1] : undefined;
+  const maxCantidad = Math.max(
+    1,
+    ...puntosGrafico.map((punto) => punto.Entregado)
+  );
+  const ticksYAxis = maxCantidad <= 1
+    ? [0, 0.25, 0.5, 0.75, 1]
+    : undefined;
 
   return (
-    <main style={{ maxWidth: 1240, margin: '0 auto', padding: '1.5rem', display: 'grid', gap: '1.2rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ color: '#0b7285', fontWeight: 800, fontSize: '1.15rem' }}>smartdrop</span>
-          <div style={{ borderLeft: '1px solid #dee2e6', paddingLeft: '1rem' }}>
-            <h1 style={{ margin: 0, fontSize: '1.45rem', color: '#212529' }}>Tablero General - Repartidor</h1>
-            <p style={{ margin: '0.25rem 0 0', color: '#6c757d' }}>{nombreRepartidor}</p>
+    <main className="repartidor-container repartidor-container--wide repartidor-dash">
+      <header className="repartidor-page-head">
+        <div className="repartidor-brand">
+          <span className="repartidor-brand__mark repartidor-dashboard-logo">
+            SD
+          </span>
+
+          <div>
+            <h1 className="repartidor-page-title">
+              Tablero General
+            </h1>
+            <p className="repartidor-page-sub">
+              Repartidor · {nombreRepartidor}
+            </p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'end', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <label style={{ display: 'grid', gap: '0.3rem', color: '#495057', fontSize: '0.82rem', fontWeight: 600 }}>
-            Período
-            <select value={periodo} onChange={(e) => { setPeriodo(e.target.value); setPagina(1); }} style={{ minWidth: 170, padding: '0.55rem 0.7rem', border: '1px solid #ced4da', borderRadius: '6px', background: '#fff' }}>
+
+        <div className="repartidor-page-head__actions">
+          <label className="repartidor-field">
+            <span>Período de consulta</span>
+
+            <select
+              className="repartidor-select"
+              value={periodo}
+              onChange={(e) => {
+                setPeriodo(e.target.value);
+                setPagina(1);
+              }}
+            >
               <option value="7">Últimos 7 días</option>
               <option value="30">Últimos 30 días</option>
               <option value="90">Últimos 90 días</option>
               <option value="todo">Desde el 01/10/2026</option>
             </select>
           </label>
-          <button onClick={() => navigate('/repartidor/inicio')} style={{ padding: '0.58rem 0.8rem', border: '1px solid #ced4da', borderRadius: '6px', background: '#fff', cursor: 'pointer', color: '#343a40' }}>
-            ← Volver al panel
+
+          <button
+            type="button"
+            className="repartidor-btn repartidor-btn--outline"
+            onClick={() => navigate('/repartidor/inicio')}
+          >
+            <span aria-hidden="true">←</span>
+            Volver al panel
           </button>
         </div>
       </header>
 
-      {error && <div style={{ padding: '0.8rem 1rem', borderRadius: '6px', background: '#fff5f5', color: '#c92a2a', border: '1px solid #ffc9c9' }}>{error}</div>}
+      {error && (
+        <div
+          className="repartidor-alert repartidor-alert--danger"
+          role="alert"
+        >
+          <span aria-hidden="true">!</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       {cargando && !dashboard ? (
-        <div style={{ ...ESTILO_PANEL, minHeight: 180, display: 'grid', placeItems: 'center', color: '#6c757d' }}>Cargando tablero…</div>
+        <div className="repartidor-state">
+          <span className="repartidor-spinner" />
+          <p>Cargando tablero…</p>
+        </div>
       ) : (
         <>
-          {/* ... dentro de la renderización del componente TableroRepartidor ... */}
+          <section
+            className="repartidor-kpi-grid repartidor-dashboard-kpis"
+            aria-label="Indicadores principales"
+          >
+            <article className="repartidor-kpi repartidor-kpi--orange">
+              <div className="repartidor-kpi__top">
+                <span className="repartidor-kpi__icon" aria-hidden="true">
+                  $
+                </span>
+                <span className="repartidor-kpi__label">
+                  Ingresos totales
+                </span>
+              </div>
 
-          <section aria-label="Indicadores principales" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.9rem' }}>
-            {/* Card 1: Ingresos Totales */}
-            <div style={{ ...ESTILO_PANEL, borderTop: '3px solid #0b7285' }}>
-              <span style={{ color: '#6c757d', fontSize: '0.88rem', fontWeight: 600 }}>Ingresos totales</span>
-              <div style={{ marginTop: '0.3rem', fontSize: '1.8rem', lineHeight: 1.2, fontWeight: 700, color: '#0b7285' }}>
+              <strong className="repartidor-kpi__value">
                 {formatearMoneda(dashboard?.kpis?.ingresosTotales)}
-              </div>
-            </div>
+              </strong>
+              <span className="repartidor-kpi__caption">
+                Ganancias del período seleccionado
+              </span>
+            </article>
 
-            {/* Card 2: Pedidos Entregados */}
-            <div style={{ ...ESTILO_PANEL, borderTop: '3px solid #2b8a3e' }}>
-              <span style={{ color: '#6c757d', fontSize: '0.88rem', fontWeight: 600 }}>Pedidos entregados</span>
-              <div style={{ marginTop: '0.3rem', fontSize: '2rem', lineHeight: 1.2, fontWeight: 700, color: '#2b8a3e' }}>
+            <article className="repartidor-kpi repartidor-kpi--success">
+              <div className="repartidor-kpi__top">
+                <span className="repartidor-kpi__icon" aria-hidden="true">
+                  ✓
+                </span>
+                <span className="repartidor-kpi__label">
+                  Pedidos entregados
+                </span>
+              </div>
+
+              <strong className="repartidor-kpi__value">
                 {dashboard?.kpis?.pedidosEntregados || 0}
-              </div>
-            </div>
+              </strong>
+              <span className="repartidor-kpi__caption">
+                Entregas completadas
+              </span>
+            </article>
 
-            {/* Card 3: Kilómetros recorridos */}
-            <div style={{ ...ESTILO_PANEL, borderTop: '3px solid #15aabf' }}>
-              <span style={{ color: '#6c757d', fontSize: '0.88rem', fontWeight: 600 }}>Kilómetros recorridos</span>
-              <div style={{ marginTop: '0.3rem', fontSize: '2rem', lineHeight: 1.2, fontWeight: 700, color: '#0b7285' }}>
-                {formatearKilometros(dashboard?.kpis?.kmRecorridos)}
+            <article className="repartidor-kpi repartidor-kpi--info">
+              <div className="repartidor-kpi__top">
+                <span className="repartidor-kpi__icon" aria-hidden="true">
+                  ↗
+                </span>
+                <span className="repartidor-kpi__label">
+                  Kilómetros recorridos
+                </span>
               </div>
-            </div>
+
+              <strong className="repartidor-kpi__value">
+                {formatearKilometros(dashboard?.kpis?.kmRecorridos)} km
+              </strong>
+              <span className="repartidor-kpi__caption">
+                Distancia registrada
+              </span>
+            </article>
           </section>
 
-          <section style={ESTILO_PANEL}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1rem', color: '#343a40' }}>Evolución diaria de entregas realizadas</h2>
-              {cargando && <span style={{ color: '#6c757d', fontSize: '0.8rem' }}>Actualizando…</span>}
+          <section className="repartidor-panel-card">
+            <div className="repartidor-panel-card__head">
+              <div>
+                <h2>Evolución diaria de entregas</h2>
+                <p className="repartidor-dashboard-description">
+                  Cantidad de pedidos entregados por fecha
+                </p>
+              </div>
+
+              {cargando && (
+                <span className="repartidor-badge repartidor-badge--info">
+                  Actualizando…
+                </span>
+              )}
             </div>
-            <div style={{ width: '100%', height: 300 }}>
+
+            <div className="repartidor-chart repartidor-dashboard-line-chart">
               {puntosGrafico.length ? (
-                <ResponsiveContainer>
-                  <LineChart data={puntosGrafico} margin={{ top: 10, right: 20, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
-                    <XAxis dataKey="fecha" tickFormatter={formatearFecha} minTickGap={24} tick={{ fontSize: 12, fill: '#6c757d' }} />
-                    <YAxis domain={[0, maxCantidad <= 1 ? 1 : 'auto']} ticks={ticksYAxis} allowDecimals={false} />
-                    <Tooltip labelFormatter={formatearFecha} />
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={puntosGrafico}
+                    margin={{ top: 10, right: 20, bottom: 8, left: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#E6E9ED"
+                    />
+                    <XAxis
+                      dataKey="fecha"
+                      tickFormatter={formatearFecha}
+                      minTickGap={24}
+                      tick={{ fontSize: 12, fill: '#667085' }}
+                    />
+                    <YAxis
+                      domain={[0, maxCantidad <= 1 ? 1 : 'auto']}
+                      ticks={ticksYAxis}
+                      allowDecimals={false}
+                      tick={{ fontSize: 12, fill: '#667085' }}
+                    />
+                    <Tooltip
+                      labelFormatter={formatearFecha}
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: '1px solid #E6E9ED'
+                      }}
+                    />
                     <Legend />
-                    {/* Se mantiene solo la línea verde de pedidos entregados */}
-                    <Line name="Pedidos Entregados" type="monotone" dataKey="Entregado" stroke="#2b8a3e" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+
+                    <Line
+                      name="Pedidos Entregados"
+                      type="monotone"
+                      dataKey="Entregado"
+                      stroke="#16804A"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: '#868e96' }}>
-                  No hay entregas registradas para este período.
+                <div className="repartidor-chart-empty">
+                  <span className="repartidor-dashboard-empty-icon" aria-hidden="true">
+                    ↗
+                  </span>
+                  <p>No hay entregas registradas para este período.</p>
                 </div>
               )}
             </div>
           </section>
 
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', gap: '1rem', alignItems: 'start' }}>
-            <div style={{ ...ESTILO_PANEL, minWidth: 0 }}>
-              <h2 style={{ margin: '0 0 0.8rem', fontSize: '1rem', color: '#343a40' }}>Tabla de pedidos repartidos</h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem', minWidth: 600 }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', color: '#495057', background: '#f1f3f5' }}>
-                      {['N° pedido', 'Fecha', 'Km recorridos', 'Ganancia repartidor', 'Estado'].map((titulo) => <th key={titulo} style={{ padding: '0.65rem 0.55rem', whiteSpace: 'nowrap' }}>{titulo}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedidosVisibles.length ? pedidosVisibles.map((pedido) => {
+          <section className="repartidor-panel-card">
+            <div className="repartidor-panel-card__head">
+              <div>
+                <h2>Pedidos repartidos</h2>
+                <p className="repartidor-dashboard-description">
+                  Historial de pedidos y ganancias por entrega
+                </p>
+              </div>
+
+              <span className="repartidor-badge repartidor-badge--neutral">
+                {pedidos.length} registros
+              </span>
+            </div>
+
+            <div className="repartidor-table-scroll">
+              <table className="repartidor-table">
+                <thead>
+                  <tr>
+                    {[
+                      'N° pedido',
+                      'Fecha',
+                      'Km recorridos',
+                      'Ganancia repartidor',
+                      'Estado'
+                    ].map((titulo) => (
+                      <th key={titulo}>{titulo}</th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {pedidosVisibles.length ? (
+                    pedidosVisibles.map((pedido) => {
                       const entregado = Number(pedido.IDestado) === 3;
+
                       return (
-                        <tr key={pedido.orden_id} style={{ borderBottom: '1px solid #e9ecef' }}>
-                          <td style={{ padding: '0.65rem 0.55rem' }}>#{pedido.orden_id}</td>
-                          <td style={{ padding: '0.65rem 0.55rem', whiteSpace: 'nowrap' }}>{formatearFecha(pedido.fecha_clave)}</td>
-                          <td style={{ padding: '0.65rem 0.55rem' }}>{formatearKilometros(pedido.distancia_km)}</td>
-                          <td style={{ padding: '0.65rem 0.55rem', whiteSpace: 'nowrap' }}>{formatearMoneda(pedido.ganancia_repartidor)}</td>
-                          <td style={{ padding: '0.65rem 0.55rem' }}>
-                            <span style={{ padding: '0.22rem 0.5rem', borderRadius: '4px', color: entregado ? '#155724' : '#721c24', background: entregado ? '#d4edda' : '#f8d7da', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <tr key={pedido.orden_id}>
+                          <td className="is-strong is-nowrap">
+                            #{pedido.orden_id}
+                          </td>
+
+                          <td className="is-nowrap">
+                            {formatearFecha(pedido.fecha_clave)}
+                          </td>
+
+                          <td className="is-nowrap">
+                            {formatearKilometros(pedido.distancia_km)} km
+                          </td>
+
+                          <td className="is-strong is-nowrap">
+                            {formatearMoneda(pedido.ganancia_repartidor)}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`repartidor-badge ${
+                                entregado
+                                  ? 'repartidor-badge--success'
+                                  : 'repartidor-badge--error'
+                              }`}
+                            >
+                              <span className="repartidor-dot" />
                               {entregado ? 'Entregado' : 'Cancelado'}
                             </span>
                           </td>
                         </tr>
                       );
-                    }) : <tr><td colSpan="5" style={{ padding: '1.2rem', textAlign: 'center', color: '#868e96' }}>No hay pedidos repartidos para este período.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-              <footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.8rem', color: '#6c757d', fontSize: '0.82rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  Filas
-                  <select value={filasPorPagina} onChange={(e) => { setFilasPorPagina(Number(e.target.value)); setPagina(1); }} style={{ padding: '0.3rem', border: '1px solid #ced4da', borderRadius: '4px', background: '#fff' }}>
-                    <option value={7}>7</option><option value={14}>14</option><option value={28}>28</option>
-                  </select>
-                </label>
-                <span>{pedidos.length ? `${inicioFilas + 1}-${Math.min(inicioFilas + filasPorPagina, pedidos.length)} de ${pedidos.length}` : '0 de 0'}</span>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  <button type="button" aria-label="Página anterior" disabled={paginaActual <= 1} onClick={() => setPagina((actual) => Math.max(1, actual - 1))} style={{ padding: '0.3rem 0.6rem', border: '1px solid #ced4da', borderRadius: '4px', background: '#fff', cursor: paginaActual <= 1 ? 'not-allowed' : 'pointer' }}>‹</button>
-                  <button type="button" aria-label="Página siguiente" disabled={paginaActual >= paginasTotales} onClick={() => setPagina((actual) => Math.min(paginasTotales, actual + 1))} style={{ padding: '0.3rem 0.6rem', border: '1px solid #ced4da', borderRadius: '4px', background: '#fff', cursor: paginaActual >= paginasTotales ? 'not-allowed' : 'pointer' }}>›</button>
-                </div>
-              </footer>
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="is-empty">
+                        No hay pedidos repartidos para este período.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            <div style={{ ...ESTILO_PANEL, minWidth: 0 }}>
-              <h2 style={{ margin: '0 0 0.8rem', fontSize: '1rem', color: '#343a40' }}>Mapa de pedidos por repartidor</h2>
-              <MapaPedidos puntos={dashboard?.mapaPedidos || []} nombre={nombreRepartidor} />
+            <footer className="repartidor-pagination">
+              <label>
+                Filas por página
+
+                <select
+                  className="repartidor-select repartidor-select--sm"
+                  value={filasPorPagina}
+                  onChange={(e) => {
+                    setFilasPorPagina(Number(e.target.value));
+                    setPagina(1);
+                  }}
+                >
+                  <option value={7}>7</option>
+                  <option value={14}>14</option>
+                  <option value={28}>28</option>
+                </select>
+              </label>
+
+              <span>
+                {pedidos.length
+                  ? `${inicioFilas + 1}-${Math.min(
+                      inicioFilas + filasPorPagina,
+                      pedidos.length
+                    )} de ${pedidos.length}`
+                  : '0 de 0'}
+              </span>
+
+              <div className="repartidor-pagination__nav">
+                <button
+                  type="button"
+                  className="repartidor-icon-btn"
+                  aria-label="Página anterior"
+                  disabled={paginaActual <= 1}
+                  onClick={() =>
+                    setPagina((actual) => Math.max(1, actual - 1))
+                  }
+                >
+                  ‹
+                </button>
+
+                <button
+                  type="button"
+                  className="repartidor-icon-btn"
+                  aria-label="Página siguiente"
+                  disabled={paginaActual >= paginasTotales}
+                  onClick={() =>
+                    setPagina((actual) =>
+                      Math.min(paginasTotales, actual + 1)
+                    )
+                  }
+                >
+                  ›
+                </button>
+              </div>
+            </footer>
+          </section>
+
+          <section className="repartidor-panel-card">
+            <div className="repartidor-panel-card__head">
+              <div>
+                <h2>Mapa de pedidos</h2>
+                <p className="repartidor-dashboard-description">
+                  Distribución geográfica de las entregas del período
+                </p>
+              </div>
+
+              <span className="repartidor-badge repartidor-badge--orange">
+                {nombreRepartidor}
+              </span>
             </div>
+
+            <MapaPedidos
+              puntos={dashboard?.mapaPedidos || []}
+              nombre={nombreRepartidor}
+            />
           </section>
         </>
       )}

@@ -54,11 +54,17 @@ export const getFlotaDashboardService = async (filtros = {}) => {
     ORDER BY nombre ASC
   `, paramsBase);
 
-  // KPIs Globales de la Flota
+  // KPIs Globales de la Flota (con filtro para descartar pruebas de un día para el otro)
   const [[kpisRepartidores]] = await pool.query(`
     SELECT 
       COUNT(DISTINCT r.id) AS cantidadRepartidores,
-      COALESCE(ROUND(AVG(TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en)), 2), 0) AS tiempoPromedio,
+      COALESCE(ROUND(AVG(
+        CASE 
+          WHEN TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en) BETWEEN 1 AND 180 
+          THEN TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en) 
+          ELSE NULL 
+        END
+      ), 2), 0) AS tiempoPromedio,
       COALESCE(ROUND((SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(o.id), 0)), 2), 0) AS porcentajeEntregados,
       COALESCE(SUM(o.distancia_km), 0) AS kmRecorridos
     FROM repartidores r
@@ -69,14 +75,20 @@ export const getFlotaDashboardService = async (filtros = {}) => {
     ${whereSQL}
   `, params);
 
-  // Tabla Detallada por Repartidor
+  // Tabla Detallada por Repartidor (Aplicando el mismo filtro de seguridad)
   const [tablaRepartidores] = await pool.query(`
     SELECT 
       r.id,
       CONCAT_WS(', ', COALESCE(NULLIF(TRIM(u.apellido), ''), u.username), u.nombre) AS nombre,
       COALESCE(SUM(CASE WHEN o.IDestado = 3 THEN 1 ELSE 0 END), 0) AS entregados,
       COALESCE(SUM(CASE WHEN o.IDestado = 6 THEN 1 ELSE 0 END), 0) AS cancelados,
-      COALESCE(ROUND(AVG(TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en)), 2), 0) AS tiempoPromedio,
+      COALESCE(ROUND(AVG(
+        CASE 
+          WHEN TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en) BETWEEN 1 AND 180 
+          THEN TIMESTAMPDIFF(MINUTE, h_inicio.creado_en, h_fin.creado_en) 
+          ELSE NULL 
+        END
+      ), 2), 0) AS tiempoPromedio,
       COUNT(o.id) AS asignados
     FROM repartidores r
     JOIN usuarios u ON r.IDusuario = u.id

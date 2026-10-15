@@ -619,3 +619,13 @@ ALTER TABLE detalle_orden
 -- Agregar la columna para almacenar el precio neto pretendido por el local
 ALTER TABLE productos
 ADD COLUMN precio_local DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER nombre;
+
+
+USE BD_SmartDrop;
+
+-- 1. Eliminar la restricción UNIQUE sobre el nombre (si existe)
+ALTER TABLE productos DROP INDEX nombre;
+
+-- 2. (Recomendado) Agregar una restricción UNIQUE compuesta:
+-- De esta forma un MISMO local no puede repetir el nombre, pero DISTINTOS locales sí pueden.
+ALTER TABLE productos ADD UNIQUE KEY unique_producto_local (IDlocal, nombre);

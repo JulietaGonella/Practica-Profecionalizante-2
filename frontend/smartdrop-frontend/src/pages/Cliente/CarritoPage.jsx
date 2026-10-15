@@ -6,6 +6,7 @@ import { crearOrden } from '../../api/ordersService';
 import { getMisDirecciones } from '../../api/clientesService';
 import api from '../../api/axios';
 import { calcularDistanciaKm } from '../../utils/geo';
+import '../../components/Cliente/CSS/Cliente.css'; // 👈 Importación correcta de los estilos unificados
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -37,6 +38,9 @@ export const CarritoPage = () => {
   const [metodoPago, setMetodoPago] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 🟢 Estado para el Modal Estético de Avisos unificado
+  const [modalAviso, setModalAviso] = useState(null); // { titulo: '', mensaje: '' }
+
   // Validación de límite de opciones
   const excedeLimiteOpciones = (item) => {
     if (!item.grupos_opciones || !item.opcionesDetalladas) return false;
@@ -62,9 +66,7 @@ export const CarritoPage = () => {
     return false;
   };
 
-  // src/pages/Cliente/CarritoPage.jsx
-
-  // 1️⃣ Cargar únicamente direcciones guardadas y autoselect por GPS (150m)
+  // 1️⃣ Cargar direcciones guardadas y seleccionar automáticamente la más cercana por GPS
   useEffect(() => {
     let isMounted = true;
 
@@ -76,7 +78,7 @@ export const CarritoPage = () => {
         // Obtener direcciones guardadas en la BD
         const dataDirs = await getMisDirecciones();
 
-        // Filtrar asegurando solo objetos válidos y excluyendo registros ficticios de GPS
+        // Filtrar asegurando solo objetos válidos y excluyendo registros temporales de GPS
         const listaDirecciones = Array.isArray(dataDirs)
           ? dataDirs.filter(d =>
             d &&
@@ -107,7 +109,7 @@ export const CarritoPage = () => {
           return;
         }
 
-        // Obtener coordenadas GPS reales del dispositivo para comparar distancias
+        // Obtener coordenadas GPS reales del dispositivo para calcular la más cercana
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (!isMounted) return;
@@ -115,13 +117,10 @@ export const CarritoPage = () => {
             const latActual = pos.coords.latitude;
             const lngActual = pos.coords.longitude;
 
-            // Rango de tolerancia: 150 metros (0.15 km)
-            const TOLERANCIA_KM = 0.15;
-
-            let direccionCercana = null;
+            let direccionMasCercana = null;
             let menorDistancia = Infinity;
 
-            // Comparar GPS actual con TODAS las direcciones guardadas en la BD
+            // Recorrer TODAS las direcciones de la base de datos para buscar la menor distancia
             listaDirecciones.forEach((dir) => {
               if (dir.latitud !== null && dir.longitud !== null) {
                 const dist = calcularDistanciaKm(
@@ -131,17 +130,16 @@ export const CarritoPage = () => {
                   Number(dir.longitud)
                 );
 
-                if (dist <= TOLERANCIA_KM && dist < menorDistancia) {
+                if (dist < menorDistancia) {
                   menorDistancia = dist;
-                  direccionCercana = dir;
+                  direccionMasCercana = dir;
                 }
               }
             });
 
-            // Si el cliente está en una de sus ubicaciones guardadas (<= 150m), la selecciona.
-            // Si está en otro lugar no guardado, selecciona su dirección principal.
-            if (direccionCercana?.id) {
-              setDireccionSeleccionadaId(String(direccionCercana.id));
+            // Selecciona la más cercana encontrada; si ninguna tiene coordenadas, usa la principal
+            if (direccionMasCercana?.id) {
+              setDireccionSeleccionadaId(String(direccionMasCercana.id));
             } else if (dirPrincipal?.id) {
               setDireccionSeleccionadaId(String(dirPrincipal.id));
             }
@@ -155,7 +153,7 @@ export const CarritoPage = () => {
               setLoadingDirecciones(false);
             }
           },
-          { timeout: 8000, maximumAge: 60000, enableHighAccuracy: true }
+          { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
         );
 
       } catch (err) {
@@ -259,83 +257,68 @@ export const CarritoPage = () => {
 
         navigate(`/cliente/seguimiento/${ordenId}`);
       } else {
-        alert("El pedido se creó pero no se obtuvo un ID válido de respuesta.");
+        setModalAviso({
+          titulo: '⚠️ Advertencia',
+          mensaje: 'El pedido se creó pero no se obtuvo un ID válido de respuesta.'
+        });
       }
     } catch (err) {
       console.error('Error al crear la orden:', err);
-      alert(err.response?.data?.error || 'Ocurrió un error al procesar tu pedido.');
+      setModalAviso({
+        titulo: '⚠️ Error al procesar pedido',
+        mensaje: err.response?.data?.error || 'Ocurrió un error al procesar tu pedido.'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h2>🛒 Tu Carrito de Compras</h2>
+    <div className="sd-container">
+      <h2 style={{ color: 'var(--sd-navy)', fontSize: '1.375rem', fontWeight: 700, marginBottom: '20px' }}>
+        🛒 Tu Carrito de Compras
+      </h2>
 
       {cartItems.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+        <div className="sd-state">
           <p>El carrito está vacío.</p>
           <button
             onClick={() => navigate('/cliente/inicio')}
-            style={{
-              padding: '0.6rem 1.2rem',
-              backgroundColor: '#1c7ed6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
+            className="admin-btn admin-btn--primary"
+            style={{ marginTop: '8px' }}
           >
             🛍️ Ir a comprar
           </button>
         </div>
       ) : (
-        <>
+        <div className="sd-cart-container">
           {/* Listado de Productos */}
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gap: '12px' }}>
             {cartItems.map((item, index) => {
               const cantidadActual = item.cantidad || 1;
               const precioUnitario = item.precioUnitarioTotal || item.precio;
               const imagenCompleta = item.imagen_url ? `${API_URL}${item.imagen_url}` : null;
 
               return (
-                <div
-                  key={index}
-                  style={{
-                    borderBottom: '1px solid #ddd',
-                    padding: '1rem 0',
-                    display: 'flex',
-                    justify: 'space-between',
-                    alignItems: 'center',
-                    gap: '15px'
-                  }}
-                >
+                <div key={index} className="sd-cart-item">
                   {imagenCompleta && (
                     <img
                       src={imagenCompleta}
                       alt={item.nombre}
-                      style={{
-                        width: '70px',
-                        height: '70px',
-                        objectFit: 'cover',
-                        borderRadius: '8px',
-                        border: '1px solid #eee'
-                      }}
+                      className="sd-cart-item__img"
                     />
                   )}
 
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: 0 }}>{item.nombre}</h4>
-                    <small style={{ color: '#666' }}>
+                  <div className="sd-cart-item__info">
+                    <h4 className="sd-cart-item__title">{item.nombre}</h4>
+                    <span className="sd-cart-item__price-unit">
                       Precio unitario: ${Number(precioUnitario).toFixed(2)}
-                    </small>
+                    </span>
 
                     {item.opcionesDetalladas && item.opcionesDetalladas.length > 0 && (
-                      <div style={{ fontSize: '0.85rem', color: '#555', marginTop: '0.2rem' }}>
-                        <strong>Opciones seleccionadas:</strong>
-                        <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.8125rem', color: 'var(--sd-navy)' }}>Opciones seleccionadas:</strong>
+                        <ul className="sd-cart-options-list">
                           {item.opcionesDetalladas.map((opc) => (
                             <li key={opc.id}>
                               <strong>{opc.cantidad}x</strong> {opc.nombre}
@@ -349,26 +332,28 @@ export const CarritoPage = () => {
                     )}
 
                     {item.comentario && (
-                      <small style={{ display: 'block', fontStyle: 'italic', color: '#888', marginTop: '0.2rem' }}>
+                      <small className="admin-muted" style={{ fontStyle: 'italic', marginTop: '2px' }}>
                         Nota: {item.comentario}
                       </small>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="sd-cart-item__controls">
                     <button
                       onClick={() => actualizarCantidad(index, cantidadActual - 1)}
-                      style={{ padding: '0.2rem 0.6rem', fontWeight: 'bold', cursor: 'pointer' }}
+                      className="sd-qty-btn"
                     >
                       -
                     </button>
 
-                    <span style={{ fontWeight: 'bold' }}>{cantidadActual}</span>
+                    <span style={{ fontWeight: 'bold', minWidth: '24px', textAlign: 'center' }}>
+                      {cantidadActual}
+                    </span>
 
                     {!item.grupos_opciones || item.grupos_opciones.length === 0 ? (
                       <button
                         onClick={() => actualizarCantidad(index, cantidadActual + 1)}
-                        style={{ padding: '0.2rem 0.6rem', fontWeight: 'bold', cursor: 'pointer' }}
+                        className="sd-qty-btn"
                       >
                         +
                       </button>
@@ -382,12 +367,7 @@ export const CarritoPage = () => {
                           }
                           disabled={excedeLimiteOpciones(item)}
                           onClick={() => actualizarCantidad(index, cantidadActual + 1)}
-                          style={{
-                            padding: '0.2rem 0.5rem',
-                            fontSize: '0.8rem',
-                            cursor: excedeLimiteOpciones(item) ? 'not-allowed' : 'pointer',
-                            opacity: excedeLimiteOpciones(item) ? 0.5 : 1
-                          }}
+                          className="admin-btn admin-btn--outline admin-btn--sm"
                         >
                           📋 +1 igual
                         </button>
@@ -395,15 +375,7 @@ export const CarritoPage = () => {
                         <button
                           title="Agregar otro con distintas opciones"
                           onClick={() => navigate(`/cliente/locales/producto/${item.id}`)}
-                          style={{
-                            padding: '0.2rem 0.5rem',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer',
-                            backgroundColor: '#1c7ed6',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '4px'
-                          }}
+                          className="admin-btn admin-btn--primary admin-btn--sm"
                         >
                           ➕ Armar otro
                         </button>
@@ -411,13 +383,14 @@ export const CarritoPage = () => {
                     )}
                   </div>
 
-                  <div style={{ textAlign: 'right', minWidth: '80px' }}>
-                    <p style={{ margin: 0, fontWeight: 'bold' }}>
+                  <div style={{ textAlign: 'right', minWidth: '90px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    <p style={{ margin: 0, fontWeight: '700', color: 'var(--sd-success)', fontSize: '1rem' }}>
                       ${(precioUnitario * cantidadActual).toFixed(2)}
                     </p>
                     <button
                       onClick={() => removerDelCarrito(index)}
-                      style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.8rem' }}
+                      className="admin-btn admin-btn--ghost admin-btn--sm"
+                      style={{ color: 'var(--sd-error)', padding: '2px 6px' }}
                     >
                       Eliminar
                     </button>
@@ -428,23 +401,24 @@ export const CarritoPage = () => {
           </div>
 
           {/* Selector de Dirección de Entrega */}
-          <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '8px', backgroundColor: '#fcfcfc' }}>
-            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>
+          <div className="admin-subbox" style={{ backgroundColor: 'var(--sd-surface)' }}>
+            <label style={{ fontWeight: '700', color: 'var(--sd-navy)', display: 'block' }}>
               📍 Dirección de Entrega (Ubicación Actual Detectada):
             </label>
 
             {loadingDirecciones ? (
-              <small>⏳ Verificando ubicación GPS actual y sincronizando direcciones...</small>
+              <small className="admin-muted">⏳ Verificando ubicación GPS actual y sincronizando direcciones...</small>
             ) : errorDirecciones ? (
-              <div style={{ padding: '0.6rem 0.8rem', backgroundColor: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '6px', color: '#e03131', fontSize: '0.9rem' }}>
+              <div className="admin-banner admin-banner--error">
                 ⚠️ {errorDirecciones}
               </div>
             ) : (
-              <div>
+              <div style={{ display: 'grid', gap: '6px' }}>
                 <select
                   value={direccionSeleccionadaId}
                   onChange={(e) => setDireccionSeleccionadaId(e.target.value)}
-                  style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '1rem' }}
+                  className="admin-select"
+                  style={{ width: '100%', minHeight: '42px' }}
                 >
                   {direcciones.map((dir) => (
                     <option key={dir.id} value={String(dir.id)}>
@@ -452,7 +426,7 @@ export const CarritoPage = () => {
                     </option>
                   ))}
                 </select>
-                <small style={{ display: 'block', marginTop: '0.4rem', color: '#666' }}>
+                <small className="admin-muted">
                   ℹ️ El selector se actualiza automáticamente con tu ubicación GPS actual.
                 </small>
               </div>
@@ -460,14 +434,15 @@ export const CarritoPage = () => {
           </div>
 
           {/* Selector de Método de Pago */}
-          <div style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
-            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>
+          <div className="admin-subbox" style={{ backgroundColor: 'var(--sd-surface)' }}>
+            <label style={{ fontWeight: '700', color: 'var(--sd-navy)', display: 'block' }}>
               💳 Método de Pago:
             </label>
             <select
               value={metodoPago}
               onChange={(e) => setMetodoPago(Number(e.target.value))}
-              style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+              className="admin-select"
+              style={{ width: '100%', minHeight: '42px' }}
             >
               <option value={1}>💵 Efectivo al entregar</option>
               <option value={2}>📱 Mercado Pago</option>
@@ -476,74 +451,76 @@ export const CarritoPage = () => {
           </div>
 
           {/* Resumen del Pedido */}
-          <div
-            style={{
-              backgroundColor: '#f8f9fa',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0'
-            }}
-          >
+          <div className="sd-cart-summary-card">
             <h3>Resumen del Pedido</h3>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <div className="sd-cart-summary-row">
               <span>Subtotal Productos:</span>
-              <span>${subtotalProductosBase.toFixed(2)}</span>
+              <span style={{ fontWeight: '600' }}>${subtotalProductosBase.toFixed(2)}</span>
             </div>
 
             {totalAdicionales > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#2b8a3e' }}>
+              <div className="sd-cart-summary-row" style={{ color: 'var(--sd-success)' }}>
                 <span>Valor Adicional (Opciones/Extras):</span>
-                <span>+${totalAdicionales.toFixed(2)}</span>
+                <span style={{ fontWeight: '600' }}>+${totalAdicionales.toFixed(2)}</span>
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#1c7ed6' }}>
+            <div className="sd-cart-summary-row" style={{ color: 'var(--sd-info)' }}>
               <span>
                 Costo de Envío {distanciaKM > 0 && `(${distanciaKM.toFixed(1)} km)`}:
               </span>
-              <span>
+              <span style={{ fontWeight: '600' }}>
                 {loadingCotizacion ? '⏳ Calculando...' : `+$${costoEnvio.toFixed(2)}`}
               </span>
             </div>
 
             {tiempoEstimadoMin > 0 && (
-              <small style={{ color: '#666', display: 'block', marginBottom: '0.5rem' }}>
+              <small className="admin-muted">
                 ⏱️ Tiempo estimado de entrega: ~{tiempoEstimadoMin} mins
               </small>
             )}
 
             {errorCotizacion && (
-              <p style={{ color: 'red', fontSize: '0.85rem', margin: '0.5rem 0' }}>{errorCotizacion}</p>
+              <p className="admin-text-error" style={{ fontSize: '0.8125rem' }}>{errorCotizacion}</p>
             )}
 
-            <hr style={{ margin: '0.8rem 0' }} />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.25rem' }}>
+            <div className="sd-cart-summary-row sd-cart-summary-row--total">
               <span>Total Final:</span>
-              <span>${totalGeneral.toFixed(2)}</span>
+              <span style={{ color: 'var(--sd-success)' }}>${totalGeneral.toFixed(2)}</span>
             </div>
 
             <button
               onClick={handleCrearOrden}
               disabled={isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId}
-              style={{
-                marginTop: '1.5rem',
-                width: '100%',
-                padding: '0.8rem',
-                backgroundColor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId ? '#ccc' : '#2b8a3e',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                cursor: isSubmitting || loadingCotizacion || Boolean(errorCotizacion) || !direccionSeleccionadaId ? 'not-allowed' : 'pointer'
-              }}
+              className="admin-btn admin-btn--success admin-btn--block"
+              style={{ minHeight: '44px', fontSize: '1rem' }}
             >
               {isSubmitting ? '⏳ Procesando Pedido...' : `Confirmar Orden ($${totalGeneral.toFixed(2)})`}
             </button>
           </div>
-        </>
+        </div>
+      )}
+
+      {/* 🟢 Modal Estético General de Avisos */}
+      {modalAviso && (
+        <div className="admin-modal-aviso-overlay">
+          <div className="admin-modal-aviso-box">
+            <div className="admin-modal-aviso-icon admin-modal-aviso-icon--error">
+              ⚠️
+            </div>
+            <h3>{modalAviso.titulo}</h3>
+            <p>{modalAviso.mensaje}</p>
+            <div className="admin-modal-aviso-actions">
+              <button
+                onClick={() => setModalAviso(null)}
+                className="admin-btn admin-btn--primary"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

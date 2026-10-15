@@ -1,6 +1,8 @@
 // src/components/Local/GestionHorariosLocal.jsx
 import { useState, useEffect } from 'react';
 import { getHorariosLocal, updateHorariosLocal } from '../../api/localService';
+import { Icon, Spinner, Banner } from './LocalUI';
+import './css/Local.css';
 
 const DIAS_SEMANA = [
     'Domingo',
@@ -132,15 +134,25 @@ export const GestionHorariosLocal = () => {
         }
     };
 
-    if (loading) return <div>⏳ Cargando configuración de horarios...</div>;
+    if (loading) {
+        return (
+            <div className="local-state local-scope" role="status">
+                <Spinner />
+                Cargando configuración de horarios...
+            </div>
+        );
+    }
 
     return (
-        <div style={{ marginTop: '1.5rem', border: '1px solid #ccc', padding: '1.5rem', borderRadius: '8px', backgroundColor: '#fff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <section className="local-section">
+            <div className="local-section-head">
                 <div>
-                    <h3 style={{ margin: 0 }}>📅 Configuración de Horarios de Atención</h3>
-                    <p style={{ color: '#666', fontSize: '0.9rem', margin: '0.3rem 0 0 0' }}>
-                        Configura rangos de atención e independientes para cada día.
+                    <h2 className="local-title">
+                        <span className="local-title__icon"><Icon name="calendar" size={20} /></span>
+                        Configuración de horarios de atención
+                    </h2>
+                    <p className="local-subtitle">
+                        Configurá rangos de atención independientes para cada día.
                     </p>
                 </div>
 
@@ -151,130 +163,100 @@ export const GestionHorariosLocal = () => {
                             setEditando(true);
                             setMensaje({ tipo: '', texto: '' });
                         }}
-                        style={{
-                            padding: '0.6rem 1.2rem',
-                            backgroundColor: '#007bff',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold'
-                        }}
+                        className="local-btn local-btn--primary"
                     >
-                        ✏️ Actualizar / Editar
+                        <Icon name="pencil" />
+                        Actualizar / Editar
                     </button>
                 )}
             </div>
 
             {mensaje.texto && (
-                <p style={{ color: mensaje.tipo === 'error' ? 'red' : 'green', fontWeight: 'bold' }}>
+                <Banner tipo={mensaje.tipo === 'error' ? 'error' : 'success'}>
                     {mensaje.texto}
-                </p>
+                </Banner>
             )}
 
             <form onSubmit={handleGuardar}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="local-days">
                     {DIAS_SEMANA.map((nombreDia, diaIdx) => {
                         const turnosDelDia = horarios.filter((h) => h.dia_semana === diaIdx);
 
                         return (
-                            <div
-                                key={`dia-${diaIdx}`}
-                                style={{
-                                    border: '1px solid #dee2e6',
-                                    borderRadius: '8px',
-                                    padding: '0.8rem',
-                                    backgroundColor: '#f8f9fa'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <strong style={{ fontSize: '1.05rem' }}>{nombreDia}</strong>
+                            <div key={`dia-${diaIdx}`} className="local-day">
+                                <div className="local-day__name">
+                                    <strong>{nombreDia}</strong>
+                                    {turnosDelDia.length === 0 && (
+                                        <span className="local-badge local-badge--neutral">Cerrado</span>
+                                    )}
                                     {editando && (
                                         <button
                                             type="button"
                                             onClick={() => handleAgregarTurno(diaIdx)}
-                                            style={{
-                                                padding: '0.3rem 0.6rem',
-                                                backgroundColor: '#28a745',
-                                                color: '#fff',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                fontSize: '0.8rem',
-                                                cursor: 'pointer',
-                                                fontWeight: 'bold'
-                                            }}
+                                            className="local-btn local-btn--sm local-btn--success-soft"
                                         >
-                                            ➕ Añadir Turno
+                                            <Icon name="plus" size={14} />
+                                            Añadir turno
                                         </button>
                                     )}
                                 </div>
 
                                 {turnosDelDia.length === 0 ? (
-                                    <p style={{ margin: 0, color: '#888', fontSize: '0.85rem' }}>Día sin horarios configurados (Cerrado).</p>
+                                    <p className="local-closed">
+                                        <Icon name="clock" size={16} />
+                                        Día sin horarios configurados (Cerrado).
+                                    </p>
                                 ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div className="local-turnos">
                                         {turnosDelDia.map((item, index) => (
                                             <div
                                                 key={item.idTemp}
-                                                style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns: '1fr 1fr 100px 40px',
-                                                    gap: '10px',
-                                                    alignItems: 'center',
-                                                    padding: '0.5rem',
-                                                    backgroundColor: item.es_activo ? '#fff' : '#ffe8cc',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid #e9ecef'
-                                                }}
+                                                className={`local-turno ${item.es_activo ? '' : 'local-turno--off'}`}
                                             >
-                                                <div>
-                                                    <small style={{ display: 'block' }}>Apertura (Turno {index + 1}):</small>
+                                                <label className="local-field">
+                                                    <span>Apertura (turno {index + 1})</span>
                                                     <input
                                                         type="time"
                                                         disabled={!editando || !item.es_activo || isSaving}
                                                         value={item.hora_apertura}
                                                         onChange={(e) => handleChange(item.idTemp, 'hora_apertura', e.target.value)}
-                                                        style={{ padding: '0.3rem', width: '100%' }}
+                                                        className="local-input"
                                                     />
-                                                </div>
+                                                </label>
 
-                                                <div>
-                                                    <small style={{ display: 'block' }}>Cierre:</small>
+                                                <label className="local-field">
+                                                    <span>Cierre</span>
                                                     <input
                                                         type="time"
                                                         disabled={!editando || !item.es_activo || isSaving}
                                                         value={item.hora_cierre}
                                                         onChange={(e) => handleChange(item.idTemp, 'hora_cierre', e.target.value)}
-                                                        style={{ padding: '0.3rem', width: '100%' }}
+                                                        className="local-input"
                                                     />
-                                                </div>
+                                                </label>
 
-                                                <label style={{ cursor: editando ? 'pointer' : 'not-allowed', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                                <label className="local-check local-turno__state" style={{ cursor: editando ? 'pointer' : 'not-allowed' }}>
                                                     <input
                                                         type="checkbox"
                                                         disabled={!editando || isSaving}
                                                         checked={item.es_activo}
                                                         onChange={(e) => handleChange(item.idTemp, 'es_activo', e.target.checked)}
                                                     />
-                                                    {' '}{item.es_activo ? 'Activo' : 'Inactivo'}
+                                                    {item.es_activo ? 'Activo' : 'Inactivo'}
                                                 </label>
 
                                                 {editando && turnosDelDia.length > 1 ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleEliminarTurno(item.idTemp)}
-                                                        style={{
-                                                            backgroundColor: '#dc3545',
-                                                            color: '#fff',
-                                                            border: 'none',
-                                                            borderRadius: '4px',
-                                                            padding: '0.4rem',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                        title="Eliminar este turno"
-                                                    >
-                                                        🗑️
-                                                    </button>
+                                                    <div className="local-turno__del">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleEliminarTurno(item.idTemp)}
+                                                            className="local-icon-btn local-icon-btn--danger"
+                                                            title="Eliminar este turno"
+                                                            aria-label="Eliminar este turno"
+                                                        >
+                                                            <Icon name="trash" size={16} />
+                                                        </button>
+                                                    </div>
                                                 ) : <div />}
                                             </div>
                                         ))}
@@ -286,44 +268,33 @@ export const GestionHorariosLocal = () => {
                 </div>
 
                 {editando && (
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem' }}>
+                    <div className="local-sticky-actions">
                         <button
                             type="button"
                             onClick={handleCancelarEdicion}
                             disabled={isSaving}
-                            style={{
-                                flex: 1,
-                                padding: '0.8rem',
-                                backgroundColor: '#6c757d',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontWeight: 'bold',
-                                cursor: 'pointer'
-                            }}
+                            className="local-btn local-btn--outline local-btn--lg"
+                            style={{ flex: 1 }}
                         >
-                            ❌ Cancelar
+                            <Icon name="x" />
+                            Cancelar
                         </button>
 
                         <button
                             type="submit"
                             disabled={isSaving}
-                            style={{
-                                flex: 1,
-                                padding: '0.8rem',
-                                backgroundColor: '#2b8a3e',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontWeight: 'bold',
-                                cursor: isSaving ? 'not-allowed' : 'pointer'
-                            }}
+                            className="local-btn local-btn--primary local-btn--lg"
+                            style={{ flex: 1 }}
                         >
-                            {isSaving ? '⏳ Guardando...' : '💾 Guardar Horarios'}
+                            {isSaving ? (
+                                <><Spinner /> Guardando...</>
+                            ) : (
+                                <><Icon name="save" /> Guardar horarios</>
+                            )}
                         </button>
                     </div>
                 )}
             </form>
-        </div>
+        </section>
     );
 };

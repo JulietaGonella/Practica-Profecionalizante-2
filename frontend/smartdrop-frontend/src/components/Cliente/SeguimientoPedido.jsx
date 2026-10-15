@@ -1,9 +1,11 @@
+// src/components/Cliente/SeguimientoPedido.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getPedidoById, getOrderTracking } from '../../api/ordersService';
 import api from '../../api/axios';
 import { obtenerEstadoEfectivoCliente, SECUENCIA_ESTADOS } from '../../utils/estados';
 import L from 'leaflet';
+import '../../components/Cliente/CSS/Cliente.css'; // 👈 Importación correcta de los estilos unificados
 
 export const SeguimientoPedido = () => {
   const { ordenId } = useParams();
@@ -14,6 +16,7 @@ export const SeguimientoPedido = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
+  const [mensajeBanner, setMensajeBanner] = useState(''); // 🟢 Estado para el banner visual estético
 
   // 📍 Estado para almacenar las coordenadas GPS del repartidor en tiempo real
   const [repartidorGps, setRepartidorGps] = useState(null);
@@ -205,12 +208,12 @@ export const SeguimientoPedido = () => {
       let estadoTexto = '⏳ Esperando retiro';
 
       if (local.todosRechazados) {
-        bgColor = '#e03131'; // Rojo si rechazó todos los productos
+        bgColor = '#e03131';
         iconEmoji = '❌';
         opacity = 0.5;
         estadoTexto = '❌ Productos Rechazados (No requiere visita)';
       } else if (local.retirado) {
-        bgColor = '#20c997'; // Verde si los productos fueron retirados
+        bgColor = '#20c997';
         opacity = 0.6;
         estadoTexto = '✅ Productos Retirados';
       }
@@ -249,7 +252,6 @@ export const SeguimientoPedido = () => {
     const lngRep = repartidorGps?.lng ?? Number(orden.repartidor?.longitud ?? orden.repartidor?.ubicacion?.longitud);
     const tieneGpsRepartidor = tieneRepartidorAsignado && Number.isFinite(latRep) && Number.isFinite(lngRep);
 
-    // Filtrar ÚNICAMENTE locales que realmente estén pendientes (excluye retirados y 100% rechazados)
     const localesPendientes = Array.from(localesMap.values()).filter(l => l.pendiente);
 
     const bounds = L.latLngBounds([[latCliente, lngCliente]]);
@@ -290,13 +292,13 @@ export const SeguimientoPedido = () => {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: '2rem' }}>⏳ Cargando estado del pedido...</div>;
+    return <div className="sd-state"><div className="sd-spinner"></div><p>Cargando estado del pedido...</p></div>;
   }
 
   if (error) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: '#e03131' }}>
-        ⚠️ {error}
+      <div className="sd-container">
+        <div className="admin-banner admin-banner--error">⚠️ {error}</div>
       </div>
     );
   }
@@ -309,8 +311,8 @@ export const SeguimientoPedido = () => {
 
   const idEstadoEfectivo = obtenerEstadoEfectivoCliente(orden);
   const estadoGeneralConfig = SECUENCIA_ESTADOS[idEstadoEfectivo] || {
-    bg: '#eee',
-    color: '#000',
+    bg: 'var(--sd-surface-muted)',
+    color: 'var(--sd-text-main)',
     etiqueta: orden.estado_orden || 'En proceso'
   };
 
@@ -332,9 +334,9 @@ export const SeguimientoPedido = () => {
   }
 
   const configBadgePago = {
-    aprobado: { bg: '#d3f9d8', color: '#2b8a3e', texto: 'PAGO APROBADO' },
-    pendiente: { bg: '#fff3bf', color: '#e67700', texto: 'PAGO PENDIENTE' },
-    rechazado: { bg: '#ffe3e3', color: '#c92a2a', texto: 'PAGO RECHAZADO' }
+    aprobado: { bg: 'var(--sd-tint-success)', color: 'var(--sd-success)', texto: 'PAGO APROBADO' },
+    pendiente: { bg: 'var(--sd-tint-warning)', color: 'var(--sd-warning)', texto: 'PAGO PENDIENTE' },
+    rechazado: { bg: 'var(--sd-tint-error)', color: 'var(--sd-error)', texto: 'PAGO RECHAZADO' }
   };
 
   const currentBadge = configBadgePago[estadoPagoNormalizado];
@@ -346,442 +348,306 @@ export const SeguimientoPedido = () => {
     estadosItemsActivos.every((st) => st === estadosItemsActivos[0]);
 
   return (
-    <div
-      style={{
-        maxWidth: '800px',
-        margin: '1.5rem auto',
-        padding: '1.5rem',
-        backgroundColor: '#fff',
-        borderRadius: '10px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-      }}
-    >
-      <h2>📦 Seguimiento del Pedido #{orden.IDorden || ordenId}</h2>
+    <div className="sd-container">
+      <div className="sd-tracking-container">
+        <h2 style={{ color: 'var(--sd-navy)', fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
+          📦 Seguimiento del Pedido #{orden.IDorden || ordenId}
+        </h2>
 
-      {/* MAPA DE SEGUIMIENTO */}
-      <div style={{ marginTop: '1.5rem' }}>
-        <h4 style={{ margin: '0 0 0.5rem 0', color: '#333' }}>
-          🗺️ Mapa de Seguimiento en Vivo
-        </h4>
+        {/* 🟢 Banner visual estético para notificaciones / errores de pago */}
+        {mensajeBanner && (
+          <div className="sd-tracking-banner">
+            <span>{mensajeBanner}</span>
+            <button
+              onClick={() => setMensajeBanner('')}
+              className="admin-btn admin-btn--ghost admin-btn--sm"
+              style={{ color: 'var(--sd-info)', padding: '2px 6px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
-        <div
-          ref={mapRef}
-          style={{
-            width: '100%',
-            height: '320px',
-            borderRadius: '8px',
-            border: '1px solid #ced4da',
-            zIndex: 1
-          }}
-        />
+        {/* MAPA DE SEGUIMIENTO */}
+        <div className="sd-tracking-map-section">
+          <h4 style={{ color: 'var(--sd-navy)', fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>
+            🗺️ Mapa de Seguimiento en Vivo
+          </h4>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: '15px',
-            marginTop: '0.5rem',
-            fontSize: '0.85rem',
-            color: '#555',
-            flexWrap: 'wrap'
-          }}
-        >
-          <span>🏪 <b>Local Pendiente</b></span>
-          <span>✅ <b>Local Retirado</b></span>
-          <span>❌ <b>Local Rechazado</b></span>
-          <span>🏠 <b>Tu Dirección</b></span>
-          {(orden.IDrepartidor || orden.repartidor_asignado || orden.repartidor) && (
-            <span>🚴 <b>Repartidor</b></span>
-          )}
+          <div
+            ref={mapRef}
+            className="sd-map-wrapper"
+            style={{ height: '320px' }}
+          />
+
+          <div className="sd-tracking-map-legend">
+            <span>🏪 <b>Local Pendiente</b></span>
+            <span>✅ <b>Local Retirado</b></span>
+            <span>❌ <b>Local Rechazado</b></span>
+            <span>🏠 <b>Tu Dirección</b></span>
+            {(orden.IDrepartidor || orden.repartidor_asignado || orden.repartidor) && (
+              <span>🚴 <b>Repartidor</b></span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Estado General */}
-      <div
-        style={{
-          padding: '1.2rem',
-          backgroundColor: estadoGeneralConfig.bg,
-          color: estadoGeneralConfig.color,
-          borderRadius: '8px',
-          fontWeight: 'bold',
-          fontSize: '1.2rem',
-          textAlign: 'center',
-          margin: '1rem 0'
-        }}
-      >
-        Estado General: {estadoGeneralConfig.etiqueta}
-      </div>
-
-      {/* Mensaje de Pedido Cancelado */}
-      {Number(orden.IDestado) === 6 && (
+        {/* Estado General */}
         <div
+          className="sd-tracking-status-box"
           style={{
-            backgroundColor: '#ffe3e3',
-            border: '1px solid #ffc9c9',
-            color: '#c92a2a',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
+            backgroundColor: estadoGeneralConfig.bg,
+            color: estadoGeneralConfig.color,
+            border: '1px solid var(--sd-border)'
           }}
         >
-          <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.1rem' }}>🚫 Pedido Cancelado</h3>
-          <p style={{ margin: 0, fontSize: '0.95rem' }}>
-            <strong>Motivo:</strong> {orden.motivo_cancelacion || 'El pedido fue cancelado.'}
+          Estado General: {estadoGeneralConfig.etiqueta}
+        </div>
+
+        {/* Mensaje de Pedido Cancelado */}
+        {Number(orden.IDestado) === 6 && (
+          <div className="admin-banner admin-banner--error" style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>🚫 Pedido Cancelado</h3>
+            <p style={{ margin: 0, fontSize: '0.875rem' }}>
+              <strong>Motivo:</strong> {orden.motivo_cancelacion || 'El pedido fue cancelado.'}
+            </p>
+          </div>
+        )}
+
+        {/* Repartidor Asignado */}
+        {(orden.repartidor_asignado || orden.IDrepartidor) && (
+          <div className="admin-banner admin-banner--info" style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'center' }}>
+            <strong style={{ fontSize: '0.95rem' }}>🚴 ¡Repartidor Asignado!</strong>
+            <p style={{ margin: 0, fontSize: '0.875rem' }}>
+              {orden.repartidor?.nombre
+                ? `${orden.repartidor.nombre} ${orden.repartidor.apellido || ''} se encargará de retirar y entregar tu pedido.`
+                : 'Un repartidor ya ha tomado tu pedido y se encuentra en camino al local.'}
+            </p>
+          </div>
+        )}
+
+        {/* Ubicación */}
+        <div className="admin-subbox" style={{ backgroundColor: 'var(--sd-surface-muted)' }}>
+          <h4 style={{ color: ' var(--sd-info)', fontSize: '0.9rem', fontWeight: 700, margin: '0 0 4px 0' }}>
+            📍 Ubicación de Entrega
+          </h4>
+          <p style={{ margin: 0, color: 'var(--sd-text-main)', fontWeight: '500', fontSize: '0.9rem' }}>
+            {orden.direccion_entrega || 'Dirección no especificada'}
           </p>
         </div>
-      )}
 
-      {/* Repartidor Asignado */}
-      {(orden.repartidor_asignado || orden.IDrepartidor) && (
-        <div
-          style={{
-            backgroundColor: '#e7f5ff',
-            border: '1px solid #74c0fc',
-            color: '#1864ab',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
-          }}
-        >
-          <strong>🚴 ¡Repartidor Asignado!</strong>
-          <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.95rem' }}>
-            {orden.repartidor?.nombre
-              ? `${orden.repartidor.nombre} ${orden.repartidor.apellido || ''} se encargará de retirar y entregar tu pedido.`
-              : 'Un repartidor ya ha tomado tu pedido y se encuentra en camino al local.'}
-          </p>
-        </div>
-      )}
+        {/* Productos */}
+        <div className="admin-subbox" style={{ backgroundColor: 'var(--sd-surface)' }}>
+          <h4 style={{ color: 'var(--sd-navy)', fontSize: '1rem', fontWeight: 700, margin: '0 ' }}>
+            📋 Estado Individual por Producto
+          </h4>
+          <div className="sd-tracking-products-list">
+            {listaProductos.map((prod, idx) => {
+              const estadoIdProd = Number(
+                prod.IDestado_item ?? prod.IDestado_detalle ?? prod.IDestado ?? orden.IDestado
+              );
 
-      {/* Ubicación */}
-      <div
-        style={{
-          backgroundColor: '#e7f5ff',
-          border: '1px solid #a5d8ff',
-          borderRadius: '8px',
-          padding: '1rem 1.2rem',
-          marginBottom: '1.5rem'
-        }}
-      >
-        <h4 style={{ margin: '0 0 0.4rem 0', color: '#1864ab' }}>📍 Ubicación de Entrega</h4>
-        <p style={{ margin: 0, color: '#343a40', fontWeight: '500' }}>
-          {orden.direccion_entrega || 'Dirección no especificada'}
-        </p>
-      </div>
+              const esCancelado = estadoIdProd === 6;
+              const configItem = SECUENCIA_ESTADOS[estadoIdProd] || {
+                bg: esCancelado ? 'var(--sd-tint-error)' : 'var(--sd-surface-muted)',
+                color: esCancelado ? 'var(--sd-error)' : 'var(--sd-text-secondary)',
+                etiqueta: esCancelado ? 'Cancelado / Rechazado' : prod.estado_item || 'Pendiente'
+              };
 
-      {/* Productos */}
-      <div
-        style={{
-          backgroundColor: '#f8f9fa',
-          padding: '1.2rem',
-          borderRadius: '8px',
-          marginTop: '1rem'
-        }}
-      >
-        <h4 style={{ margin: '0 0 1rem 0' }}>📋 Estado Individual por Producto</h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-          {listaProductos.map((prod, idx) => {
-            const estadoIdProd = Number(
-              prod.IDestado_item ?? prod.IDestado_detalle ?? prod.IDestado ?? orden.IDestado
-            );
+              const motivoRechazoItem =
+                prod.motivo_rechazo || prod.motivo_cancelacion || orden.motivo_cancelacion;
 
-            const esCancelado = estadoIdProd === 6;
-            const configItem = SECUENCIA_ESTADOS[estadoIdProd] || {
-              bg: esCancelado ? '#ffe3e3' : '#e9ecef',
-              color: esCancelado ? '#c92a2a' : '#495057',
-              etiqueta: esCancelado ? 'Cancelado / Rechazado' : prod.estado_item || 'Pendiente'
-            };
-
-            const motivoRechazoItem =
-              prod.motivo_rechazo || prod.motivo_cancelacion || orden.motivo_cancelacion;
-
-            return (
-              <div
-                key={idx}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.8rem 1rem',
-                  backgroundColor: esCancelado ? '#fff5f5' : '#fff',
-                  border: `1px solid ${esCancelado ? '#ffc9c9' : '#dee2e6'}`,
-                  borderRadius: '6px',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                  opacity: esCancelado ? 0.85 : 1
-                }}
-              >
-                <div style={{ flex: '1 1 250px' }}>
-                  <div
-                    style={{
-                      fontWeight: '600',
-                      textDecoration: esCancelado ? 'line-through' : 'none',
-                      color: esCancelado ? '#868e96' : '#212529'
-                    }}
-                  >
-                    {prod.cantidad}x {prod.producto || prod.nombre}
-                  </div>
-
-                  {prod.opciones && prod.opciones.length > 0 && (
-                    <div style={{ fontSize: '0.85rem', color: '#6c757d', marginTop: '0.2rem' }}>
-                      <strong>Opciones:</strong>{' '}
-                      {prod.opciones
-                        .map((o) => {
-                          const cant = o.cantidad || 1;
-                          const cantStr = cant > 1 ? `${cant}x ` : '';
-                          const precioUnit = Number(o.precio_adicional || 0);
-                          let precioStr = '';
-                          if (precioUnit > 0) {
-                            precioStr =
-                              cant > 1
-                                ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
-                                : ` (+$${precioUnit.toFixed(2)})`;
-                          }
-                          return `${cantStr}${o.nombre}${precioStr}`;
-                        })
-                        .join(', ')}
-                    </div>
-                  )}
-
-                  {prod.local && (
-                    <div style={{ fontSize: '0.8rem', color: '#6c757d', marginTop: '0.1rem' }}>
-                      🏪 Local: {prod.local}
-                    </div>
-                  )}
-
-                  {esCancelado && motivoRechazoItem && (
+              return (
+                <div
+                  key={idx}
+                  className={`sd-tracking-product-item ${esCancelado ? 'sd-tracking-product-item--cancelled' : ''}`}
+                >
+                  <div style={{ flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <div
                       style={{
-                        fontSize: '0.85rem',
-                        color: '#e03131',
-                        marginTop: '0.4rem',
-                        fontWeight: '500'
+                        fontWeight: '600',
+                        textDecoration: esCancelado ? 'line-through' : 'none',
+                        color: esCancelado ? 'var(--sd-text-secondary)' : 'var(--sd-navy)',
+                        fontSize: '0.9rem'
                       }}
                     >
-                      ⚠️ <strong>Motivo de rechazo/cancelación:</strong> {motivoRechazoItem}
+                      {prod.cantidad}x {prod.producto || prod.nombre}
                     </div>
-                  )}
+
+                    {prod.opciones && prod.opciones.length > 0 && (
+                      <div className="admin-muted" style={{ fontSize: '0.8125rem' }}>
+                        <strong>Opciones:</strong>{' '}
+                        {prod.opciones
+                          .map((o) => {
+                            const cant = o.cantidad || 1;
+                            const cantStr = cant > 1 ? `${cant}x ` : '';
+                            const precioUnit = Number(o.precio_adicional || 0);
+                            let precioStr = '';
+                            if (precioUnit > 0) {
+                              precioStr =
+                                cant > 1
+                                  ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
+                                  : ` (+$${precioUnit.toFixed(2)})`;
+                            }
+                            return `${cantStr}${o.nombre}${precioStr}`;
+                          })
+                          .join(', ')}
+                      </div>
+                    )}
+
+                    {prod.local && (
+                      <div className="admin-muted" style={{ fontSize: '0.75rem' }}>
+                        🏪 Local: {prod.local}
+                      </div>
+                    )}
+
+                    {esCancelado && motivoRechazoItem && (
+                      <div className="admin-text-error" style={{ fontSize: '0.8125rem', fontWeight: '500', marginTop: '2px' }}>
+                        ⚠️ <strong>Motivo de rechazo/cancelación:</strong> {motivoRechazoItem}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      padding: '4px 10px',
+                      backgroundColor: configItem.bg,
+                      color: configItem.color,
+                      borderRadius: '12px',
+                      fontSize: '0.8125rem',
+                      fontWeight: '700'
+                    }}
+                  >
+                    {configItem.etiqueta}
+                  </div>
                 </div>
-
-                <div
-                  style={{
-                    padding: '0.3rem 0.8rem',
-                    backgroundColor: configItem.bg,
-                    color: configItem.color,
-                    borderRadius: '12px',
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {configItem.etiqueta}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {!estanTodosMismoEstado && productosActivos.length > 0 && (
-        <div
-          style={{
-            backgroundColor: '#e7f5ff',
-            color: '#1864ab',
-            padding: '0.8rem 1rem',
-            borderRadius: '6px',
-            margin: '1rem 0 1.5rem 0',
-            fontSize: '0.9rem',
-            borderLeft: '4px solid #339af0'
-          }}
-        >
-          ℹ️ Los productos de tu pedido se encuentran en diferentes etapas de preparación/despacho. El estado general se actualizará a la siguiente fase cuando todos los locales/productos coincidan en el mismo estado.
-        </div>
-      )}
-
-      {/* Resumen */}
-      <div
-        style={{
-          backgroundColor: '#f8f9fa',
-          border: '1px solid #dee2e6',
-          borderRadius: '8px',
-          padding: '1rem 1.2rem',
-          margin: '1.5rem 0'
-        }}
-      >
-        <h4 style={{ margin: '0 0 0.8rem 0' }}>💳 Resumen del Pedido</h4>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto',
-            rowGap: '0.5rem',
-            columnGap: '1rem'
-          }}
-        >
-          <span>Subtotal</span>
-          <strong>$ {subtotal.toFixed(2)}</strong>
-
-          <span>Envío</span>
-          <strong>$ {costoEnvio.toFixed(2)}</strong>
-
-          <span>Total a pagar</span>
-          <strong style={{ fontSize: '1.05rem', color: '#1c7ed6' }}>
-            $ {totalPedido.toFixed(2)}
-          </strong>
+              );
+            })}
+          </div>
         </div>
 
-        <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid #eee' }}>
-          <p style={{ margin: 0, color: '#495057', fontSize: '0.9rem' }}>
-            <strong>Método de pago:</strong> {metodoPago}
-          </p>
+        {!estanTodosMismoEstado && productosActivos.length > 0 && (
+          <div className="admin-banner admin-banner--info" style={{ fontSize: '0.875rem' }}>
+            ℹ️ Los productos de tu pedido se encuentran en diferentes etapas de preparación/despacho. El estado general se actualizará a la siguiente fase cuando todos los locales/productos coincidan en el mismo estado.
+          </div>
+        )}
 
-          {!esEfectivo && (
-            <div style={{ marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <strong style={{ fontSize: '0.9rem', color: '#495057' }}>Estado del pago:</strong>
-              <span
-                style={{
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold',
-                  backgroundColor: currentBadge.bg,
-                  color: currentBadge.color
-                }}
-              >
-                {currentBadge.texto}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Banner de Pagos */}
-      {!esEfectivo && estadoPagoNormalizado === 'aprobado' && (
-        <div
-          style={{
-            backgroundColor: '#d3f9d8',
-            color: '#2b8a3e',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            fontWeight: 'bold',
-            textAlign: 'center'
-          }}
-        >
-          🎉 ¡Pago aprobado con éxito! Tu pedido ha sido enviado al local para su preparación.
-        </div>
-      )}
-
-      {esEfectivo && (
-        <div
-          style={{
-            backgroundColor: '#e7f5ff',
-            color: '#1864ab',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            fontWeight: 'bold',
-            textAlign: 'center'
-          }}
-        >
-          💵 Pago en efectivo: Abonarás en el punto de entrega directamente al repartidor al recibir tu compra.
-        </div>
-      )}
-
-      {!esEfectivo && estadoPagoNormalizado === 'pendiente' && (
-        <div
-          style={{
-            backgroundColor: '#fff3bf',
-            color: '#e67700',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            fontWeight: 'bold',
-            textAlign: 'center'
-          }}
-        >
-          ⏳ Tu pago está en proceso de revisión por parte de la pasarela. Te avisaremos apenas sea acreditado.
-        </div>
-      )}
-
-      {/* Botón Simular Pago Demo */}
-      {!esEfectivo && estadoPagoNormalizado === 'pendiente' && (
-        <div
-          style={{
-            margin: '1rem 0',
-            padding: '1rem',
-            border: '1px dashed #2b8a3e',
-            borderRadius: '8px',
-            backgroundColor: '#ebfbee',
-            textAlign: 'center'
-          }}
-        >
-          <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: '#2b8a3e' }}>
-            🧪 Modo Demo Activo (Pasarela Online):
-          </p>
-          <button
-            disabled={isSimulating}
-            onClick={async () => {
-              setIsSimulating(true);
-              try {
-                await api.post(`/orders/${ordenId}/simular-pago`);
-                await cargarPedido();
-              } catch (error) {
-                alert(error.response?.data?.error || 'Error al simular el pago');
-              } finally {
-                setIsSimulating(false);
-              }
-            }}
+        {/* Resumen */}
+        <div className="sd-tracking-summary-box">
+          <h4 style={{ color: 'var(--sd-navy)', fontSize: '1rem', fontWeight: 700, margin: 0 }}>
+            💳 Resumen del Pedido
+          </h4>
+          <div
             style={{
-              padding: '0.6rem 1.2rem',
-              backgroundColor: isSimulating ? '#a5d8ff' : '#2b8a3e',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: isSimulating ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isSimulating ? 0.7 : 1,
-              transition: 'all 0.2s ease'
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              rowGap: '6px',
+              columnGap: '12px',
+              fontSize: '0.9rem'
             }}
           >
-            {isSimulating ? '⏳ Procesando pago...' : '✅ Simular Pago Exitoso (Mercado Pago)'}
-          </button>
-        </div>
-      )}
+            <span>Subtotal</span>
+            <span style={{ fontWeight: '600' }}>$ {subtotal.toFixed(2)}</span>
 
-      {!esEfectivo && estadoPagoNormalizado === 'rechazado' && (
-        <div
-          style={{
-            backgroundColor: '#ffe3e3',
-            color: '#c92a2a',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1.5rem',
-            fontWeight: 'bold',
-            textAlign: 'center'
-          }}
-        >
-          ⚠️ La transacción del pago ha fallado o fue rechazada. Por favor, intenta realizar la compra con otro medio de pago.
-        </div>
-      )}
+            <span>Envío</span>
+            <span style={{ fontWeight: '600' }}>$ {costoEnvio.toFixed(2)}</span>
 
-      {/* Código OTP */}
-      {orden.codigo_otp && (
-        <div
-          style={{
-            border: '2px dashed #007bff',
-            padding: '1rem',
-            textAlign: 'center',
-            borderRadius: '8px',
-            marginBottom: '1.5rem'
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '0.9rem', color: '#555' }}>
-            Muestra este código al repartidor para recibir tu pedido:
-          </p>
-          <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#007bff' }}>
-            {orden.codigo_otp}
-          </span>
+            <span style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--sd-navy)' }}>Total a pagar</span>
+            <span style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--sd-success)' }}>
+              $ {totalPedido.toFixed(2)}
+            </span>
+          </div>
+
+          <div style={{ marginTop: '4px', paddingTop: '12px', borderTop: '1px solid var(--sd-border)' }}>
+            <p className="admin-muted" style={{ margin: 0, fontSize: '0.875rem' }}>
+              <strong style={{ color: 'var(--sd-text-main)' }}>Método de pago:</strong> {metodoPago}
+            </p>
+
+            {!esEfectivo && (
+              <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ fontSize: '0.875rem', color: 'var(--sd-text-main)' }}>Estado del pago:</strong>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.75rem',
+                    fontWeight: '700',
+                    backgroundColor: currentBadge.bg,
+                    color: currentBadge.color
+                  }}
+                >
+                  {currentBadge.texto}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Banner de Pagos */}
+        {!esEfectivo && estadoPagoNormalizado === 'aprobado' && (
+          <div className="admin-banner admin-banner--success" style={{ textAlign: 'center', fontWeight: '700' }}>
+            🎉 ¡Pago aprobado con éxito! Tu pedido ha sido enviado al local para su preparación.
+          </div>
+        )}
+
+        {esEfectivo && (
+          <div className="admin-banner admin-banner--info" style={{ textAlign: 'center', fontWeight: '700' }}>
+            💵 Pago en efectivo: Abonarás en el punto de entrega directamente al repartidor al recibir tu compra.
+          </div>
+        )}
+
+        {!esEfectivo && estadoPagoNormalizado === 'pendiente' && (
+          <div className="admin-banner admin-banner--warning" style={{ textAlign: 'center', fontWeight: '700' }}>
+            ⏳ Tu pago está en proceso de revisión por parte de la pasarela. Te avisaremos apenas sea acreditado.
+          </div>
+        )}
+
+        {/* Botón Simular Pago Demo */}
+        {!esEfectivo && estadoPagoNormalizado === 'pendiente' && (
+          <div className="admin-subbox" style={{ backgroundColor: 'var(--sd-surface)', border: '1px dashed var(--sd-success)', textAlign: 'center' }}>
+            <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: 'var(--sd-success)', fontSize: '0.9rem' }}>
+              🧪 Modo Demo Activo (Pasarela Online):
+            </p>
+            <button
+              disabled={isSimulating}
+              onClick={async () => {
+                setIsSimulating(true);
+                setMensajeBanner('');
+                try {
+                  await api.post(`/orders/${ordenId}/simular-pago`);
+                  setMensajeBanner('✓ ¡Pago simulado correctamente como aprobado!');
+                  await cargarPedido();
+                } catch (error) {
+                  setMensajeBanner(error.response?.data?.error || '⚠️ Error al simular el pago');
+                } finally {
+                  setIsSimulating(false);
+                }
+              }}
+              className="admin-btn admin-btn--success"
+              style={{ width: '100%', minHeight: '40px', fontWeight: '700' }}
+            >
+              {isSimulating ? '⏳ Procesando pago...' : '✅ Simular Pago Exitoso (Mercado Pago)'}
+            </button>
+          </div>
+        )}
+
+        {!esEfectivo && estadoPagoNormalizado === 'rechazado' && (
+          <div className="admin-banner admin-banner--error" style={{ textAlign: 'center', fontWeight: '700' }}>
+            ⚠️ La transacción del pago ha fallado o fue rechazada. Por favor, intenta realizar la compra con otro medio de pago.
+          </div>
+        )}
+
+        {/* Código OTP */}
+        {orden.codigo_otp && (
+          <div className="sd-tracking-otp-box">
+            <p className="admin-muted" style={{ margin: 0, fontSize: '0.875rem' }}>
+              Muestra este código al repartidor para recibir tu pedido:
+            </p>
+            <span style={{ fontSize: '1.75rem', fontWeight: '700', color: 'var(--sd-info)', letterSpacing: '2px' }}>
+              {orden.codigo_otp}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,7 +1,10 @@
+// src/components/Local/ComanderaLocal.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { getMisPedidosLocal, updateEstadoOrdenLocal, searchPedidosHistorial } from '../../api/localService';
 import { SECUENCIA_ESTADOS, ESTADOS_ORDEN } from '../../utils/estados';
 import { ComprobanteModal } from './ComprobanteModal';
+import { Icon, Spinner, Badge, EstadoBadge, AvisoModal, visualEstado } from './LocalUI';
+import './css/Local.css';
 
 export const ComanderaLocal = () => {
   const [pedidos, setPedidos] = useState([]);
@@ -22,6 +25,9 @@ export const ComanderaLocal = () => {
   const [modalRechazo, setModalRechazo] = useState({ abierto: false, orden: null, producto: null });
   const [motivoTexto, setMotivoTexto] = useState('');
   const [ordenParaImprimir, setOrdenParaImprimir] = useState(null);
+
+  // 🟢 Estado para el Modal Estético de Avisos (Reemplazo de los alert)
+  const [modalAviso, setModalAviso] = useState(null); // { titulo: '', mensaje: '' }
 
   // --- Funciones auxiliares de cálculo de estado ---
   const estadoOrden = (orden) => Number(orden.IDestado ?? orden.id_estado ?? 1);
@@ -111,14 +117,22 @@ export const ComanderaLocal = () => {
       }
 
       if (detallesIds.length === 0) {
-        alert('No se pudo identificar el ítem a actualizar.');
+        // 🟢 Reemplazo del primer alert nativo por el modal estético
+        setModalAviso({
+          titulo: '⚠️ Ítem no identificado',
+          mensaje: 'No se pudo identificar el ítem a actualizar.'
+        });
         return;
       }
 
       await updateEstadoOrdenLocal(ordenId, nuevoEstadoId, detallesIds, motivo);
       await cargarPedidos();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al actualizar el estado del pedido');
+      // 🟢 Reemplazo del segundo alert nativo por el modal estético
+      setModalAviso({
+        titulo: '⚠️ Error de Actualización',
+        mensaje: err.response?.data?.error || 'Error al actualizar el estado del pedido'
+      });
     } finally {
       setActualizandoId(null);
       setAccionProcesando(null);
@@ -144,23 +158,10 @@ export const ComanderaLocal = () => {
 
   const getEtiquetaEstado = (estadoId, estadoNombre) => {
     const config = SECUENCIA_ESTADOS[estadoId] || {
-      bg: '#e2e3e5',
-      color: '#383d41',
       etiqueta: estadoNombre || 'Desconocido'
     };
 
-    return (
-      <span style={{
-        backgroundColor: config.bg,
-        color: config.color,
-        padding: '0.3rem 0.7rem',
-        borderRadius: '20px',
-        fontWeight: 'bold',
-        fontSize: '0.85rem'
-      }}>
-        {config.etiqueta}
-      </span>
-    );
+    return <EstadoBadge estadoId={estadoId} etiqueta={config.etiqueta} />;
   };
 
   // Filtrado defensivo de cliente/subvista en memoria
@@ -182,164 +183,184 @@ export const ComanderaLocal = () => {
     }
   });
 
-  return (
-    <div style={{ marginTop: '1.5rem' }}>
-      {/* Encabezado Principal */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
-        <h2>📋 Comandera e Historial de Pedidos</h2>
+  // Resumen de pedidos activos por estado (derivado de la lista ya filtrada)
+  const contarEstado = (estados) =>
+    pedidosFiltrados.filter((o) => estados.includes(estadoOrden(o))).length;
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={cargarPedidos}
-            disabled={loading}
-            style={{ padding: '0.5rem 1rem', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: '#fff' }}
-          >
-            🔄 {loading ? 'Cargando...' : 'Buscar / Actualizar'}
-          </button>
+  const hayFiltros = busquedaTexto || filtroEstado !== 'todos' || fechaInicio || fechaFin;
+
+  return (
+    <section className="local-section">
+      {/* Encabezado principal */}
+      <div className="local-section-head">
+        <div>
+          <h2 className="local-title">
+            <span className="local-title__icon"><Icon name="clipboard" size={20} /></span>
+            Comandera e historial de pedidos
+          </h2>
         </div>
+
+        <button
+          type="button"
+          onClick={cargarPedidos}
+          disabled={loading}
+          className="local-btn local-btn--outline"
+        >
+          {loading ? <><Spinner /> Cargando...</> : <><Icon name="refresh" /> Buscar / Actualizar</>}
+        </button>
       </div>
 
-      {/* Pestañas de Navegación */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', borderBottom: '2px solid #e0e0e0' }}>
+      {/* Pestañas de navegación */}
+      <div className="local-subtabs">
         <button
+          type="button"
           onClick={() => {
             setSubvista('activos');
             handleLimpiarFiltros();
           }}
-          style={{
-            padding: '0.6rem 1.2rem',
-            cursor: 'pointer',
-            border: 'none',
-            borderBottom: subvista === 'activos' ? '3px solid #1c7ed6' : '3px solid transparent',
-            fontWeight: subvista === 'activos' ? 'bold' : 'normal',
-            color: subvista === 'activos' ? '#1c7ed6' : '#495057',
-            backgroundColor: 'transparent',
-            fontSize: '1rem'
-          }}
+          className={subvista === 'activos' ? 'active' : ''}
+          aria-pressed={subvista === 'activos'}
         >
-          🔔 Pedidos Activos
+          <Icon name="bell" />
+          Pedidos activos
         </button>
 
         <button
+          type="button"
           onClick={() => {
             setSubvista('historial');
             handleLimpiarFiltros();
           }}
-          style={{
-            padding: '0.6rem 1.2rem',
-            cursor: 'pointer',
-            border: 'none',
-            borderBottom: subvista === 'historial' ? '3px solid #1c7ed6' : '3px solid transparent',
-            fontWeight: subvista === 'historial' ? 'bold' : 'normal',
-            color: subvista === 'historial' ? '#1c7ed6' : '#495057',
-            backgroundColor: 'transparent',
-            fontSize: '1rem'
-          }}
+          className={subvista === 'historial' ? 'active' : ''}
+          aria-pressed={subvista === 'historial'}
         >
-          📜 Historial y Búsqueda Avanzada
+          <Icon name="history" />
+          Historial y búsqueda avanzada
         </button>
       </div>
 
-      {/* Panel Avanzado de Filtros */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '1rem', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-        <div style={{ flex: '1', minWidth: '200px' }}>
+      {/* Resumen de pedidos activos */}
+      {subvista === 'activos' && pedidosFiltrados.length > 0 && (
+        <div className="local-stats">
+          <div className="local-stat">
+            <span className="local-stat__icon local-stat__icon--warning"><Icon name="clock" size={18} /></span>
+            <div>
+              <strong>{contarEstado([ESTADOS_ORDEN.CREADO])}</strong>
+              <span>Nuevos</span>
+            </div>
+          </div>
+          <div className="local-stat">
+            <span className="local-stat__icon local-stat__icon--info"><Icon name="chefHat" size={18} /></span>
+            <div>
+              <strong>{contarEstado([ESTADOS_ORDEN.EN_PROGRESO])}</strong>
+              <span>En preparación</span>
+            </div>
+          </div>
+          <div className="local-stat">
+            <span className="local-stat__icon local-stat__icon--orange"><Icon name="bell" size={18} /></span>
+            <div>
+              <strong>{contarEstado([ESTADOS_ORDEN.LISTO_PARA_RETIRO])}</strong>
+              <span>Listos para retiro</span>
+            </div>
+          </div>
+          <div className="local-stat">
+            <span className="local-stat__icon local-stat__icon--navy"><Icon name="bike" size={18} /></span>
+            <div>
+              <strong>{contarEstado([ESTADOS_ORDEN.REPARTIDOR_ASIGNADO, ESTADOS_ORDEN.EN_CAMINO])}</strong>
+              <span>En reparto</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panel avanzado de filtros */}
+      <div className="local-filters">
+        <div className="local-search">
+          <Icon name="search" size={18} />
           <input
             type="text"
-            placeholder="🔎 Buscar ID de orden o cliente..."
+            placeholder="Buscar ID de orden o cliente..."
+            aria-label="Buscar ID de orden o cliente"
             value={busquedaTexto}
             onChange={(e) => setBusquedaTexto(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.5rem 0.8rem',
-              borderRadius: '4px',
-              border: '1px solid #ccc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
+            className="local-input"
           />
         </div>
 
-        <div>
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            style={{
-              padding: '0.55rem 0.8rem',
-              borderRadius: '4px',
-              border: '1px solid #ccc',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="todos">🔍 Todos los estados</option>
-            {subvista === 'activos' ? (
-              <>
-                <option value="1">⏳ Creado</option>
-                <option value="2">👨‍🍳 En Preparación</option>
-                <option value="7">🔔 Listo para Retiro</option>
-                <option value="4">🛵 Repartidor Asignado</option>
-                <option value="5">🚚 En Camino</option>
-              </>
-            ) : (
-              <>
-                <option value="3">✅ Entregado</option>
-                <option value="6">❌ Cancelado</option>
-              </>
-            )}
-          </select>
-        </div>
+        <select
+          value={filtroEstado}
+          onChange={(e) => setFiltroEstado(e.target.value)}
+          aria-label="Filtrar por estado"
+          className="local-select"
+        >
+          <option value="todos">Todos los estados</option>
+          {subvista === 'activos' ? (
+            <>
+              <option value="1">Creado</option>
+              <option value="2">En preparación</option>
+              <option value="7">Listo para retiro</option>
+              <option value="4">Repartidor asignado</option>
+              <option value="5">En camino</option>
+            </>
+          ) : (
+            <>
+              <option value="3">Entregado</option>
+              <option value="6">Cancelado</option>
+            </>
+          )}
+        </select>
 
-        {/* Filtro por Rango de Fechas */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '0.85rem', color: '#495057' }}>Desde:</label>
+        <label className="local-field">
+          <span>Desde</span>
           <input
             type="date"
             value={fechaInicio}
             onChange={(e) => setFechaInicio(e.target.value)}
-            style={{ padding: '0.45rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+            className="local-input"
           />
-        </div>
+        </label>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '0.85rem', color: '#495057' }}>Hasta:</label>
+        <label className="local-field">
+          <span>Hasta</span>
           <input
             type="date"
             value={fechaFin}
             onChange={(e) => setFechaFin(e.target.value)}
-            style={{ padding: '0.45rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+            className="local-input"
           />
-        </div>
+        </label>
 
-        {(busquedaTexto || filtroEstado !== 'todos' || fechaInicio || fechaFin) && (
+        {hayFiltros && (
           <button
+            type="button"
             onClick={handleLimpiarFiltros}
-            style={{
-              padding: '0.5rem 0.8rem',
-              backgroundColor: '#e9ecef',
-              border: '1px solid #ced4da',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '0.85rem'
-            }}
+            className="local-btn local-btn--ghost"
           >
-            Limpiar Filtros
+            <Icon name="x" size={16} />
+            Limpiar filtros
           </button>
         )}
       </div>
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && (
+        <div className="local-state local-state--error" role="alert">
+          <Icon name="alert" size={24} />
+          {error}
+        </div>
+      )}
 
-      {/* Renderizado de Tarjetas de Pedidos */}
+      {/* Tarjetas de pedidos */}
       {pedidosFiltrados.length === 0 && !loading ? (
-        <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-          <p style={{ color: '#666', margin: 0 }}>
+        <div className="local-state">
+          <Icon name="package" size={28} />
+          <p>
             {subvista === 'activos'
               ? 'No hay pedidos activos que coincidan con los criterios de búsqueda.'
               : 'No se encontraron pedidos en el historial para los filtros aplicados.'}
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+        <div className="local-orders">
           {pedidosFiltrados.map((orden) => {
             const estadoActual = estadoOrden(orden);
             const esOrdenCancelada = estadoActual === ESTADOS_ORDEN.CANCELADO;
@@ -354,39 +375,18 @@ export const ComanderaLocal = () => {
             const tieneRepartidorAsignado = Boolean(orden.IDrepartidor);
 
             return (
-              <div
+              <article
                 key={orden.IDorden || orden.id}
-                style={{
-                  border: esOrdenCancelada ? '2px solid #f8d7da' : '1px solid #e0e0e0',
-                  borderRadius: '10px',
-                  padding: '1.2rem',
-                  backgroundColor: esOrdenCancelada ? '#fff5f5' : '#ffffff',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  opacity: esOrdenCancelada ? 0.85 : 1
-                }}
+                className={`local-order local-order--${visualEstado(estadoActual).tone}`}
               >
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
-                    <h3 style={{ margin: 0, color: '#2c3e50' }}>Pedido #{orden.IDorden || orden.id}</h3>
+                  <div className="local-order__head">
+                    <h3>Pedido #{orden.IDorden || orden.id}</h3>
 
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      {/* 🛵 Badge visual de Repartidor Asignado solo para pedidos en curso */}
-                      {/* 🛵 Badge visual de Repartidor Asignado solo para pedidos en curso cuando hayan avanzado a estados posteriores */}
+                    <div className="local-order__badges">
+                      {/* Repartidor asignado solo para pedidos en curso que ya avanzaron a estados posteriores */}
                       {esPedidoEnCurso && tieneRepartidorAsignado && estadoActual !== ESTADOS_ORDEN.REPARTIDOR_ASIGNADO && (
-                        <span style={{
-                          backgroundColor: '#d0ebff',
-                          color: '#1864ab',
-                          padding: '0.3rem 0.7rem',
-                          borderRadius: '20px',
-                          fontWeight: 'bold',
-                          fontSize: '0.85rem',
-                          border: '1px solid #74c0fc'
-                        }}>
-                          🛵 Repartidor Asignado
-                        </span>
+                        <Badge tone="navy" icon="bike">Repartidor asignado</Badge>
                       )}
 
                       {/* Estado general o efectivo de la orden */}
@@ -395,201 +395,213 @@ export const ComanderaLocal = () => {
                   </div>
 
                   {esOrdenCancelada && (
-                    <div style={{
-                      backgroundColor: '#ffe3e3',
-                      border: '1px solid #ffa8a8',
-                      color: '#c92a2a',
-                      padding: '0.5rem',
-                      borderRadius: '6px',
-                      fontSize: '0.85rem',
-                      fontWeight: 'bold',
-                      marginBottom: '0.8rem'
-                    }}>
-                      ⚠️ PEDIDO CANCELADO
-                      {orden.motivo_cancelacion && (
-                        <div style={{ fontWeight: 'normal', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                          Motivo: {orden.motivo_cancelacion}
-                        </div>
-                      )}
+                    <div className="local-cancel-note" style={{ marginTop: '12px' }}>
+                      <Icon name="alert" size={16} />
+                      <div>
+                        Pedido cancelado
+                        {orden.motivo_cancelacion && (
+                          <small>Motivo: {orden.motivo_cancelacion}</small>
+                        )}
+                      </div>
                     </div>
                   )}
 
-                  <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.2rem 0' }}>
-                    👤 <strong>Cliente:</strong> {obtenerNombreCliente(orden)}
-                  </p>
-                  {orden.fecha_creacion && (
-                    <p style={{ fontSize: '0.8rem', color: '#888', margin: '0.2rem 0' }}>
-                      📅 <strong>Fecha:</strong> {new Date(orden.fecha_creacion).toLocaleString()}
-                    </p>
-                  )}
-
-                  <hr style={{ border: 'none', borderTop: '1px dashed #ddd', margin: '0.8rem 0' }} />
-
-                  <h4 style={{ margin: '0.5rem 0', fontSize: '0.95rem' }}>📦 Ítems solicitados:</h4>
-
-                  <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                    {(orden.productos || []).map((prod) => {
-                      const detEstado = estadoDetalle(prod);
-                      const esItemCancelado = detEstado === ESTADOS_ORDEN.CANCELADO;
-                      const editable = puedeMarcarListoItem(prod);
-                      const aceptarDetalle = puedeAceptarDetalle(prod);
-                      const detalleBloqueadoActual = detalleBloqueado(prod);
-                      const keyAceptar = `aceptar-${orden.IDorden || orden.id}-${prod.IDdetalle || prod.id}`;
-                      const keyListo = `listo-${orden.IDorden || orden.id}-${prod.IDdetalle || prod.id}`;
-
-                      return (
-                        <div
-                          key={prod.IDdetalle || prod.id}
-                          style={{
-                            padding: '0.5rem',
-                            border: esItemCancelado ? '1px solid #ffa8a8' : '1px solid #f0f0f0',
-                            borderRadius: '6px',
-                            backgroundColor: esItemCancelado ? '#fff5f5' : '#fafafa',
-                            opacity: esItemCancelado ? 0.65 : 1
-                          }}
-                        >
-                          <div style={{ textDecoration: esItemCancelado ? 'line-through' : 'none' }}>
-                            <strong>{prod.cantidad}x</strong> {prod.producto || prod.nombre}
-
-                            {!esItemCancelado && (() => {
-                              const cantidad = Number(prod.cantidad || 1);
-                              const precio = Number(prod.precio_unitario || prod.precio || 0);
-                              const totalBruto = cantidad * precio;
-                              const netoLocal = prod.ganancia_local_item !== undefined
-                                ? Number(prod.ganancia_local_item)
-                                : Number((totalBruto * 0.90).toFixed(2));
-                              const comisionSistema = prod.comision_plataforma_item !== undefined
-                                ? Number(prod.comision_plataforma_item)
-                                : Number((totalBruto - netoLocal).toFixed(2));
-
-                              return (
-                                <span style={{ fontSize: '0.85rem', marginLeft: '6px' }}>
-                                  — Total: <strong>${totalBruto.toFixed(2)}</strong>
-                                  <span style={{ color: '#2b8a3e', marginLeft: '4px' }}>
-                                    (Neto: ${netoLocal.toFixed(2)})
-                                  </span>
-                                  <span style={{ color: '#6c757d', marginLeft: '4px' }}>
-                                    (Sistema: ${comisionSistema.toFixed(2)})
-                                  </span>
-                                </span>
-                              );
-                            })()}
-                          </div>
-
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '0.5rem', justifyContent: 'space-between' }}>
-                            {getEtiquetaEstado(detEstado, prod.estado_detalle)}
-
-                            {!detalleBloqueadoActual && !esOrdenCancelada && subvista === 'activos' && (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                {aceptarDetalle && (
-                                  <button
-                                    onClick={() => handleCambiarEstado(orden, ESTADOS_ORDEN.EN_PROGRESO, prod, keyAceptar)}
-                                    disabled={actualizandoId === (orden.IDorden || orden.id) || accionProcesando === keyAceptar}
-                                    style={{
-                                      padding: '0.35rem 0.6rem',
-                                      backgroundColor: accionProcesando === keyAceptar ? '#868e96' : '#1c7ed6',
-                                      color: '#fff',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      fontSize: '0.8rem',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    {accionProcesando === keyAceptar ? '⏳ Aceptando...' : '👨‍🍳 Aceptar'}
-                                  </button>
-                                )}
-
-                                {editable && (
-                                  <button
-                                    onClick={() => handleCambiarEstado(orden, ESTADOS_ORDEN.LISTO_PARA_RETIRO, prod, keyListo)}
-                                    disabled={actualizandoId === (orden.IDorden || orden.id) || accionProcesando === keyListo}
-                                    style={{
-                                      padding: '0.35rem 0.6rem',
-                                      backgroundColor: accionProcesando === keyListo ? '#868e96' : '#2b8a3e',
-                                      color: '#fff',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      fontSize: '0.8rem',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    {accionProcesando === keyListo ? '⏳ Marcando...' : '📌 Listo'}
-                                  </button>
-                                )}
-
-                                {aceptarDetalle && (
-                                  <button
-                                    onClick={() => abrirModalRechazo(orden, prod)}
-                                    disabled={actualizandoId === (orden.IDorden || orden.id)}
-                                    style={{
-                                      padding: '0.35rem 0.6rem',
-                                      backgroundColor: '#e03131',
-                                      color: '#fff',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      fontSize: '0.8rem',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    ❌ Rechazar
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="local-order__meta" style={{ marginTop: '12px' }}>
+                    <span>
+                      <Icon name="user" size={14} />
+                      <span><strong>Cliente:</strong> {obtenerNombreCliente(orden)}</span>
+                    </span>
+                    {orden.fecha_creacion && (
+                      <span>
+                        <Icon name="calendar" size={14} />
+                        <span><strong>Fecha:</strong> {new Date(orden.fecha_creacion).toLocaleString()}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div style={{ marginTop: '1.2rem', paddingTop: '0.8rem', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 className="local-order__items-title">
+                  <Icon name="package" size={16} />
+                  Ítems solicitados
+                </h4>
+
+                <div className="local-items">
+                  {(orden.productos || []).map((prod) => {
+                    const detEstado = estadoDetalle(prod);
+                    const esItemCancelado = detEstado === ESTADOS_ORDEN.CANCELADO;
+                    const editable = puedeMarcarListoItem(prod);
+                    const aceptarDetalle = puedeAceptarDetalle(prod);
+                    const detalleBloqueadoActual = detalleBloqueado(prod);
+                    const keyAceptar = `aceptar-${orden.IDorden || orden.id}-${prod.IDdetalle || prod.id}`;
+                    const keyListo = `listo-${orden.IDorden || orden.id}-${prod.IDdetalle || prod.id}`;
+
+                    return (
+                      <div
+                        key={prod.IDdetalle || prod.id}
+                        className={`local-item ${esItemCancelado ? 'local-item--cancelled' : ''}`}
+                      >
+                        <div className="local-item__name">
+                          <span className="local-item__qty">{prod.cantidad}x</span>
+                          <span>{prod.producto || prod.nombre}</span>
+                        </div>
+
+                        {!esItemCancelado && (() => {
+                          const cantidad = Number(prod.cantidad || 1);
+                          const precio = Number(prod.precio_unitario || prod.precio || 0);
+                          const totalBruto = cantidad * precio;
+                          const netoLocal = prod.ganancia_local_item !== undefined
+                            ? Number(prod.ganancia_local_item)
+                            : Number((totalBruto * 0.90).toFixed(2));
+                          const comisionSistema = prod.comision_plataforma_item !== undefined
+                            ? Number(prod.comision_plataforma_item)
+                            : Number((totalBruto - netoLocal).toFixed(2));
+
+                          return (
+                            <div className="local-item__money">
+                              <span>Total: <strong>${totalBruto.toFixed(2)}</strong></span>
+                              <span className="net">Neto: ${netoLocal.toFixed(2)}</span>
+                              <span>Sistema: ${comisionSistema.toFixed(2)}</span>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="local-item__foot">
+                          {getEtiquetaEstado(detEstado, prod.estado_detalle)}
+
+                          {!detalleBloqueadoActual && !esOrdenCancelada && subvista === 'activos' && (
+                            <div className="local-item__actions">
+                              {aceptarDetalle && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCambiarEstado(orden, ESTADOS_ORDEN.EN_PROGRESO, prod, keyAceptar)}
+                                  disabled={actualizandoId === (orden.IDorden || orden.id) || accionProcesando === keyAceptar}
+                                  className="local-btn local-btn--sm local-btn--primary"
+                                >
+                                  {accionProcesando === keyAceptar ? (
+                                    <><Spinner /> Aceptando...</>
+                                  ) : (
+                                    <><Icon name="chefHat" size={14} /> Aceptar</>
+                                  )}
+                                </button>
+                              )}
+
+                              {editable && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCambiarEstado(orden, ESTADOS_ORDEN.LISTO_PARA_RETIRO, prod, keyListo)}
+                                  disabled={actualizandoId === (orden.IDorden || orden.id) || accionProcesando === keyListo}
+                                  className="local-btn local-btn--sm local-btn--success"
+                                >
+                                  {accionProcesando === keyListo ? (
+                                    <><Spinner /> Marcando...</>
+                                  ) : (
+                                    <><Icon name="check" size={14} /> Listo</>
+                                  )}
+                                </button>
+                              )}
+
+                              {aceptarDetalle && (
+                                <button
+                                  type="button"
+                                  onClick={() => abrirModalRechazo(orden, prod)}
+                                  disabled={actualizandoId === (orden.IDorden || orden.id)}
+                                  className="local-btn local-btn--sm local-btn--danger-soft"
+                                >
+                                  <Icon name="x" size={14} />
+                                  Rechazar
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="local-order__foot">
                   <button
+                    type="button"
                     onClick={() => setOrdenParaImprimir(orden)}
-                    style={{
-                      padding: '0.4rem 0.8rem',
-                      backgroundColor: '#495057',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer'
-                    }}
+                    className="local-btn local-btn--sm local-btn--outline"
                   >
-                    🖨️ Ticket / Comanda
+                    <Icon name="printer" size={14} />
+                    Ticket / Comanda
                   </button>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
       )}
 
-      {/* Modal Rechazo */}
+      {/* Modal de rechazo */}
       {modalRechazo.abierto && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', width: '90%', maxWidth: '400px' }}>
-            <h3>Rechazar Producto</h3>
-            <p>Ingresa el motivo del rechazo para <strong>{modalRechazo.producto?.producto || modalRechazo.producto?.nombre}</strong>:</p>
-            <textarea
-              value={motivoTexto}
-              onChange={(e) => setMotivoTexto(e.target.value)}
-              placeholder="Motivo..."
-              rows={3}
-              style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', marginBottom: '1rem' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setModalRechazo({ abierto: false, orden: null, producto: null })}>Cancelar</button>
-              <button onClick={confirmarRechazoModal} disabled={!motivoTexto.trim()}>Confirmar Rechazo</button>
+        <div className="local-modal-overlay">
+          <div className="local-modal" role="dialog" aria-modal="true" aria-label="Rechazar producto">
+            <div className="local-modal__head">
+              <div>
+                <h3>Rechazar producto</h3>
+                <p>
+                  Ingresá el motivo del rechazo para{' '}
+                  <strong>{modalRechazo.producto?.producto || modalRechazo.producto?.nombre}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalRechazo({ abierto: false, orden: null, producto: null })}
+                className="local-icon-btn"
+                aria-label="Cerrar"
+              >
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+
+            <label className="local-field">
+              <span>Motivo</span>
+              <textarea
+                value={motivoTexto}
+                onChange={(e) => setMotivoTexto(e.target.value)}
+                placeholder="Motivo..."
+                rows={3}
+                className="local-textarea"
+              />
+            </label>
+
+            <div className="local-modal__foot">
+              <button
+                type="button"
+                onClick={() => setModalRechazo({ abierto: false, orden: null, producto: null })}
+                className="local-btn local-btn--outline"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarRechazoModal}
+                disabled={!motivoTexto.trim()}
+                className="local-btn local-btn--danger"
+              >
+                Confirmar rechazo
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Impresión */}
+      {/* Aviso general: flota sobre cualquier otro modal */}
+      {modalAviso && (
+        <AvisoModal
+          titulo={modalAviso.titulo}
+          mensaje={modalAviso.mensaje}
+          onClose={() => setModalAviso(null)}
+        />
+      )}
+
+      {/* Modal de impresión */}
       {ordenParaImprimir && (
         <ComprobanteModal orden={ordenParaImprimir} onClose={() => setOrdenParaImprimir(null)} />
       )}
-    </div>
+    </section>
   );
 };

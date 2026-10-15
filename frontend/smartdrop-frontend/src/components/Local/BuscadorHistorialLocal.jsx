@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { searchPedidosHistorial } from '../../api/localService';
 import { SECUENCIA_ESTADOS } from '../../utils/estados';
 import { ComprobanteModal } from './ComprobanteModal';
+import { Icon, Spinner, EstadoBadge, AvisoModal } from './LocalUI';
+import './css/Local.css';
 
 export const BuscadorHistorialLocal = () => {
   const [filtros, setFiltros] = useState({
@@ -17,6 +19,9 @@ export const BuscadorHistorialLocal = () => {
   const [buscado, setBuscado] = useState(false);
   const [ordenParaImprimir, setOrdenParaImprimir] = useState(null);
 
+  // 🟢 Estado para el Modal Estético de Avisos (Reemplazo del alert)
+  const [modalAviso, setModalAviso] = useState(null); // { titulo: '', mensaje: '' }
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFiltros((prev) => ({ ...prev, [name]: value }));
@@ -30,7 +35,11 @@ export const BuscadorHistorialLocal = () => {
       setResultados(Array.isArray(data) ? data : []);
       setBuscado(true);
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al realizar la búsqueda.');
+      // 🟢 Reemplazamos el alert nativo por el modal estético de avisos con alta prioridad
+      setModalAviso({
+        titulo: '⚠️ Error de Búsqueda',
+        mensaje: err.response?.data?.error || 'Error al realizar la búsqueda.'
+      });
     } finally {
       setLoading(false);
     }
@@ -43,122 +52,132 @@ export const BuscadorHistorialLocal = () => {
   };
 
   return (
-    <div style={{ marginTop: '1.5rem', backgroundColor: '#fcfcfc', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-      <h3>🔎 Búsqueda Avanzada e Historial de Pedidos</h3>
-      
-      <form onSubmit={ejecutarBusqueda} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '1.5rem' }}>
-        <div>
-          <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Pedido # ID o Cliente:</label>
+    <section className="local-card local-scope">
+      <h3 className="local-card__title">
+        <Icon name="search" size={18} />
+        Búsqueda avanzada e historial de pedidos
+      </h3>
+
+      <form onSubmit={ejecutarBusqueda} className="local-filters local-filters--form" style={{ marginBottom: '20px', boxShadow: 'none' }}>
+        <label className="local-field">
+          <span>Pedido # ID o cliente</span>
           <input
             type="text"
             name="busqueda"
             value={filtros.busqueda}
             onChange={handleInputChange}
             placeholder="Ej: 1045 o Juan Perez"
-            style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginTop: '4px' }}
+            className="local-input"
           />
-        </div>
+        </label>
 
-        <div>
-          <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Desde:</label>
+        <label className="local-field">
+          <span>Desde</span>
           <input
             type="date"
             name="fechaInicio"
             value={filtros.fechaInicio}
             onChange={handleInputChange}
-            style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginTop: '4px' }}
+            className="local-input"
           />
-        </div>
+        </label>
 
-        <div>
-          <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Hasta:</label>
+        <label className="local-field">
+          <span>Hasta</span>
           <input
             type="date"
             name="fechaFin"
             value={filtros.fechaFin}
             onChange={handleInputChange}
-            style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', marginTop: '4px' }}
+            className="local-input"
           />
-        </div>
+        </label>
 
-        <div>
-          <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Estado:</label>
+        <label className="local-field">
+          <span>Estado</span>
           <select
             name="estado"
             value={filtros.estado}
             onChange={handleInputChange}
-            style={{ width: '100%', padding: '0.45rem', borderRadius: '4px', border: '1px solid #ccc', marginTop: '4px' }}
+            className="local-select"
           >
             <option value="todos">Todos los estados</option>
-            <option value="1">⏳ Pendiente</option>
-            <option value="2">👨‍🍳 En Preparación</option>
-            <option value="7">🔔 Listo para Retiro</option>
-            <option value="3">✅ Entregado</option>
-            <option value="6">❌ Cancelado</option>
+            <option value="1">Pendiente</option>
+            <option value="2">En preparación</option>
+            <option value="7">Listo para retiro</option>
+            <option value="3">Entregado</option>
+            <option value="6">Cancelado</option>
           </select>
-        </div>
+        </label>
 
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px' }}>
+        <div className="local-filters__actions local-filters__actions--full">
           <button
             type="button"
             onClick={limpiarFiltros}
-            style={{ padding: '0.5rem 1rem', border: '1px solid #ccc', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+            className="local-btn local-btn--outline"
           >
             Limpiar
           </button>
           <button
             type="submit"
             disabled={loading}
-            style={{ padding: '0.5rem 1.2rem', border: 'none', backgroundColor: '#1c7ed6', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+            className="local-btn local-btn--primary"
           >
-            {loading ? 'Buscando...' : '🔍 Buscar Pedidos'}
+            {loading ? (
+              <><Spinner /> Buscando...</>
+            ) : (
+              <><Icon name="search" size={16} /> Buscar pedidos</>
+            )}
           </button>
         </div>
       </form>
 
-      {/* Resultados de la Búsqueda */}
+      {/* Resultados de la búsqueda */}
       {buscado && resultados.length === 0 && !loading && (
-        <p style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>No se encontraron pedidos con los criterios ingresados.</p>
+        <div className="local-state">
+          <Icon name="package" size={28} />
+          <p>No se encontraron pedidos con los criterios ingresados.</p>
+        </div>
       )}
 
       {resultados.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+        <div className="local-table-wrap">
+          <table className="local-table local-table--stack">
             <thead>
-              <tr style={{ backgroundColor: '#e9ecef', borderBottom: '2px solid #dee2e6' }}>
-                <th style={{ padding: '8px' }}>ID</th>
-                <th style={{ padding: '8px' }}>Fecha</th>
-                <th style={{ padding: '8px' }}>Cliente</th>
-                <th style={{ padding: '8px' }}>Estado</th>
-                <th style={{ padding: '8px' }}>Total</th>
-                <th style={{ padding: '8px' }}>Acción</th>
+              <tr>
+                <th>ID</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th className="is-right">Total</th>
+                <th className="is-right">Acción</th>
               </tr>
             </thead>
             <tbody>
               {resultados.map((ord) => {
                 const configEstado = SECUENCIA_ESTADOS[ord.IDestado] || {};
                 return (
-                  <tr key={ord.IDorden} style={{ borderBottom: '1px solid #dee2e6' }}>
-                    <td style={{ padding: '8px', fontWeight: 'bold' }}>#{ord.IDorden}</td>
-                    <td style={{ padding: '8px' }}>{new Date(ord.fecha_creacion).toLocaleString()}</td>
-                    <td style={{ padding: '8px' }}>
+                  <tr key={ord.IDorden}>
+                    <td data-label="ID" className="is-strong">#{ord.IDorden}</td>
+                    <td data-label="Fecha">{new Date(ord.fecha_creacion).toLocaleString()}</td>
+                    <td data-label="Cliente">
                       {[ord.cliente_nombre, ord.cliente_apellido]
                         .filter((valor) => valor?.trim())
                         .join(' ')
                         .trim() || ord.cliente_username || `Cliente #${ord.IDcliente}`}
                     </td>
-                    <td style={{ padding: '8px' }}>
-                      <span style={{ backgroundColor: configEstado.bg || '#eee', color: configEstado.color || '#000', padding: '2px 6px', borderRadius: '12px', fontSize: '0.8rem' }}>
-                        {ord.estado_orden}
-                      </span>
+                    <td data-label="Estado">
+                      <EstadoBadge estadoId={ord.IDestado} etiqueta={configEstado.etiqueta || ord.estado_orden} />
                     </td>
-                    <td style={{ padding: '8px', fontWeight: 'bold' }}>${Number(ord.total).toFixed(2)}</td>
-                    <td style={{ padding: '8px' }}>
+                    <td data-label="Total" className="is-right is-strong">${Number(ord.total).toFixed(2)}</td>
+                    <td data-label="Acción" className="is-right local-table__actions">
                       <button
+                        type="button"
                         onClick={() => setOrdenParaImprimir(ord)}
-                        style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: '#495057', color: '#fff', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                        className="local-btn local-btn--sm local-btn--outline"
                       >
-                        🖨️ Ver Ticket
+                        <Icon name="printer" size={14} />
+                        Ver ticket
                       </button>
                     </td>
                   </tr>
@@ -169,12 +188,21 @@ export const BuscadorHistorialLocal = () => {
         </div>
       )}
 
+      {/* Aviso general (por encima de cualquier otro modal) */}
+      {modalAviso && (
+        <AvisoModal
+          titulo={modalAviso.titulo}
+          mensaje={modalAviso.mensaje}
+          onClose={() => setModalAviso(null)}
+        />
+      )}
+
       {ordenParaImprimir && (
         <ComprobanteModal
           orden={ordenParaImprimir}
           onClose={() => setOrdenParaImprimir(null)}
         />
       )}
-    </div>
+    </section>
   );
 };

@@ -63,7 +63,35 @@ export const createDireccionClienteService = async (userId, data) => {
 };
 
 // Eliminar dirección
+// Eliminar dirección con validación de principal o ubicación actual
 export const deleteDireccionClienteService = async (userId, direccionId) => {
+  // 1. Buscar la dirección para validar sus propiedades
+  const [rows] = await pool.query(
+    `SELECT alias, direccion, es_principal FROM direcciones_cliente WHERE id = ? AND IDusuario = ?`,
+    [direccionId, userId]
+  );
+
+  if (rows.length === 0) {
+    throw new Error('Dirección no encontrada o no pertenece al usuario');
+  }
+
+  const direccionObj = rows[0];
+
+  // 2. Validar si es la dirección principal
+  if (Number(direccionObj.es_principal) === 1) {
+    throw new Error('No se puede eliminar la dirección principal.');
+  }
+
+  // 3. Validar si es la ubicación actual
+  const esUbicacionActual = 
+    (direccionObj.alias && (direccionObj.alias.includes('Ubicación Actual') || direccionObj.alias.includes('Ubicacion Actual'))) ||
+    (direccionObj.direccion && direccionObj.direccion.startsWith('Lat:'));
+
+  if (esUbicacionActual) {
+    throw new Error('No se puede eliminar la ubicación actual.');
+  }
+
+  // 4. Proceder con la eliminación si pasa las validaciones
   const [result] = await pool.query(
     `DELETE FROM direcciones_cliente WHERE id = ? AND IDusuario = ?`,
     [direccionId, userId]

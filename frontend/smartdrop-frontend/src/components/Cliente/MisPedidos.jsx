@@ -6,6 +6,7 @@ import { getLocalById } from '../../api/localService';
 import { useCart } from '../../context/CartContext';
 import { ESTADOS_ORDEN } from '../../utils/estados';
 import { estaLocalAbierto } from '../../utils/horarios';
+import './CSS/Cliente.css'; // 👈 Importación de los estilos unificados
 
 export const MisPedidos = () => {
   const navigate = useNavigate();
@@ -15,6 +16,10 @@ export const MisPedidos = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reorderingId, setReorderingId] = useState(null);
+  const [mensajeBanner, setMensajeBanner] = useState('');
+
+  // Estado para el Modal Estético de Avisos unificado
+  const [modalAviso, setModalAviso] = useState(null);
 
   // Estados para el Modal de Cancelación
   const [cancellingOrder, setCancellingOrder] = useState(null);
@@ -26,7 +31,6 @@ export const MisPedidos = () => {
   const [puntaje, setPuntaje] = useState(5);
   const [submittingRating, setSubmittingRating] = useState(false);
 
-  // 1. Modificamos cargarPedidos para permitir actualizaciones silenciosas en segundo plano
   const cargarPedidos = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
@@ -41,28 +45,21 @@ export const MisPedidos = () => {
     }
   };
 
-  // 2. useEffect con Intervalo (polling) idéntico a SeguimientoPedido
   useEffect(() => {
-    // Carga inicial (muestra spinner)
     cargarPedidos();
-
-    // Polling en segundo plano cada 2 segundos sin interrumpir la interfaz
     const interval = setInterval(() => {
       cargarPedidos(true);
     }, 2000);
-
-    // Limpieza del temporizador al desmontar el componente
     return () => clearInterval(interval);
   }, []);
 
-  // 🔄 Handler para la funcionalidad "Pedir de nuevo" con soporte multilocal y validación individual
   const handlePedirDeNuevo = async (orden) => {
     if (!orden.productos || orden.productos.length === 0) return;
 
     setReorderingId(orden.IDorden);
+    setMensajeBanner('');
 
     try {
-      // 1. Extraer los IDs únicos de los locales involucrados en la orden
       const idsLocales = [
         ...new Set(
           orden.productos
@@ -71,7 +68,6 @@ export const MisPedidos = () => {
         )
       ];
 
-      // 2. Verificar disponibilidad y horario de cada uno de los locales
       const localesCerrados = [];
 
       for (const localId of idsLocales) {
@@ -86,23 +82,29 @@ export const MisPedidos = () => {
         }
       }
 
-      // 3. Si hay uno o más locales cerrados, detener la acción e informar al usuario
       if (localesCerrados.length > 0) {
-        if (localesCerrados.length === 1) {
-          alert(`No se puede reordenar: El local "${localesCerrados[0]}" se encuentra cerrado o fuera de servicio actualmente.`);
-        } else {
-          alert(`No se puede reordenar: Los siguientes locales están cerrados o fuera de servicio actualmente:\n- ${localesCerrados.join('\n- ')}`);
-        }
+        const textoDetalle = localesCerrados.length === 1
+          ? `El local "${localesCerrados[0]}" se encuentra cerrado actualmente.`
+          : `Los siguientes locales están cerrados:\n- ${localesCerrados.join('\n- ')}`;
+
+        setModalAviso({
+          titulo: '⚠️ No se puede reordenar',
+          mensaje: textoDetalle
+        });
+        setReorderingId(null);
         return;
       }
 
-      // 4. Filtrar únicamente los productos que NO hayan sido rechazados/cancelados
       const productosDisponibles = orden.productos.filter(
         (p) => Number(p.IDestado_item) !== ESTADOS_ORDEN.CANCELADO
       );
 
       if (productosDisponibles.length === 0) {
-        alert('No se puede reordenar: Todos los productos de este pedido fueron cancelados.');
+        setModalAviso({
+          titulo: '⚠️ No se puede reordenar',
+          mensaje: 'Todos los productos de este pedido fueron cancelados.'
+        });
+        setReorderingId(null);
         return;
       }
 
@@ -110,29 +112,41 @@ export const MisPedidos = () => {
       navigate('/cliente/carrito');
     } catch (err) {
       console.error('Error al intentar reordenar pedido:', err);
-      alert('Ocurrió un error al verificar la disponibilidad de los locales.');
+      setModalAviso({
+        titulo: '⚠️ Error de sistema',
+        mensaje: 'Ocurrió un error al verificar la disponibilidad de los locales.'
+      });
     } finally {
       setReorderingId(null);
     }
   };
 
-  // Manejo de la cancelación desde el modal
   const handleConfirmarCancelar = async () => {
     if (!motivoCancelacion.trim()) {
-      alert('Debes ingresar un motivo');
+      setModalAviso({
+        titulo: '⚠️ Motivo requerido',
+        mensaje: 'Debes ingresar un motivo para cancelar el pedido.'
+      });
       return;
     }
 
     setSubmittingCancel(true);
+    setMensajeBanner('');
 
     try {
       await cancelarPedido(cancellingOrder.IDorden, motivoCancelacion);
-      alert('Pedido cancelado exitosamente');
       setCancellingOrder(null);
       setMotivoCancelacion('');
+      setModalAviso({
+        titulo: '✓ Pedido Cancelado',
+        mensaje: 'El pedido fue cancelado exitosamente.'
+      });
       cargarPedidos();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al cancelar el pedido');
+      setModalAviso({
+        titulo: '⚠️ Error al cancelar',
+        mensaje: err.response?.data?.error || 'Ocurrió un error al intentar cancelar el pedido.'
+      });
     } finally {
       setSubmittingCancel(false);
     }
@@ -146,214 +160,203 @@ export const MisPedidos = () => {
   const handleEnviarCalificacion = async () => {
     if (!modalOrden) return;
     setSubmittingRating(true);
+    setMensajeBanner('');
 
     try {
       await calificarPedido(modalOrden.IDorden, puntaje);
-      alert('¡Gracias por calificar tu pedido!');
+      setMensajeBanner('⭐ ¡Gracias por calificar tu pedido!');
       setModalOrden(null);
       cargarPedidos();
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al guardar la calificación');
+      setMensajeBanner(err.response?.data?.error || '⚠️ Error al guardar la calificación.');
     } finally {
       setSubmittingRating(false);
     }
   };
 
-  if (loading) return <div>⏳ Cargando tus pedidos...</div>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+  if (loading) {
+    return (
+      <div className="sd-state">
+        <div className="sd-spinner"></div>
+        <p>Cargando tus pedidos...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="sd-state sd-state--error">
+        <p>⚠️ {error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '10px' }}>
-        <h2 style={{ margin: 0 }}>📦 Mis Pedidos</h2>
+    <div className="sd-orders-container">
+      <div className="admin-page-head" style={{ marginBottom: 0 }}>
+        <h2 className="admin-section-title" style={{ margin: 0 }}>📦 Mis Pedidos</h2>
       </div>
 
+      {mensajeBanner && (
+        <div className="admin-banner admin-banner--success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{mensajeBanner}</span>
+          <button onClick={() => setMensajeBanner('')} className="admin-btn admin-btn--ghost admin-btn--sm">✕</button>
+        </div>
+      )}
+
       {pedidos.length === 0 ? (
-        <p>Aún no has realizado ningún pedido.</p>
+        <div className="sd-state">
+          <p className="admin-muted">Aún no has realizado ningún pedido.</p>
+        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {pedidos.map((orden) => {
             const estadoId = Number(orden.IDestado);
+            const esEntregado = estadoId === ESTADOS_ORDEN.ENTREGADO;
+            const esCancelado = estadoId === ESTADOS_ORDEN.CANCELADO;
+
+            let badgeClass = 'admin-badge admin-badge--warning';
+            if (esEntregado) badgeClass = 'admin-badge admin-badge--success';
+            if (esCancelado) badgeClass = 'admin-badge admin-badge--error';
 
             return (
-              <div
-                key={orden.IDorden}
-                style={{
-                  border: '1px solid #ccc',
-                  borderRadius: '8px',
-                  padding: '1.2rem',
-                  backgroundColor: '#fff',
-                  boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>Pedido #{orden.IDorden}</h3>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {/* 🚴 Repartidor Asignado (Solo se muestra si tiene repartidor asignado, NO está entregado ni cancelado, y ya avanzó de estado) */}
+              <div key={orden.IDorden} className="sd-order-card">
+                <div className="sd-order-card__head">
+                  <h3 className="sd-order-card__title">Pedido #{orden.IDorden}</h3>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                     {(orden.repartidor_asignado || orden.IDrepartidor) &&
-                      estadoId !== ESTADOS_ORDEN.ENTREGADO &&
-                      estadoId !== ESTADOS_ORDEN.CANCELADO &&
+                      !esEntregado &&
+                      !esCancelado &&
                       estadoId !== ESTADOS_ORDEN.REPARTIDOR_ASIGNADO && (
-                        <span style={{
-                          fontWeight: 'bold',
-                          padding: '0.3rem 0.6rem',
-                          borderRadius: '4px',
-                          backgroundColor: '#d0ebff',
-                          color: '#1864ab',
-                          fontSize: '0.85rem'
-                        }}>
+                        <span className="admin-badge admin-badge--info">
                           🚴 Repartidor Asignado
                         </span>
                       )}
-                    <span style={{
-                      fontWeight: 'bold',
-                      padding: '0.3rem 0.6rem',
-                      borderRadius: '4px',
-                      backgroundColor: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#d4edda' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#f8d7da' : '#fff3cd',
-                      color: estadoId === ESTADOS_ORDEN.ENTREGADO ? '#155724' : estadoId === ESTADOS_ORDEN.CANCELADO ? '#721c24' : '#856404'
-                    }}>
+                    <span className={badgeClass}>
                       {orden.estado_orden}
                     </span>
                   </div>
                 </div>
 
-                <p><strong>Total:</strong> ${Number(orden.total).toFixed(2)} (Subtotal: ${Number(orden.subtotal).toFixed(2)} + Envío: ${Number(orden.costo_envio).toFixed(2)})</p>
-                {orden.codigo_otp && <p><strong>Código OTP de Entrega:</strong> <code style={{ fontSize: '1.1rem', color: '#1c7ed6' }}>{orden.codigo_otp}</code></p>}
-                {orden.motivo_cancelacion && <p style={{ color: 'red' }}><strong>Motivo Cancelación:</strong> {orden.motivo_cancelacion}</p>}
-                {orden.puntaje_cliente && <p style={{ color: '#f39c12' }}><strong>Tu calificación:</strong> {'★'.repeat(orden.puntaje_cliente)}{'☆'.repeat(5 - orden.puntaje_cliente)} ({orden.puntaje_cliente}/5)</p>}
+                <div className="sd-order-card__meta">
+                  <p>
+                    <strong>Total:</strong> ${Number(orden.total).toFixed(2)}{' '}
+                    <span className="admin-muted">
+                      (Subtotal: ${Number(orden.subtotal).toFixed(2)} + Envío: ${Number(orden.costo_envio).toFixed(2)})
+                    </span>
+                  </p>
+                  {orden.codigo_otp && (
+                    <p>
+                      <strong>Código OTP de Entrega:</strong> <code className="admin-mono" style={{ color: 'var(--sd-info)', fontSize: '1rem' }}>{orden.codigo_otp}</code>
+                    </p>
+                  )}
+                  {orden.motivo_cancelacion && (
+                    <p className="admin-text-error">
+                      <strong>Motivo Cancelación:</strong> {orden.motivo_cancelacion}
+                    </p>
+                  )}
+                  {orden.puntaje_cliente && (
+                    <p style={{ color: 'var(--sd-warning)' }}>
+                      <strong>Tu calificación:</strong> {'★'.repeat(orden.puntaje_cliente)}{'☆'.repeat(5 - orden.puntaje_cliente)} ({orden.puntaje_cliente}/5)
+                    </p>
+                  )}
+                </div>
 
-                <h4>Productos:</h4>
-                <ul style={{ paddingLeft: '1.2rem', listStyleType: 'none' }}>
-                  {orden.productos?.map((prod) => {
-                    const isItemRechazado = Number(prod.IDestado_item) === ESTADOS_ORDEN.CANCELADO;
+                <div>
+                  <h4 className="admin-subtitle" style={{ margin: '0 0 8px 0' }}>Productos:</h4>
+                  <ul className="sd-order-items-list">
+                    {orden.productos?.map((prod) => {
+                      const isItemRechazado = Number(prod.IDestado_item) === ESTADOS_ORDEN.CANCELADO;
 
-                    return (
-                      <li
-                        key={prod.IDdetalle}
-                        style={{
-                          marginBottom: '0.8rem',
-                          padding: '0.6rem',
-                          borderRadius: '6px',
-                          backgroundColor: isItemRechazado ? '#fff5f5' : 'transparent',
-                          borderLeft: isItemRechazado ? '4px solid #dc3545' : 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ textDecoration: isItemRechazado ? 'line-through' : 'none', color: isItemRechazado ? '#6c757d' : '#000' }}>
-                            {prod.cantidad}x {prod.producto} ({prod.local}) - <strong>${Number(prod.precio_unitario).toFixed(2)} c/u</strong>
-                          </span>
-
-                          {/* Estado individual del producto en caso de rechazo/cancelación */}
-                          {isItemRechazado && (
-                            <span style={{ backgroundColor: '#f8d7da', color: '#721c24', fontSize: '0.75rem', fontWeight: 'bold', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                              ❌ {prod.estado_item || 'Rechazado'}
+                      return (
+                        <li
+                          key={prod.IDdetalle}
+                          className={`sd-order-item ${isItemRechazado ? 'sd-order-item--rejected' : ''}`}
+                        >
+                          <div className="sd-order-item__row">
+                            <span style={{ textDecoration: isItemRechazado ? 'line-through' : 'none', color: isItemRechazado ? 'var(--sd-text-secondary)' : 'inherit' }}>
+                              {prod.cantidad}x {prod.producto} ({prod.local}) - <strong>${Number(prod.precio_unitario).toFixed(2)} c/u</strong>
                             </span>
-                          )}
-                        </div>
 
-                        {/* Motivo de rechazo específico del ítem proporcionado por el local */}
-                        {isItemRechazado && prod.motivo_rechazo && (
-                          <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#dc3545', fontWeight: 'bold' }}>
-                            ⚠️ Motivo de rechazo del local: {prod.motivo_rechazo}
-                          </p>
-                        )}
-
-                        {/* Visualización de Opciones con Cantidad y Subtotal Explícito */}
-                        {prod.opciones && prod.opciones.length > 0 && (
-                          <div style={{ fontSize: '0.85rem', color: '#555', marginTop: '0.2rem' }}>
-                            <strong>Opciones:</strong>{' '}
-                            {prod.opciones
-                              .map((o) => {
-                                const cant = o.cantidad || 1;
-                                const cantStr = cant > 1 ? `${cant}x ` : '';
-                                const precioUnit = Number(o.precio_adicional || 0);
-
-                                let precioStr = '';
-                                if (precioUnit > 0) {
-                                  precioStr = cant > 1
-                                    ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
-                                    : ` (+$${precioUnit.toFixed(2)})`;
-                                }
-
-                                return `${cantStr}${o.nombre}${precioStr}`;
-                              })
-                              .join(', ')}
+                            {isItemRechazado && (
+                              <span className="admin-badge admin-badge--error">
+                                ❌ {prod.estado_item || 'Rechazado'}
+                              </span>
+                            )}
                           </div>
-                        )}
 
-                        {prod.comentario && <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>Nota: {prod.comentario}</p>}
-                      </li>
-                    );
-                  })}
-                </ul>
+                          {isItemRechazado && prod.motivo_rechazo && (
+                            <p className="admin-text-error" style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 'bold' }}>
+                              ⚠️ Motivo de rechazo del local: {prod.motivo_rechazo}
+                            </p>
+                          )}
 
-                <div style={{ display: 'flex', gap: '10px', marginTop: '1rem', flexWrap: 'wrap' }}>
+                          {prod.opciones && prod.opciones.length > 0 && (
+                            <div className="sd-order-item__options">
+                              <strong>Opciones:</strong>{' '}
+                              {prod.opciones
+                                .map((o) => {
+                                  const cant = o.cantidad || 1;
+                                  const cantStr = cant > 1 ? `${cant}x ` : '';
+                                  const precioUnit = Number(o.precio_adicional || 0);
 
-                  {/* 🔄 BOTÓN PEDIR DE NUEVO: Solo si el pedido está ENTREGADO o CANCELADO */}
-                  {(estadoId === ESTADOS_ORDEN.ENTREGADO || estadoId === ESTADOS_ORDEN.CANCELADO) && (
+                                  let precioStr = '';
+                                  if (precioUnit > 0) {
+                                    precioStr = cant > 1
+                                      ? ` (+$${precioUnit.toFixed(2)} c/u = +$${(precioUnit * cant).toFixed(2)})`
+                                      : ` (+$${precioUnit.toFixed(2)})`;
+                                  }
+
+                                  return `${cantStr}${o.nombre}${precioStr}`;
+                                })
+                                .join(', ')}
+                            </div>
+                          )}
+
+                          {prod.comentario && <p className="admin-muted" style={{ margin: 0, fontSize: '0.8125rem' }}>Nota: {prod.comentario}</p>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+
+                <div className="sd-order-actions">
+                  {(esEntregado || esCancelado) && (
                     <button
                       onClick={() => handlePedirDeNuevo(orden)}
                       disabled={reorderingId === orden.IDorden}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        backgroundColor: reorderingId === orden.IDorden ? '#6c757d' : '#17a2b8',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontWeight: 'bold',
-                        cursor: reorderingId === orden.IDorden ? 'not-allowed' : 'pointer'
-                      }}
+                      className="admin-btn admin-btn--info-soft admin-btn--sm"
                     >
-                      {reorderingId === orden.IDorden ? '⌛ Verificando disponibilidad...' : '🔄 Pedir de nuevo'}
+                      {reorderingId === orden.IDorden ? '⌛ Verificando...' : '🔄 Pedir de nuevo'}
                     </button>
                   )}
 
-                  {/* 🟢 BOTÓN DE SEGUIMIENTO */}
-                  {estadoId !== ESTADOS_ORDEN.ENTREGADO && estadoId !== ESTADOS_ORDEN.CANCELADO && (
+                  {!esEntregado && !esCancelado && (
                     <button
                       onClick={() => navigate(`/cliente/seguimiento/${orden.IDorden}`)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        backgroundColor: '#1c7ed6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
+                      className="admin-btn admin-btn--primary admin-btn--sm"
                     >
                       📍 Ver Seguimiento
                     </button>
                   )}
 
-                  {/* Botón de Cancelar */}
                   {estadoId === ESTADOS_ORDEN.CREADO && (
                     <button
                       onClick={() => setCancellingOrder(orden)}
-                      style={{ padding: '0.5rem 1rem', backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      className="admin-btn admin-btn--danger-soft admin-btn--sm"
                     >
                       ❌ Cancelar Pedido
                     </button>
                   )}
 
-                  {/* Botón de Calificar */}
-                  {estadoId === ESTADOS_ORDEN.ENTREGADO && (
+                  {esEntregado && (
                     <button
                       onClick={() => handleAbrirCalificacion(orden)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        backgroundColor: orden.puntaje_cliente ? '#f39c12' : '#28a745',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold'
-                      }}
+                      className={`admin-btn admin-btn--sm ${orden.puntaje_cliente ? 'admin-btn--outline' : 'admin-btn--success'}`}
                     >
                       {orden.puntaje_cliente ? '✏️ Cambiar Calificación' : '⭐ Calificar Pedido'}
                     </button>
                   )}
-
                 </div>
               </div>
             );
@@ -361,39 +364,59 @@ export const MisPedidos = () => {
         </div>
       )}
 
+      {/* Modal Estético General de Avisos */}
+      {modalAviso && (
+        <div className="admin-modal-aviso-overlay">
+          <div className="admin-modal-aviso-box">
+            <div className="admin-modal-aviso-icon admin-modal-aviso-icon--warning">⚠️</div>
+            <h3>{modalAviso.titulo}</h3>
+            <p>{modalAviso.mensaje}</p>
+            <div className="admin-modal-aviso-actions">
+              <button
+                onClick={() => {
+                  setModalAviso(null);
+                  if (modalAviso.titulo.includes('Cancelado')) {
+                    setCancellingOrder(null);
+                  }
+                }}
+                className="admin-btn admin-btn--primary"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Cancelación */}
       {cancellingOrder && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-          <div style={{ backgroundColor: '#fff', padding: '2rem', borderRadius: '8px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-            <h3>Cancelar Pedido #{cancellingOrder.IDorden}</h3>
-            <p style={{ color: '#666', fontSize: '0.9rem' }}>Escribe la razón por la cual deseas cancelar tu pedido:</p>
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-content" style={{ maxWidth: '420px' }}>
+            <div className="admin-modal-head">
+              <h3>Cancelar Pedido #{cancellingOrder.IDorden}</h3>
+            </div>
+            <p className="admin-muted" style={{ marginBottom: '16px' }}>Escribe la razón por la cual deseas cancelar tu pedido:</p>
 
-            <textarea
-              value={motivoCancelacion}
-              onChange={(e) => setMotivoCancelacion(e.target.value)}
-              placeholder="Motivo de la cancelación..."
-              style={{ width: '100%', height: '80px', marginBottom: '1rem', padding: '0.5rem', boxSizing: 'border-box' }}
-            />
+            <div className="admin-field" style={{ marginBottom: '16px' }}>
+              <textarea
+                value={motivoCancelacion}
+                onChange={(e) => setMotivoCancelacion(e.target.value)}
+                placeholder="Motivo de la cancelación..."
+                className="admin-textarea"
+              />
+            </div>
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <div className="admin-modal-foot">
               <button
                 onClick={() => { setCancellingOrder(null); setMotivoCancelacion(''); }}
-                style={{ padding: '0.5rem 1rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                className="admin-btn admin-btn--outline"
               >
                 Volver
               </button>
               <button
                 onClick={handleConfirmarCancelar}
                 disabled={submittingCancel}
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: submittingCancel ? '#6c757d' : '#dc3545',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: submittingCancel ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold'
-                }}
+                className="admin-btn admin-btn--danger"
               >
                 {submittingCancel ? '⌛ Cancelando...' : 'Confirmar Cancelación'}
               </button>
@@ -404,55 +427,38 @@ export const MisPedidos = () => {
 
       {/* Modal de Calificación */}
       {modalOrden && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justify: 'center',
-          align: 'center',
-          zIndex: 2000
-        }}>
-          <div style={{
-            backgroundColor: '#fff',
-            padding: '2rem',
-            borderRadius: '8px',
-            maxWidth: '400px',
-            width: '100%',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            textAlign: 'center'
-          }}>
-            <h3>Calificar Pedido #{modalOrden.IDorden}</h3>
-            <p style={{ color: '#666', fontSize: '0.9rem' }}>¿Cómo fue tu experiencia con este pedido?</p>
+        <div className="admin-modal-overlay">
+          <div className="admin-modal-content" style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <div className="admin-modal-head" style={{ justifyContent: 'center' }}>
+              <h3>Calificar Pedido #{modalOrden.IDorden}</h3>
+            </div>
+            <p className="admin-muted">¿Cómo fue tu experiencia con este pedido?</p>
 
             <div style={{ margin: '1.5rem 0', fontSize: '2rem', cursor: 'pointer' }}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <span
                   key={star}
                   onClick={() => setPuntaje(star)}
-                  style={{ color: star <= puntaje ? '#f1c40f' : '#ccc', padding: '0 0.2rem' }}
+                  style={{ color: star <= puntaje ? 'var(--sd-warning)' : '#ccc', padding: '0 0.2rem' }}
                 >
                   ★
                 </span>
               ))}
             </div>
 
-            <p style={{ fontWeight: 'bold', color: '#333' }}>{puntaje} / 5 Estrellas</p>
+            <p style={{ fontWeight: 'bold', color: 'var(--sd-navy)' }}>{puntaje} / 5 Estrellas</p>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem', justifyContent: 'center' }}>
+            <div className="admin-modal-foot" style={{ justifyContent: 'center', marginTop: '20px' }}>
               <button
                 onClick={() => setModalOrden(null)}
-                style={{ padding: '0.6rem 1.2rem', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                className="admin-btn admin-btn--outline"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleEnviarCalificacion}
                 disabled={submittingRating}
-                style={{ padding: '0.6rem 1.2rem', backgroundColor: '#007bff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                className="admin-btn admin-btn--primary"
               >
                 {submittingRating ? 'Guardando...' : 'Guardar Feedback'}
               </button>

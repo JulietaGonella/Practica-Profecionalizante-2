@@ -32,9 +32,13 @@ import { SolicitarRecuperacionPage } from './pages/SolicitarRecuperacionPage';
 import { RestablecerPasswordPage } from './pages/RestablecerPasswordPage';
 import { ClienteGuard } from './components/Cliente/ClienteGuard';
 import { TableroAdministrador } from './components/Admin/TableroAdministrador';
-import { TableroRepartidor } from './components/Repartidor/TableroRepartidor'; // Ajusta la ruta según la ubicación exacta de tus componentes
+import { TableroRepartidor } from './components/Repartidor/TableroRepartidor';
 import { TableroCliente } from './components/Cliente/TableroCliente';
 import { NotificationMenu } from './components/Common/NotificationMenu'; 
+import './components/Local/css/Local.css';
+import { Icon, Spinner, Badge, Banner } from './components/Local/LocalUI';
+import './components/Cliente/CSS/Cliente.css'; // 👈 Importación correcta de los estilos unificados de cliente
+import './index.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -77,81 +81,52 @@ const ClienteInicio = () => {
   }, []);
 
   return (
-    <div
-      style={{
-        padding: '2rem',
-        maxWidth: '1000px',
-        margin: '0 auto'
-      }}
-    >
+    <div className="sd-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
       {/* 🟢 PANEL DE PEDIDOS EN CURSO */}
-      <section style={{ marginBottom: '2rem' }}>
-        <h2>📍 Pedidos en Curso</h2>
+      <section className="sd-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px', backgroundColor: 'var(--sd-surface)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-card)', boxShadow: 'var(--sd-shadow-sm)' }}>
+        <h2 style={{ color: 'var(--sd-navy)', fontSize: '1.25rem', fontWeight: 700 }}>
+          📍 Pedidos en Curso
+        </h2>
 
         {loadingPedidos ? (
-          <p>⏳ Buscando pedidos activos...</p>
+          <div className="sd-state"><div className="sd-spinner"></div><p>Buscando pedidos activos...</p></div>
         ) : pedidosEnCurso.length === 0 ? (
-          <p style={{ color: '#666' }}>
+          <p className="admin-muted">
             No tienes ningún pedido activo en este momento.
           </p>
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              marginTop: '1rem'
-            }}
-          >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {pedidosEnCurso.map((orden) => (
               <div
                 key={orden.IDorden}
+                className="sd-order-item"
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '1rem',
-                  backgroundColor: '#e7f5ff',
-                  border: '1px solid #74c0fc',
-                  borderRadius: '8px'
+                  padding: '16px',
+                  backgroundColor: 'var(--sd-tint-info)',
+                  border: '1px solid var(--sd-line-info)',
+                  borderRadius: 'var(--sd-radius-ctl)',
+                  flexWrap: 'wrap',
+                  gap: '12px'
                 }}
               >
                 <div>
-                  <strong>Pedido #{orden.IDorden}</strong> —{' '}
-                  <span
-                    style={{
-                      color: '#1c7ed6',
-                      fontWeight: 'bold'
-                    }}
-                  >
+                  <strong style={{ color: 'var(--sd-navy)' }}>Pedido #{orden.IDorden}</strong> —{' '}
+                  <span style={{ color: 'var(--sd-info)', fontWeight: 700 }}>
                     {orden.estado_orden}
                   </span>
 
-                  <p
-                    style={{
-                      margin: '0.2rem 0 0 0',
-                      fontSize: '0.9rem',
-                      color: '#555'
-                    }}
-                  >
+                  <p className="admin-muted" style={{ margin: '4px 0 0 0', fontSize: '0.875rem' }}>
                     Total: ${Number(orden.total).toFixed(2)}
                   </p>
                 </div>
 
                 <button
-                  onClick={() =>
-                    navigate(`/cliente/seguimiento/${orden.IDorden}`)
-                  }
-                  style={{
-                    padding: '0.6rem 1.2rem',
-                    backgroundColor: '#1c7ed6',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
+                  onClick={() => navigate(`/cliente/seguimiento/${orden.IDorden}`)}
+                  className="admin-btn admin-btn--primary admin-btn--sm"
                 >
                   🚴 Ver Seguimiento
                 </button>
@@ -161,69 +136,37 @@ const ClienteInicio = () => {
         )}
       </section>
 
+      {/* Menú de Accesos Rápidos */}
+      <section className="sd-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px', backgroundColor: 'var(--sd-surface)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-card)', boxShadow: 'var(--sd-shadow-sm)' }}>
+        <h2 style={{ color: 'var(--sd-navy)', fontSize: '1.25rem', fontWeight: 700 }}>
+          Menú de Accesos Rápidos
+        </h2>
 
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Menú de Accesos Rápidos</h2>
-
-        <div
-          style={{
-            marginTop: '1rem',
-            display: 'flex',
-            gap: '10px',
-            flexWrap: 'wrap'
-          }}
-        >
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button
             onClick={() => navigate('/cliente/locales/')}
-            style={{
-              padding: '0.7rem 1.4rem',
-              cursor: 'pointer',
-              borderRadius: '6px',
-              border: '1px solid #ccc',
-              fontWeight: 'bold'
-            }}
+            className="admin-btn admin-btn--outline"
           >
             🏪 Explorar Locales
           </button>
 
           <button
             onClick={() => navigate('/cliente/pedidos')}
-            style={{
-              padding: '0.7rem 1.4rem',
-              cursor: 'pointer',
-              borderRadius: '6px',
-              border: '1px solid #ccc',
-              fontWeight: 'bold'
-            }}
+            className="admin-btn admin-btn--outline"
           >
             📦 Historial de Pedidos
           </button>
 
           <button
             onClick={() => navigate('/cliente/perfil')}
-            style={{
-              padding: '0.7rem 1.4rem',
-              cursor: 'pointer',
-              borderRadius: '6px',
-              border: '1px solid #ccc',
-              fontWeight: 'bold'
-            }}
+            className="admin-btn admin-btn--outline"
           >
             👤 Configurar Mi Perfil
           </button>
 
           <button
             onClick={() => navigate('/cliente/tablero')}
-            style={{
-              padding: '0.7rem 1.4rem',
-              cursor: 'pointer',
-              borderRadius: '6px',
-              border: '1px solid #ccc',
-              fontWeight: 'bold',
-              backgroundColor: '#e7f5ff',
-              color: '#1c7ed6',
-              borderColor: '#74c0fc'
-            }}
+            className="admin-btn admin-btn--info-soft"
           >
             📊 Mi Tablero
           </button>
@@ -242,7 +185,6 @@ const LocalInicio = () => {
   const [errorLocal, setErrorLocal] = useState('');
   const [, actualizarReloj] = useState(0);
 
-  // Estado de la pestaña activa
   const [seccionActiva, setSeccionActiva] = useState('comandera');
 
   const resolverUrl = (path) =>
@@ -290,76 +232,38 @@ const LocalInicio = () => {
   };
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '1150px', margin: '0 auto' }}>
+    <div className="local-panel local-scope">
 
-      {/* ========================================================= */}
-      {/* 🖼️ ENCABEZADO PERSISTENTE DEL LOCAL (SIN OVERFLOW HIDDEN) */}
-      {/* ========================================================= */}
       {loadingLocal ? (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>⏳ Cargando datos del local...</div>
+        <div className="local-state" role="status" style={{ marginBottom: '20px' }}>
+          <Spinner />
+          <p>Cargando datos del local...</p>
+        </div>
       ) : errorLocal ? (
-        <p style={{ color: 'red' }}>{errorLocal}</p>
+        <div style={{ marginBottom: '20px' }}>
+          <Banner tipo="error">{errorLocal}</Banner>
+        </div>
       ) : local && (
-        <div
-          style={{
-            position: 'relative',
-            borderRadius: '12px',
-            backgroundColor: '#1a1a1a',
-            color: '#fff',
-            marginBottom: '1.5rem',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
-            // ⚠️ Se eliminó overflow: 'hidden' de aquí para no recortar menús desplegables
-          }}
-        >
-          {/* Botones Flotantes Superiores (Z-Index alto para sobresalir del banner) */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '15px',
-              right: '15px',
-              zIndex: 100,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.8rem'
-            }}
-          >
+        <header className="local-header">
+          {/* Acciones superiores sobre el banner */}
+          <div className="local-header__actions">
             <NotificationMenu />
             <LogoutButton />
           </div>
 
-          {/* 1. PORTADA / BANNER DE FONDO (Aquí si aplicamos el clip redondeado) */}
+          {/* Portada del local */}
           <div
+            className="local-header__banner"
             style={{
-              height: '180px',
-              borderRadius: '12px',
-              overflow: 'hidden',
               backgroundImage: local.banner_url
-                ? `linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.8)), url(${resolverUrl(local.banner_url)})`
-                : 'linear-gradient(135deg, #1c7ed6 0%, #0c8599 100%)',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              display: 'flex',
-              alignItems: 'flex-end',
-              padding: '1.5rem',
-              position: 'relative'
+                ? `linear-gradient(to bottom, rgba(23,36,58,0.25), rgba(23,36,58,0.85)), url(${resolverUrl(local.banner_url)})`
+                : 'linear-gradient(135deg, #17243A 0%, #284666 100%)'
             }}
           >
-            {/* Contenido Principal del Encabezado */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', width: '100%', flexWrap: 'wrap' }}>
+            <div className="local-header__content">
 
-              {/* 2. LOGO DEL COMERCIO */}
-              <div
-                style={{
-                  width: '90px',
-                  height: '90px',
-                  borderRadius: '50%',
-                  border: '3px solid #fff',
-                  backgroundColor: '#fff',
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                  flexShrink: 0
-                }}
-              >
+              {/* Logo del comercio */}
+              <div className="local-header__logo">
                 <img
                   src={
                     local.logo_url
@@ -367,7 +271,6 @@ const LocalInicio = () => {
                       : 'https://placehold.co/100x100?text=Logo'
                   }
                   alt={local.nombre}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = 'https://placehold.co/100x100?text=Logo';
@@ -375,161 +278,95 @@ const LocalInicio = () => {
                 />
               </div>
 
-              {/* Textos del Local */}
-              <div style={{ flex: 1, minWidth: '220px' }}>
-                <h1 style={{ margin: 0, fontSize: '1.8rem', textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>
-                  {local.nombre}
-                </h1>
-                <p style={{ margin: '0.3rem 0 0 0', opacity: 0.9, fontSize: '0.95rem' }}>
-                  📍 {local.direccion} {local.telefono ? `• 📞 ${local.telefono}` : ''}
+              {/* Datos del local */}
+              <div className="local-header__info">
+                <h1>{local.nombre}</h1>
+                <p className="local-header__meta">
+                  <span><Icon name="pin" size={14} /> {local.direccion}</span>
+                  {local.telefono && (
+                    <span><Icon name="phone" size={14} /> {local.telefono}</span>
+                  )}
                 </p>
               </div>
 
-              {/* 3. FACHADA Y CONTROL DE ESTADO OPERATIVO */}
-              <div
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                  backdropFilter: 'blur(8px)',
-                  padding: '0.8rem 1.2rem',
-                  borderRadius: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  border: '1px solid rgba(255, 255, 255, 0.2)'
-                }}
-              >
+              {/* Fachada y control del estado operativo */}
+              <div className="local-status-card">
                 {local.foto_url && (
                   <img
                     src={resolverUrl(local.foto_url)}
                     alt="Fachada"
-                    style={{
-                      width: '50px',
-                      height: '50px',
-                      borderRadius: '8px',
-                      objectFit: 'cover',
-                      border: '1px solid #fff'
-                    }}
                   />
                 )}
 
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.3rem' }}>
-                    Estado del Comercio:
+                  <div className="local-status-card__label">
+                    Estado del comercio
                   </div>
-                  <span
-                    style={{
-                      backgroundColor: localEstaAbierto ? '#2b8a3e' : '#c92a2a',
-                      color: '#fff',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '12px',
-                      fontSize: '0.8rem',
-                      fontWeight: 'bold',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {localEstaAbierto ? '🟢 Abierto' : '🔴 Cerrado'}
-                  </span>
+                  {localEstaAbierto ? (
+                    <Badge tone="success" dot>Abierto</Badge>
+                  ) : (
+                    <Badge tone="error" dot>Cerrado</Badge>
+                  )}
                 </div>
 
                 <button
+                  type="button"
                   onClick={handleToggleEstado}
-                  style={{
-                    padding: '0.5rem 0.9rem',
-                    backgroundColor: local.esta_operativo ? '#e03131' : '#099268',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
+                  className={`local-btn local-btn--sm ${local.esta_operativo ? 'local-btn--danger' : 'local-btn--success'}`}
                 >
-                  {local.esta_operativo ? 'Pausar Recepción' : 'Activar Recepción'}
+                  <Icon name={local.esta_operativo ? 'pause' : 'play'} size={14} />
+                  {local.esta_operativo ? 'Pausar recepción' : 'Activar recepción'}
                 </button>
               </div>
 
             </div>
           </div>
-        </div>
+        </header>
       )}
 
-      {/* ========================================================= */}
-      {/* 📌 PESTAÑAS DE NAVEGACIÓN (CONMUTADOR DE VISTAS) */}
-      {/* ========================================================= */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap',
-          borderBottom: '2px solid #e9ecef',
-          paddingBottom: '0.5rem'
-        }}
-      >
+      {/* Pestañas de navegación de local */}
+      <nav className="local-tabs" aria-label="Secciones del local">
         <button
+          type="button"
           onClick={() => setSeccionActiva('comandera')}
-          style={{
-            padding: '0.7rem 1.3rem',
-            backgroundColor: seccionActiva === 'comandera' ? '#007bff' : '#f8f9fa',
-            color: seccionActiva === 'comandera' ? '#fff' : '#495057',
-            border: '1px solid #ced4da',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={seccionActiva === 'comandera' ? 'active' : ''}
+          aria-current={seccionActiva === 'comandera' ? 'page' : undefined}
         >
-          📋 Comandera de Pedidos
+          <Icon name="clipboard" />
+          Comandera de pedidos
         </button>
 
         <button
+          type="button"
           onClick={() => setSeccionActiva('productos')}
-          style={{
-            padding: '0.7rem 1.3rem',
-            backgroundColor: seccionActiva === 'productos' ? '#007bff' : '#f8f9fa',
-            color: seccionActiva === 'productos' ? '#fff' : '#495057',
-            border: '1px solid #ced4da',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={seccionActiva === 'productos' ? 'active' : ''}
+          aria-current={seccionActiva === 'productos' ? 'page' : undefined}
         >
-          🍕 Gestión de Productos
+          <Icon name="utensils" />
+          Gestión de productos
         </button>
 
         <button
+          type="button"
           onClick={() => setSeccionActiva('horarios')}
-          style={{
-            padding: '0.7rem 1.3rem',
-            backgroundColor: seccionActiva === 'horarios' ? '#007bff' : '#f8f9fa',
-            color: seccionActiva === 'horarios' ? '#fff' : '#495057',
-            border: '1px solid #ced4da',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={seccionActiva === 'horarios' ? 'active' : ''}
+          aria-current={seccionActiva === 'horarios' ? 'page' : undefined}
         >
-          📅 Horarios de Atención
+          <Icon name="calendar" />
+          Horarios de atención
         </button>
 
         <button
+          type="button"
           onClick={() => setSeccionActiva('perfil')}
-          style={{
-            padding: '0.7rem 1.3rem',
-            backgroundColor: seccionActiva === 'perfil' ? '#007bff' : '#f8f9fa',
-            color: seccionActiva === 'perfil' ? '#fff' : '#495057',
-            border: '1px solid #ced4da',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
+          className={seccionActiva === 'perfil' ? 'active' : ''}
+          aria-current={seccionActiva === 'perfil' ? 'page' : undefined}
         >
-          🏪 Perfil del Comercio
+          <Icon name="store" />
+          Perfil del comercio
         </button>
-      </div>
+      </nav>
 
-      {/* ========================================================= */}
-      {/* 🔄 RENDERIZADO DINÁMICO DE SECCIONES */}
-      {/* ========================================================= */}
       {seccionActiva === 'comandera' && <ComanderaLocal />}
       {seccionActiva === 'productos' && local && <GestionMenuLocal localId={local.id} />}
       {seccionActiva === 'horarios' && <GestionHorariosLocal />}
@@ -539,67 +376,31 @@ const LocalInicio = () => {
   );
 };
 
-
 // 🚴 INICIO REPARTIDOR
 const RepartidorInicio = () => {
-
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        padding: '2rem',
-        maxWidth: '1000px',
-        margin: '0 auto'
-      }}
-    >
-
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem'
-        }}
-      >
-
-        <h1>
-          Panel de Entregas del Repartidor 🚴
-        </h1>
-
+    <div className="admin-container" style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
+      <header className="admin-header">
+        <div>
+          <h1>Panel de Entregas del Repartidor 🚴</h1>
+          <p>Pedidos disponibles y tracking en tiempo real.</p>
+        </div>
         <LogoutButton />
-
       </header>
 
-
-      <section style={{ marginTop: '2rem' }}>
-
-        <h2>
-          ¡Bienvenido a tu panel!
-        </h2>
-
-        <p>
-          Pedidos disponibles y tracking en tiempo real.
-        </p>
-
+      <section className="admin-card" style={{ padding: '2rem', marginTop: '1.5rem' }}>
+        <h2>¡Bienvenido a tu panel!</h2>
         <div style={{ marginTop: '1.5rem' }}>
-
           <button
-            onClick={() =>
-              navigate('/repartidor/tablero')
-            }
-            style={{
-              padding: '0.6rem 1.2rem',
-              cursor: 'pointer'
-            }}
+            onClick={() => navigate('/repartidor/tablero')}
+            className="admin-btn admin-btn--primary"
           >
             📊 Ir al Tablero de Estadísticas
           </button>
-
         </div>
-
       </section>
-
     </div>
   );
 };
@@ -607,89 +408,29 @@ const RepartidorInicio = () => {
 
 // 🛡️ INICIO ADMINISTRADOR
 const AdminInicio = () => {
-
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        padding: '2rem',
-        maxWidth: '1000px',
-        margin: '0 auto'
-      }}
-    >
-
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem'
-        }}
-      >
-
-        <h1>
-          Panel de Administración General 🛡️
-        </h1>
-
+    <div className="admin-container" style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
+      <header className="admin-header">
+        <div>
+          <h1>Panel de Administración General 🛡️</h1>
+          <p>Gestión global de locales, usuarios y validaciones.</p>
+        </div>
         <LogoutButton />
-
       </header>
 
-
-      <section style={{ marginTop: '2rem' }}>
-
-        <h2>
-          ¡Bienvenido a tu panel!
-        </h2>
-
-        <p>
-          Gestión global de locales, usuarios y validaciones.
-        </p>
-
+      <section className="admin-card" style={{ padding: '2rem', marginTop: '1.5rem' }}>
+        <h2>¡Bienvenido a tu panel!</h2>
         <div style={{ marginTop: '1.5rem' }}>
-
           <button
-            onClick={() =>
-              navigate('/admin/tablero')
-            }
-            style={{
-              padding: '0.6rem 1.2rem',
-              cursor: 'pointer'
-            }}
+            onClick={() => navigate('/admin/tablero')}
+            className="admin-btn admin-btn--primary"
           >
             📊 Ir al Tablero General
           </button>
-
         </div>
-
       </section>
-
-    </div>
-  );
-};
-
-
-// 📊 TABLERO DE ESTADÍSTICAS
-const TableroEstadisticas = ({ rol }) => {
-
-  const navigate = useNavigate();
-
-  return (
-    <div style={{ padding: '2rem' }}>
-
-      <h2>
-        📊 Tablero de Estadísticas y Métricas ({rol})
-      </h2>
-
-      <p>
-        Sector en desarrollo para reportes interactivos.
-      </p>
-
-      <button onClick={() => navigate(-1)}>
-        ⬅ Volver al Inicio
-      </button>
-
     </div>
   );
 };
@@ -700,28 +441,25 @@ const TableroEstadisticas = ({ rol }) => {
 // =============================================
 
 export default function App() {
-
   const { agregarAlCarrito } = useCart();
 
   return (
     <AuthProvider>
-      <CartProvider> {/* 👈 CartProvider debe estar DENTRO de AuthProvider */}
+      <CartProvider>
         <BrowserRouter>
           <ScrollToTop />
 
           <Routes>
-            {/* 🔓 RUTAS PÚBLICAS DE AUTENTICACIÓN */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/recuperar-password" element={<SolicitarRecuperacionPage />} />
             <Route path="/restablecer-password" element={<RestablecerPasswordPage />} />
 
-            {/* 🔒 RUTA DE CAMBIO DE CONTRASEÑA */}
             <Route element={<ProtectedRoute />}>
               <Route path="/actualizar-password-inicial" element={<ActualizarPasswordInicialPage />} />
             </Route>
 
-            {/* 🛒 RUTAS DEL CLIENTE */}
+            {/* Rutas del Cliente */}
             <Route element={<ProtectedRoute allowedRoles={['cliente']} />}>
               <Route element={<ClienteGuard />}>
                 <Route element={<ClienteLayout />}>
@@ -729,7 +467,6 @@ export default function App() {
                   <Route path="/cliente/pedidos" element={<MisPedidos />} />
                   <Route path="/cliente/perfil" element={<MiPerfil />} />
                   <Route path="/cliente/carrito" element={<CarritoPage />} />
-                  {/* CatalogoCliente consume useCart() internamente */}
                   <Route path="/cliente/locales/*" element={<CatalogoCliente />} />
                   <Route path="/cliente/tablero" element={<TableroCliente />} />
                   <Route path="/cliente/seguimiento/:ordenId" element={<SeguimientoPedido />} />
@@ -742,19 +479,19 @@ export default function App() {
               />
             </Route>
 
-            {/* 🏪 RUTAS DEL LOCAL */}
+            {/* Rutas del Local */}
             <Route element={<ProtectedRoute allowedRoles={['local', 'administrador local']} />}>
               <Route path="/local/inicio" element={<LocalInicio />} />
             </Route>
 
-            {/* 🚴 RUTAS DEL REPARTIDOR */}
+            {/* Rutas del Repartidor */}
             <Route element={<ProtectedRoute allowedRoles={['repartidor']} />}>
               <Route path="/repartidor/inicio" element={<PanelRepartidor />} />
               <Route path="/repartidor/orden/:ordenId" element={<DetallePedidoRepartidor />} />
               <Route path="/repartidor/tablero" element={<TableroRepartidor />} />
             </Route>
 
-            {/* 🛡️ RUTAS DEL ADMINISTRADOR */}
+            {/* Rutas del Administrador */}
             <Route element={<ProtectedRoute allowedRoles={['administrador']} />}>
               <Route path="/admin/inicio" element={<PanelAdministrador />} />
               <Route path="/admin/crear-cuenta" element={<CrearCuentaPerfilAdmin />} />

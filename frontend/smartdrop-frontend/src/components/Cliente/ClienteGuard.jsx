@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { getMisDirecciones } from '../../api/clientesService';
 import { calcularDistanciaKm } from '../../utils/geo';
+import './CSS/Cliente.css'; // 👈 Importamos los estilos unificados
 
 export const ClienteGuard = () => {
   const [estadoValidacion, setEstadoValidacion] = useState({
@@ -46,10 +47,8 @@ export const ClienteGuard = () => {
             (pos) => {
               const latActual = pos.coords.latitude;
               const lngActual = pos.coords.longitude;
-              const precisionGpsKm = (pos.coords.accuracy || 0) / 1000; // Margen de error del dispositivo en km
+              const precisionGpsKm = (pos.coords.accuracy || 0) / 1000;
               
-              // ⏱️ Tolerancia base ampliada a 600m (0.6 km) para compensar variaciones de Wi-Fi/IP en navegadores
-              // Si el GPS reporta una imprecisión mayor, expandimos la tolerancia dinámicamente
               const TOLERANCIA_KM = Math.max(0.6, precisionGpsKm);
 
               // 🔍 Recorre TODAS las direcciones guardadas del cliente
@@ -84,7 +83,6 @@ export const ClienteGuard = () => {
             },
             (err) => {
               console.warn('Error o denegación de geolocalización:', err);
-              // Si falla el GPS pero la cuenta ya tiene direcciones registradas, se permite el paso
               sessionStorage.setItem('ubicacionValidada', 'true');
               setEstadoValidacion({ verificando: false, mensaje: '' });
             },
@@ -106,27 +104,13 @@ export const ClienteGuard = () => {
 
   if (estadoValidacion.verificando) {
     return (
-      <div 
-        style={{ 
-          height: '100vh', 
-          width: '100vw', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          backgroundColor: '#f8f9fa',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          zIndex: 99999,
-          fontFamily: 'sans-serif',
-          textAlign: 'center',
-          padding: '1rem'
-        }}
-      >
-        <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>🚀</div>
-        <h2 style={{ color: '#333', margin: '0 0 0.5rem 0' }}>{estadoValidacion.mensaje}</h2>
-        <p style={{ color: '#666', fontSize: '0.95rem' }}>Por favor, espera un momento.</p>
+      <div className="sd-guard-screen">
+        <div className="sd-guard-card">
+          <div className="sd-guard-icon">🚀</div>
+          <span className="sd-spinner"></span>
+          <h2 className="sd-guard-title">{estadoValidacion.mensaje}</h2>
+          <p className="sd-guard-subtitle">Por favor, espera un momento.</p>
+        </div>
       </div>
     );
   }
