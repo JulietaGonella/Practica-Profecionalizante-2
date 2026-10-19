@@ -2146,3 +2146,170 @@ Administrador.css se haya cargado primero.
   border-radius: 50%;
   vertical-align: middle;
 }
+
+/* ==========================================================================
+   ADICIONALES Y COMPLEMENTOS PARA MIS DIRECCIONES (MisDirecciones.jsx)
+   ========================================================================== */
+
+.sd-addresses-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 30px);
+  background: #fff;
+  border: 1px solid var(--sd-client-border);
+  border-radius: var(--sd-client-radius-lg);
+  box-shadow: var(--sd-client-shadow-sm);
+}
+
+.sd-addresses-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sd-addresses-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--sd-client-navy);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.sd-addresses-title__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: var(--sd-client-orange-soft);
+  color: var(--sd-client-orange);
+  border-radius: 10px;
+}
+
+.sd-addresses-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  color: var(--sd-client-navy);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.sd-addresses-list {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-address-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 16px;
+  background: var(--sd-client-surface-soft);
+  border: 1px solid var(--sd-client-border);
+  border-radius: 13px;
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.sd-address-item:hover {
+  background: #fff;
+  border-color: var(--sd-client-border-hover);
+}
+
+.sd-address-item__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  background: var(--sd-client-navy-soft);
+  color: var(--sd-client-navy);
+  border-radius: 10px;
+}
+
+.sd-address-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--sd-client-text-muted);
+  font-size: .88rem;
+  overflow-wrap: anywhere;
+}
+
+.sd-address-info__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sd-address-info strong {
+  color: var(--sd-client-navy);
+  font-size: .94rem;
+}
+
+.sd-address-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  color: var(--sd-client-blue);
+  background: var(--sd-client-blue-soft);
+  border: 1px solid var(--sd-client-blue-line);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.sd-address-protect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sd-client-text-muted);
+  font-size: .78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sd-addresses-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--sd-client-navy);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.sd-addresses-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--sd-client-navy);
+  color: #fff;
+  border-radius: 10px;
+}
+
+.sd-spinner--inline {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
